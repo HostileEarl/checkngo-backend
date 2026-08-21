@@ -5,7 +5,6 @@ from django.db import models
 from django.utils import timezone
 
 
-
 class Farm(models.Model):
     """A physical poultry site. The unit of operational isolation in CheckN Go."""
 
@@ -45,6 +44,17 @@ class Farm(models.Model):
         if not user or not user.is_authenticated:
             return None
         return self.memberships.filter(user=user, is_active=True).first()
+
+    def archive(self):
+        """Close the farm to new data. History remains readable by the owner."""
+        if not self.is_active:
+            return
+        self.is_active = False
+        self.save(update_fields=["is_active"])
+
+    def reactivate(self):
+        self.is_active = True
+        self.save(update_fields=["is_active"])
 
 
 class FarmMembership(models.Model):
@@ -125,3 +135,67 @@ class FarmMembership(models.Model):
         self.is_active = True
         self.deactivated_at = None
         self.save(update_fields=["is_active", "deactivated_at"])
+
+
+class FarmOwnershipHistory(models.Model):
+    """
+    Immutable record of every ownership change.
+
+    Transfers delete the outgoing owner's membership, so without this table
+    the question "who held this farm in March?" would be unanswerable. Rows
+    here are written once and never edited — that is what makes them evidence.
+    """
+
+    farm = models.ForeignKey(
+        Farm,
+        on_delete=models.CASCADE,
+        related_name="ownership_history",
+    )
+    from_owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="farms_transferred_away",
+        help_text="Null for the original registration.",
+    )
+    to_owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="farms_transferred_in",
+    )
+    # Denormalized snapshots: survive even if an account is later deleted.
+    from_owner_name = models.CharField(max_length=150, blank=True)
+    to_owner_name = models.CharField(max_length=150, blank=True)
+
+    transferred_at = models.DateTimeField(default=timezone.now, db_index=True)
+    performed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="ownership_transfers_performed",
+    )
+    note = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        db_table = "farms_ownership_history"
+        ordering = ["-transferred_at"]
+        verbose_name_plural = "Farm ownership history"
+        indexes = [
+            models.Index(fields=["farm", "-transferred_at"], name="ownership_farm_time_idx"),
+        ]
+
+    def __str__(self):
+        origin = self.from_owner_name or "registration"
+        return f"{self.farm.name}: {origin} → {self.to_owner_name}"
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValueError("Ownership history records are immutable.")
+        # Snapshot the names at transfer time.
+        if self.from_owner and not self.from_owner_name:
+            self.from_owner_name = self.from_owner.full_name
+        if self.to_owner and not self.to_owner_name:
+            self.to_owner_name = self.to_owner.full_name
+        super().save(*args, **kwargs)

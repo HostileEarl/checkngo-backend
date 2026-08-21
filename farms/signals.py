@@ -2,7 +2,7 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from .models import Farm, FarmMembership
+from .models import Farm, FarmMembership, FarmOwnershipHistory
 
 
 @receiver(post_save, sender=Farm, dispatch_uid="farm_owner_membership")
@@ -25,4 +25,24 @@ def ensure_owner_membership(sender, instance, created, raw, **kwargs):
             "is_active": True,
             "deactivated_at": None,
         },
+    )
+
+
+@receiver(post_save, sender=Farm, dispatch_uid="farm_registration_history")
+def record_initial_ownership(sender, instance, created, raw, **kwargs):
+    """
+    Open the ownership ledger when a farm is registered.
+
+    Only fires on creation — later transfers are recorded explicitly by the
+    transfer serializer, which knows who performed the action.
+    """
+    if raw or not created:
+        return
+
+    FarmOwnershipHistory.objects.create(
+        farm=instance,
+        from_owner=None,
+        to_owner=instance.owner,
+        performed_by=instance.owner,
+        note="Farm registered.",
     )

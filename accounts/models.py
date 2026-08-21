@@ -265,8 +265,6 @@ class Invitation(models.Model):
     def save(self, *args, **kwargs):
         if not self.expires_at:
             self.expires_at = timezone.now() + timedelta(days=self.DEFAULT_VALIDITY_DAYS)
-        if not self.pin_hash:
-            raise ValueError("Call issue_pin() before saving an Invitation.")
         self.phone_number = UserManager.normalize_phone(self.phone_number)
         super().save(*args, **kwargs)
 
@@ -306,41 +304,63 @@ class Invitation(models.Model):
     # --- Acceptance ---
 
     @transaction.atomic
-    def accept(self, raw_pin):
+    def accept(self, raw_pin=None):
         """
-        Convert a pending invitation into a real User (+ FarmMembership).
+        Convert a pending invitation into farm access.
 
-        Atomic: either the user, the membership, and the status change all
-        land, or none of them do. A half-created worker with no farm access
-        would be worse than a clean failure.
+        Two paths:
+          NEW USER      — create the account, require the issued PIN,
+                          leave must_change_credential=True.
+          EXISTING USER — attach a membership only. No PIN is issued or
+                          checked; their existing credential is unchanged,
+                          because a credential belongs to a person, not a farm.
         """
         from farms.models import FarmMembership
 
         if not self.is_actionable:
             raise ValidationError("This invitation is no longer valid.")
-        if not self.check_pin(raw_pin):
-            raise ValidationError("Incorrect PIN.")
 
-        user = User.objects.create_user(
-            phone_number=self.phone_number,
-            password=raw_pin,
-            full_name=self.full_name,
-            email=self.email or None,
-            role=self.account_role,
-        )
-        # must_change_credential defaults to True — the forced rotation
-        # in Task 7 is what makes the PIN non-repudiable.
+        user = User.objects.filter(phone_number=self.phone_number).first()
+
+        if user is None:
+            if not raw_pin or not self.check_pin(raw_pin):
+                raise ValidationError("Incorrect PIN.")
+            user = User.objects.create_user(
+                phone_number=self.phone_number,
+                password=raw_pin,
+                full_name=self.full_name,
+                email=self.email or None,
+                role=self.account_role,
+            )
+        else:
+            if not user.is_active:
+                raise ValidationError("This account has been deactivated.")
+            if self.farm and not user.is_internal:
+                raise ValidationError(
+                    "This number belongs to an external partner and cannot "
+                    "hold farm membership."
+                )
 
         if self.farm and self.membership_role:
-            FarmMembership.objects.create(
+            membership, created = FarmMembership.objects.get_or_create(
                 farm=self.farm,
                 user=user,
-                role=self.membership_role,
-                invited_by=self.invited_by,
+                defaults={
+                    "role": self.membership_role,
+                    "invited_by": self.invited_by,
+                },
             )
+            if not created and not membership.is_active:
+                membership.reactivate()
+                membership.role = self.membership_role
+                membership.save(update_fields=["role"])
 
         self.status = self.Status.ACCEPTED
         self.accepted_at = timezone.now()
         self.accepted_user = user
         self.save(update_fields=["status", "accepted_at", "accepted_user"])
         return user
+
+    @property
+    def targets_existing_user(self):
+        return User.objects.filter(phone_number=self.phone_number).exists()

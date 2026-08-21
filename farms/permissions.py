@@ -8,21 +8,25 @@ class FarmScopedPermission(BasePermission):
     """
     Base for all farm-scoped access.
 
-    Resolves the farm from the URL (per the URL-scoping decision), looks up
-    the caller's ACTIVE membership, and caches it on the request so views
-    and serializers can reuse it without re-querying.
+    Resolves the farm from the URL, looks up the caller's ACTIVE membership,
+    and caches both on the request so views and serializers can reuse them.
 
-    Subclasses declare `allowed_roles`; an empty set means "any active member".
+    Archived farms (is_active=False) are readable by the OWNER only, and
+    accept no writes from anyone — historical analytics stay available
+    without allowing new records to be backdated into a closed site.
     """
 
     allowed_roles = set()
     farm_url_kwarg = "farm_pk"
+    message = "You do not have access to this farm."
 
     def get_farm(self, request, view):
         farm_id = view.kwargs.get(self.farm_url_kwarg) or view.kwargs.get("pk")
         if not farm_id:
             return None
-        return Farm.objects.filter(pk=farm_id, is_active=True).first()
+        # No is_active filter here — archive rules are applied below, so we
+        # can distinguish "no access" from "archived, read-only".
+        return Farm.objects.filter(pk=farm_id).first()
 
     def has_permission(self, request, view):
         user = request.user
@@ -37,7 +41,14 @@ class FarmScopedPermission(BasePermission):
         if membership is None:
             return False
 
-        # Cache for downstream use — avoids a second identical query.
+        if not farm.is_active:
+            if membership.role != FarmMembership.Role.OWNER:
+                self.message = "This farm has been archived."
+                return False
+            if request.method not in SAFE_METHODS:
+                self.message = "This farm is archived and is read-only."
+                return False
+
         request.farm = farm
         request.membership = membership
 
@@ -59,17 +70,13 @@ class IsFarmManagerOrOwner(FarmScopedPermission):
 
 
 class IsFarmOwner(FarmScopedPermission):
-    """Owner-only. Manager promotion, ownership transfer, farm deletion."""
+    """Owner-only. Manager promotion, ownership transfer, archiving."""
 
     allowed_roles = {FarmMembership.Role.OWNER}
 
 
 class IsFarmMemberReadOnly(FarmScopedPermission):
-    """
-    Everyone active can read; only owner/manager can write.
-
-    Useful for reference data a worker consults but must not edit.
-    """
+    """Everyone active can read; only owner/manager can write."""
 
     def has_permission(self, request, view):
         if not super().has_permission(request, view):
@@ -84,15 +91,16 @@ class IsFarmMemberReadOnly(FarmScopedPermission):
 
 class CanInviteRole(FarmScopedPermission):
     """
-    Enforces your hierarchy ruling: managers may invite workers only;
-    granting MANAGER authority is reserved to the owner.
+    Managers may invite workers only; granting MANAGER authority is
+    reserved to the owner.
 
-    Checked here rather than in the serializer because it's an authorization
-    question, not a validation question — the distinction matters when a
-    panelist asks where your access control lives.
+    Checked here rather than in the serializer because "may this person
+    grant this level of authority" is authorization, not validation —
+    which is why it returns 403 and not 400.
     """
 
     allowed_roles = {FarmMembership.Role.OWNER, FarmMembership.Role.MANAGER}
+    message = "Only the farm owner can grant manager-level access."
 
     def has_permission(self, request, view):
         if not super().has_permission(request, view):
@@ -103,7 +111,6 @@ class CanInviteRole(FarmScopedPermission):
         requested_role = (request.data.get("membership_role") or "").upper()
         if request.membership.role == FarmMembership.Role.OWNER:
             return True
-        # Manager path: workers only.
         return requested_role == FarmMembership.Role.WORKER
 
 
@@ -117,11 +124,12 @@ class IsExternalPartner(BasePermission):
 
 class HasRotatedCredential(BasePermission):
     """
-    The Task 7 gate, defined now so it's ready to wire in.
+    THE GATE.
 
     A user still holding an owner-issued PIN has not established sole
-    knowledge of their credential — so nothing they do is yet non-repudiable.
-    Block everything except the endpoints needed to fix that.
+    knowledge of their credential, so nothing they do is yet non-repudiable.
+    Until they rotate it, every endpoint is closed to them except the ones
+    needed to fix that.
     """
 
     message = "You must change your initial PIN before continuing."

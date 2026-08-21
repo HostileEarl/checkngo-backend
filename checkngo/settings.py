@@ -149,9 +149,25 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
+        "farms.permissions.HasRotatedCredential",
     ),
-    "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
-    # Throttling gets configured in Task 9 — leave a placeholder in your notes.
+    "DEFAULT_THROTTLE_RATES": {
+        "phone_login": "10/hour",       # per targeted phone number
+        "login_ip": "30/hour",          # per source IP
+        "invite_accept": "10/hour",     # public endpoint
+        "credential_change": "5/hour",  # per authenticated user
+        "user": "1000/hour",            # general authenticated ceiling
+        "anon": "60/hour",
+    },
+}
+# Throttle counters live in the cache. LocMemCache is per-process, so it
+# resets on reload and is not shared across workers — adequate for the
+# defense demo, but Redis is the correct production backend.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "checkngo-throttle-cache",
+    }
 }
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG   # tighten this before deployment
