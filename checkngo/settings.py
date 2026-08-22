@@ -47,6 +47,8 @@ INSTALLED_APPS = [
     # Local
     "accounts",
     "farms.apps.FarmsConfig",
+    "partners",
+    "production.apps.ProductionConfig",
 ]
 
 MIDDLEWARE = [

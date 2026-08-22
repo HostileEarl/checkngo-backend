@@ -1,0 +1,408 @@
+# production/models.py
+import uuid
+from datetime import timedelta
+from decimal import Decimal
+
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
+from django.db import models
+from django.utils import timezone
+
+
+class OfflineSyncModel(models.Model):
+    """
+    Base for anything a worker records in the field.
+
+    Three timestamps, three jobs:
+      record_date / sample_date — the day the data DESCRIBES
+      recorded_at               — when the worker typed it (client clock)
+      created_at                — when the server received it
+
+    The gap between the last two is the offline window. The UUID primary key
+    is generated on the device, so a sync retry updates rather than duplicates.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="%(class)s_records",
+    )
+    recorded_at = models.DateTimeField(
+        default=timezone.now,
+        help_text="Client-supplied. When the worker actually entered this.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    EDIT_WINDOW_HOURS = 24
+
+    class Meta:
+        abstract = True
+
+    @property
+    def is_editable(self):
+        """Fat-finger fixes allowed for a day; after that the record is evidence."""
+        return timezone.now() < self.created_at + timedelta(hours=self.EDIT_WINDOW_HOURS)
+
+    @property
+    def sync_delay_seconds(self):
+        if not self.created_at or not self.recorded_at:
+            return None
+        return (self.created_at - self.recorded_at).total_seconds()
+
+
+class House(models.Model):
+    """
+    A physical shed. Reusable across batches — this is what makes
+    "how does House 3 perform over time?" answerable.
+    """
+
+    farm = models.ForeignKey(
+        "farms.Farm", on_delete=models.CASCADE, related_name="houses"
+    )
+    name = models.CharField(max_length=100)
+    capacity = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        help_text="Maximum birds this house can hold.",
+    )
+    notes = models.CharField(max_length=255, blank=True)
+
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "production_house"
+        ordering = ["farm", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["farm", "name"], name="unique_house_name_per_farm"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.farm.name})"
+
+    @property
+    def current_batch(self):
+        return self.batches.filter(status=Batch.Status.ACTIVE).first()
+
+    @property
+    def is_occupied(self):
+        return self.current_batch is not None
+
+
+class Batch(models.Model):
+    """
+    One cohort of broilers, placement to harvest. The analytics unit —
+    every chart in the system is scoped to a batch.
+    """
+
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE", "Active"
+        HARVESTED = "HARVESTED", "Harvested"
+        TERMINATED = "TERMINATED", "Terminated"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    house = models.ForeignKey(House, on_delete=models.PROTECT, related_name="batches")
+    batch_code = models.CharField(max_length=50, help_text="Human-facing, e.g. B-2026-03")
+    breed = models.CharField(max_length=100, blank=True)
+
+    initial_bird_count = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    start_date = models.DateField()
+    expected_harvest_date = models.DateField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.ACTIVE, db_index=True
+    )
+
+    # Denormalized running totals. Maintained by signal on DailyRecord save.
+    # Deliberate trade: instant chart loads, at the cost of possible drift.
+    # The DailyRecord rows are the source of truth; recalculate_totals()
+    # rebuilds these from them if they ever disagree.
+    total_mortality = models.PositiveIntegerField(default=0)
+    total_feed_kg = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0"))
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        related_name="batches_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "production_batch"
+        ordering = ["-start_date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["house", "batch_code"], name="unique_batch_code_per_house"
+            ),
+            # A house holds one live batch at a time. Partial unique index —
+            # harvested batches are excluded, so the house can be refilled.
+            models.UniqueConstraint(
+                fields=["house"],
+                condition=models.Q(status="ACTIVE"),
+                name="one_active_batch_per_house",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["house", "status"], name="batch_house_status_idx"),
+            models.Index(fields=["start_date"], name="batch_start_date_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.batch_code} @ {self.house.name}"
+
+    @property
+    def farm(self):
+        return self.house.farm
+
+    def clean(self):
+        if self.initial_bird_count and self.house_id:
+            if self.initial_bird_count > self.house.capacity:
+                raise ValidationError(
+                    {"initial_bird_count": "Exceeds the house's stated capacity."}
+                )
+
+    # --- Derived metrics: computed, never stored ---
+
+    @property
+    def current_bird_count(self):
+        return max(self.initial_bird_count - self.total_mortality, 0)
+
+    @property
+    def mortality_rate(self):
+        """Percentage of the placed flock lost to date."""
+        if not self.initial_bird_count:
+            return Decimal("0")
+        return (
+            Decimal(self.total_mortality) / Decimal(self.initial_bird_count)
+        ) * 100
+
+    @property
+    def age_days(self):
+        end = self.harvest.harvest_date if hasattr(self, "harvest") else timezone.localdate()
+        return (end - self.start_date).days
+
+    @property
+    def feed_conversion_ratio(self):
+        """
+        FCR = feed consumed / live weight produced. Lower is better.
+
+        Only computable after harvest — without a harvest weight there is
+        no denominator. Returns None for active batches by design.
+        """
+        harvest = getattr(self, "harvest", None)
+        if harvest is None or not harvest.total_weight_kg:
+            return None
+        return (self.total_feed_kg / harvest.total_weight_kg).quantize(Decimal("0.001"))
+
+    def recalculate_totals(self):
+        """Rebuild the denormalized fields from the underlying records."""
+        agg = self.daily_records.aggregate(
+            mortality=models.Sum("mortality"),
+            feed=models.Sum("feed_kg"),
+        )
+        self.total_mortality = agg["mortality"] or 0
+        self.total_feed_kg = agg["feed"] or Decimal("0")
+        self.save(update_fields=["total_mortality", "total_feed_kg"])
+
+
+class DailyRecord(OfflineSyncModel):
+    """
+    One entry per batch per day. Mortality is broken out by cause so the
+    chart can show WHY birds were lost, not just how many.
+    """
+
+    batch = models.ForeignKey(Batch, on_delete=models.CASCADE, related_name="daily_records")
+    record_date = models.DateField(db_index=True)
+
+    mortality_disease = models.PositiveIntegerField(default=0)
+    mortality_heat = models.PositiveIntegerField(default=0)
+    mortality_culled = models.PositiveIntegerField(default=0)
+    mortality_unknown = models.PositiveIntegerField(default=0)
+
+    feed_kg = models.DecimalField(
+        max_digits=8, decimal_places=2, default=Decimal("0"),
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    notes = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        db_table = "production_daily_record"
+        ordering = ["-record_date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["batch", "record_date"], name="unique_daily_record_per_batch"
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["batch", "record_date"], name="daily_batch_date_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.batch.batch_code} — {self.record_date}"
+
+    @property
+    def mortality(self):
+        return (
+            self.mortality_disease
+            + self.mortality_heat
+            + self.mortality_culled
+            + self.mortality_unknown
+        )
+
+    def clean(self):
+        if self.record_date and self.batch_id:
+            if self.record_date < self.batch.start_date:
+                raise ValidationError(
+                    {"record_date": "Cannot record a date before the batch started."}
+                )
+            if self.record_date > timezone.localdate():
+                raise ValidationError({"record_date": "Cannot record a future date."})
+
+
+class WeightSample(OfflineSyncModel):
+    """
+    Weekly sample weighing. birds_weighed is kept because a 10-bird sample
+    and a 50-bird sample carry very different confidence.
+    """
+
+    batch = models.ForeignKey(Batch, on_delete=models.CASCADE, related_name="weight_samples")
+    sample_date = models.DateField(db_index=True)
+    birds_weighed = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    average_grams = models.DecimalField(
+        max_digits=8, decimal_places=2, validators=[MinValueValidator(Decimal("0"))]
+    )
+    notes = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        db_table = "production_weight_sample"
+        ordering = ["-sample_date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["batch", "sample_date"], name="unique_weight_sample_per_day"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.batch.batch_code} — {self.average_grams}g on {self.sample_date}"
+
+    @property
+    def age_days(self):
+        return (self.sample_date - self.batch.start_date).days
+
+
+class Harvest(models.Model):
+    """
+    Closes a batch. This is where FCR becomes computable — before harvest
+    there is no weight denominator.
+    """
+
+    batch = models.OneToOneField(Batch, on_delete=models.CASCADE, related_name="harvest")
+    harvest_date = models.DateField()
+    birds_harvested = models.PositiveIntegerField()
+    total_weight_kg = models.DecimalField(
+        max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0"))]
+    )
+    revenue = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Gross sale value. Recorded after the fact, not transacted here.",
+    )
+    buyer_link = models.ForeignKey(
+        "partners.FarmPartnerLink",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="harvests_purchased",
+        help_text="Optional: the consumer this batch went to.",
+    )
+    notes = models.CharField(max_length=255, blank=True)
+
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        related_name="harvests_recorded",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "production_harvest"
+        ordering = ["-harvest_date"]
+
+    def __str__(self):
+        return f"{self.batch.batch_code} harvested {self.harvest_date}"
+
+    @property
+    def average_weight_kg(self):
+        if not self.birds_harvested:
+            return None
+        return (self.total_weight_kg / self.birds_harvested).quantize(Decimal("0.001"))
+
+    @property
+    def revenue_per_kg(self):
+        if self.revenue is None or not self.total_weight_kg:
+            return None
+        return (self.revenue / self.total_weight_kg).quantize(Decimal("0.01"))
+
+    def clean(self):
+        if self.batch_id and self.birds_harvested:
+            if self.birds_harvested > self.batch.current_bird_count:
+                raise ValidationError(
+                    {"birds_harvested": "More birds harvested than the batch contains."}
+                )
+
+
+class FeedDelivery(OfflineSyncModel):
+    """
+    Stock in, attributable to a supplier. Farm-level rather than batch-level:
+    a delivery arrives at the farm and is split across houses, so per-batch
+    cost uses the average feed price over the period rather than tracing
+    individual sacks.
+    """
+
+    class FeedType(models.TextChoices):
+        STARTER = "STARTER", "Starter"
+        GROWER = "GROWER", "Grower"
+        FINISHER = "FINISHER", "Finisher"
+        OTHER = "OTHER", "Other"
+
+    farm = models.ForeignKey(
+        "farms.Farm", on_delete=models.CASCADE, related_name="feed_deliveries"
+    )
+    supplier_link = models.ForeignKey(
+        "partners.FarmPartnerLink",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="feed_deliveries",
+    )
+    delivery_date = models.DateField(db_index=True)
+    feed_type = models.CharField(max_length=20, choices=FeedType.choices)
+    quantity_kg = models.DecimalField(
+        max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0"))]
+    )
+    unit_cost = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Cost per kg.",
+    )
+    total_cost = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    invoice_ref = models.CharField(max_length=100, blank=True)
+    notes = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        db_table = "production_feed_delivery"
+        ordering = ["-delivery_date"]
+        indexes = [
+            models.Index(fields=["farm", "delivery_date"], name="feed_farm_date_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.quantity_kg}kg {self.get_feed_type_display()} — {self.delivery_date}"
+
+    def save(self, *args, **kwargs):
+        # Derive whichever cost field is missing, so either entry style works.
+        if self.total_cost is None and self.unit_cost is not None:
+            self.total_cost = (self.unit_cost * self.quantity_kg).quantize(Decimal("0.01"))
+        elif self.unit_cost is None and self.total_cost is not None and self.quantity_kg:
+            self.unit_cost = (self.total_cost / self.quantity_kg).quantize(Decimal("0.01"))
+        super().save(*args, **kwargs)

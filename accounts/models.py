@@ -188,6 +188,11 @@ class Invitation(models.Model):
     )
     full_name = models.CharField(max_length=150)
     email = models.EmailField(blank=True, null=True)
+    business_name = models.CharField(
+        max_length=150,
+        blank=True,
+        help_text="External partners only. Carried onto the FarmPartnerLink.",
+    )
 
     # --- What they are being invited to ---
     farm = models.ForeignKey(
@@ -306,21 +311,27 @@ class Invitation(models.Model):
     @transaction.atomic
     def accept(self, raw_pin=None):
         """
-        Convert a pending invitation into farm access.
+        Convert a pending invitation into access.
 
-        Two paths:
-          NEW USER      — create the account, require the issued PIN,
-                          leave must_change_credential=True.
-          EXISTING USER — attach a membership only. No PIN is issued or
-                          checked; their existing credential is unchanged,
-                          because a credential belongs to a person, not a farm.
+        NEW USER      — create the account, require the issued PIN,
+                        leave must_change_credential=True.
+        EXISTING USER — attach the relationship only. No PIN issued or
+                        checked; a credential belongs to a person, not a farm.
+
+        Internal invites produce a FarmMembership; external invites produce
+        a FarmPartnerLink. Same credential mechanics, different authority.
         """
         from farms.models import FarmMembership
+        from partners.models import FarmPartnerLink
 
         if not self.is_actionable:
             raise ValidationError("This invitation is no longer valid.")
 
         user = User.objects.filter(phone_number=self.phone_number).first()
+        is_external_invite = self.account_role in {
+            User.Role.SUPPLIER,
+            User.Role.CONSUMER,
+        }
 
         if user is None:
             if not raw_pin or not self.check_pin(raw_pin):
@@ -335,13 +346,31 @@ class Invitation(models.Model):
         else:
             if not user.is_active:
                 raise ValidationError("This account has been deactivated.")
-            if self.farm and not user.is_internal:
+            if is_external_invite and user.is_internal:
+                raise ValidationError(
+                    "This number belongs to internal staff and cannot be "
+                    "linked as an external partner."
+                )
+            if not is_external_invite and not user.is_internal:
                 raise ValidationError(
                     "This number belongs to an external partner and cannot "
                     "hold farm membership."
                 )
 
-        if self.farm and self.membership_role:
+        if is_external_invite:
+            if self.farm:
+                link, created = FarmPartnerLink.objects.get_or_create(
+                    farm=self.farm,
+                    partner=user,
+                    link_type=self.account_role,
+                    defaults={
+                        "business_name": self.business_name,
+                        "linked_by": self.invited_by,
+                    },
+                )
+                if not created and not link.is_active:
+                    link.reactivate()
+        elif self.farm and self.membership_role:
             membership, created = FarmMembership.objects.get_or_create(
                 farm=self.farm,
                 user=user,
@@ -360,7 +389,3 @@ class Invitation(models.Model):
         self.accepted_user = user
         self.save(update_fields=["status", "accepted_at", "accepted_user"])
         return user
-
-    @property
-    def targets_existing_user(self):
-        return User.objects.filter(phone_number=self.phone_number).exists()

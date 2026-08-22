@@ -7,6 +7,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from farms.models import FarmMembership
 
 from .models import Invitation, User, UserManager
+from django.core.exceptions import ValidationError as DjangoValidationError
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -246,4 +247,12 @@ class InvitationAcceptSerializer(serializers.Serializer):
         return value
 
     def save(self, **kwargs):
-        return self.invitation.accept(self.validated_data.get("pin"))
+        # The model raises Django's ValidationError, which DRF does not
+        # recognise. Translate it here — the model stays framework-agnostic,
+        # and the client still gets a clean 400 instead of a 500.
+        try:
+            return self.invitation.accept(self.validated_data.get("pin"))
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(
+                {"detail": exc.messages}
+            ) from exc
