@@ -32,7 +32,7 @@ ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="127.0.0.1,localhost").split(","
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
-    "django.contrib.contenttypes",
+    "django.contrib.contenttypes",     # <-- keep this one only
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
@@ -40,15 +40,17 @@ INSTALLED_APPS = [
     # Third party
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "phonenumber_field",
-    "rest_framework_simplejwt.token_blacklist",
 
     # Local
     "accounts",
     "farms.apps.FarmsConfig",
     "partners",
     "production.apps.ProductionConfig",
+    "analytics",
+    "drf_spectacular",
 ]
 
 MIDDLEWARE = [
@@ -153,12 +155,13 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
         "farms.permissions.HasRotatedCredential",
     ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_THROTTLE_RATES": {
-        "phone_login": "10/hour",       # per targeted phone number
-        "login_ip": "30/hour",          # per source IP
-        "invite_accept": "10/hour",     # public endpoint
-        "credential_change": "5/hour",  # per authenticated user
-        "user": "1000/hour",            # general authenticated ceiling
+        "phone_login": "10/hour",
+        "login_ip": "30/hour",
+        "invite_accept": "10/hour",
+        "credential_change": "5/hour",
+        "user": "1000/hour",
         "anon": "60/hour",
     },
 }
@@ -183,4 +186,39 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "user_id",
+}
+
+ADMIN_SITE_HEADER = "CheckN Go Administration"
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "CheckN Go API",
+    "DESCRIPTION": (
+        "Backend for CheckN Go — a cross-platform poultry management system "
+        "for distributed farm coordination and descriptive analytics.\n\n"
+        "**Authentication:** phone number (E.164) + PIN, returning JWT access "
+        "and refresh tokens. Send `Authorization: Bearer <access>`.\n\n"
+        "**Forced rotation:** a newly onboarded user has "
+        "`must_change_credential = true` and is blocked from every endpoint "
+        "except `/auth/me/` and `/auth/credential/change/` until they rotate "
+        "their PIN.\n\n"
+        "**Farm scoping:** operational endpoints are nested under "
+        "`/farms/<farm_id>/`. Access is resolved from the caller's active "
+        "membership on that farm; a member of one farm cannot read another's "
+        "data."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "TAGS": [
+        {"name": "Authentication", "description": "Login, logout, PIN rotation."},
+        {"name": "Invitations", "description": "Staff and partner onboarding."},
+        {"name": "Farms", "description": "Farms, membership, ownership."},
+        {"name": "Partners", "description": "Suppliers and buyers."},
+        {"name": "Production", "description": "Houses, batches, daily records."},
+        {"name": "Analytics", "description": "Charts and aggregations."},
+    ],
+    "SWAGGER_UI_SETTINGS": {
+        "persistAuthorization": True,
+        "displayRequestDuration": True,
+    },
 }

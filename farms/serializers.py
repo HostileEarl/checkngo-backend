@@ -26,8 +26,8 @@ class FarmSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["id", "owner", "is_active", "created_at"]
-
-    def get_member_count(self, obj):
+    
+    def get_member_count(self, obj) -> int:
         return obj.memberships.filter(is_active=True).count()
 
 

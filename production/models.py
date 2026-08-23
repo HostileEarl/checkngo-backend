@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
+from django.contrib.contenttypes.fields import GenericForeignKey
 
 
 class OfflineSyncModel(models.Model):
@@ -104,6 +105,8 @@ class Batch(models.Model):
         ACTIVE = "ACTIVE", "Active"
         HARVESTED = "HARVESTED", "Harvested"
         TERMINATED = "TERMINATED", "Terminated"
+        
+        
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     house = models.ForeignKey(House, on_delete=models.PROTECT, related_name="batches")
@@ -116,6 +119,39 @@ class Batch(models.Model):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.ACTIVE, db_index=True
     )
+    # Termination is an abnormal close — disease wipeout, or a batch that
+    # should never have been placed. The reason is required at the API layer
+    # so a batch missing from the FCR averages always has a documented cause.
+    termination_reason = models.CharField(max_length=255, blank=True)
+    terminated_at = models.DateTimeField(null=True, blank=True)
+    terminated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="batches_terminated",
+    )
+    
+    def terminate(self, reason, user=None):
+        """
+        Close a batch without a harvest. Excluded from FCR averages, so the
+        reason is mandatory — an unexplained gap in the analytics is worse
+        than no gap at all.
+        """
+        if not reason or not reason.strip():
+            raise ValidationError("A reason is required to terminate a batch.")
+        self.status = self.Status.TERMINATED
+        self.termination_reason = reason.strip()
+        self.terminated_at = timezone.now()
+        self.terminated_by = user
+        self.save(
+            update_fields=[
+                "status",
+                "termination_reason",
+                "terminated_at",
+                "terminated_by",
+            ]
+        )
 
     # Denormalized running totals. Maintained by signal on DailyRecord save.
     # Deliberate trade: instant chart loads, at the cost of possible drift.
@@ -163,6 +199,17 @@ class Batch(models.Model):
                 raise ValidationError(
                     {"initial_bird_count": "Exceeds the house's stated capacity."}
                 )
+    @property
+    def was_corrected(self):
+        return self.corrections_for_this().exists()
+
+    def corrections_for_this(self):
+        from django.contrib.contenttypes.models import ContentType
+
+        return RecordCorrection.objects.filter(
+            content_type=ContentType.objects.get_for_model(self),
+            object_id=self.id,
+        )
 
     # --- Derived metrics: computed, never stored ---
 
@@ -198,12 +245,25 @@ class Batch(models.Model):
         return (self.total_feed_kg / harvest.total_weight_kg).quantize(Decimal("0.001"))
 
     def recalculate_totals(self):
-        """Rebuild the denormalized fields from the underlying records."""
+        """
+        Rebuild the denormalized fields from the underlying records.
+
+        The four mortality causes are summed in SQL and added together —
+        `mortality` is a Python property, so the database cannot see it.
+        """
         agg = self.daily_records.aggregate(
-            mortality=models.Sum("mortality"),
+            disease=models.Sum("mortality_disease"),
+            heat=models.Sum("mortality_heat"),
+            culled=models.Sum("mortality_culled"),
+            unknown=models.Sum("mortality_unknown"),
             feed=models.Sum("feed_kg"),
         )
-        self.total_mortality = agg["mortality"] or 0
+        self.total_mortality = (
+            (agg["disease"] or 0)
+            + (agg["heat"] or 0)
+            + (agg["culled"] or 0)
+            + (agg["unknown"] or 0)
+        )
         self.total_feed_kg = agg["feed"] or Decimal("0")
         self.save(update_fields=["total_mortality", "total_feed_kg"])
 
@@ -260,6 +320,18 @@ class DailyRecord(OfflineSyncModel):
                 )
             if self.record_date > timezone.localdate():
                 raise ValidationError({"record_date": "Cannot record a future date."})
+            
+    def corrections_for_this(self):
+        from django.contrib.contenttypes.models import ContentType
+
+        return RecordCorrection.objects.filter(
+            content_type=ContentType.objects.get_for_model(self),
+            object_id=self.id,
+        )
+
+    @property
+    def was_corrected(self):
+        return self.corrections_for_this().exists()
 
 
 class WeightSample(OfflineSyncModel):
@@ -287,6 +359,18 @@ class WeightSample(OfflineSyncModel):
 
     def __str__(self):
         return f"{self.batch.batch_code} — {self.average_grams}g on {self.sample_date}"
+    
+    def corrections_for_this(self):
+        from django.contrib.contenttypes.models import ContentType
+
+        return RecordCorrection.objects.filter(
+            content_type=ContentType.objects.get_for_model(self),
+            object_id=self.id,
+        )
+
+    @property
+    def was_corrected(self):
+        return self.corrections_for_this().exists()
 
     @property
     def age_days(self):
@@ -405,4 +489,68 @@ class FeedDelivery(OfflineSyncModel):
             self.total_cost = (self.unit_cost * self.quantity_kg).quantize(Decimal("0.01"))
         elif self.unit_cost is None and self.total_cost is not None and self.quantity_kg:
             self.unit_cost = (self.total_cost / self.quantity_kg).quantize(Decimal("0.01"))
+        super().save(*args, **kwargs)
+        
+class RecordCorrection(models.Model):
+    """
+    Permanent log of a manager overriding the 24-hour lock.
+
+    Records are immutable to the person who created them. A manager may
+    override that, but never silently: the before-state, the after-state,
+    the author, and a written reason are all captured here, and this row
+    can never be edited or deleted.
+
+    Corrections stop when a batch is harvested. At that point the FCR and
+    feed margin have been calculated and may already have been reported —
+    the books are closed.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # Generic target so one model covers DailyRecord and WeightSample.
+    content_type = models.ForeignKey(
+        "contenttypes.ContentType", on_delete=models.PROTECT
+    )
+    object_id = models.UUIDField()
+    target = GenericForeignKey("content_type", "object_id")
+
+    # Denormalized for filtering and for surviving a cascade delete.
+    batch = models.ForeignKey(
+        "Batch", on_delete=models.CASCADE, related_name="corrections"
+    )
+    record_date = models.DateField(db_index=True)
+
+    previous_values = models.JSONField(help_text="Full snapshot before the change.")
+    new_values = models.JSONField()
+    changed_fields = models.JSONField(default=list)
+
+    reason = models.TextField()
+    corrected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="corrections_made",
+    )
+    # Permanent ink — survives the account being deleted.
+    corrected_by_name = models.CharField(max_length=150, blank=True)
+    corrected_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    MIN_REASON_LENGTH = 15
+
+    class Meta:
+        db_table = "production_record_correction"
+        ordering = ["-corrected_at"]
+        indexes = [
+            models.Index(fields=["batch", "-corrected_at"], name="correction_batch_time_idx"),
+            models.Index(fields=["content_type", "object_id"], name="correction_target_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.batch.batch_code} {self.record_date} corrected by {self.corrected_by_name}"
+
+    def save(self, *args, **kwargs):
+        if self.pk and RecordCorrection.objects.filter(pk=self.pk).exists():
+            raise ValueError("Correction records are immutable.")
+        if self.corrected_by and not self.corrected_by_name:
+            self.corrected_by_name = self.corrected_by.full_name
         super().save(*args, **kwargs)
