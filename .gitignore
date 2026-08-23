@@ -25,5 +25,9 @@ db.sqlite3-journal
 *.code-workspace
 
 # OS
+# OS
 .DS_Store
 Thumbs.db
+
+# Build artifacts
+schema.yml
