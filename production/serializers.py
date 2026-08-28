@@ -68,7 +68,7 @@ class BatchSerializer(serializers.ModelSerializer):
 
     house_name = serializers.CharField(source="house.name", read_only=True)
     current_bird_count = serializers.IntegerField(read_only=True)
-    mortality_rate = serializers.SerializerMethodField()
+    mortality_rate_pct = serializers.SerializerMethodField()
     feed_conversion_ratio = serializers.SerializerMethodField()
     age_days = serializers.IntegerField(read_only=True)
     latest_weight_grams = serializers.SerializerMethodField()
@@ -96,7 +96,7 @@ class BatchSerializer(serializers.ModelSerializer):
             "terminated_by_name",
             "total_mortality",
             "total_feed_kg",
-            "mortality_rate",
+            "mortality_rate_pct",
             "feed_conversion_ratio",
             "age_days",
             "latest_weight_grams",
@@ -114,7 +114,7 @@ class BatchSerializer(serializers.ModelSerializer):
             "created_at",
         ]
 
-    def get_mortality_rate(self, obj) -> str:
+    def get_mortality_rate_pct(self, obj) -> str:
         return str(obj.mortality_rate.quantize(Decimal("0.01")))
 
     def get_feed_conversion_ratio(self, obj) -> str | None:

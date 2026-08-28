@@ -16,6 +16,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 
 from accounts.models import User
@@ -72,12 +73,14 @@ class Command(BaseCommand):
             farm = self._create_farm(owner, manager, worker)
             supplier, buyer = self._create_partners(farm, owner)
             houses = self._create_houses(farm)
-            self._create_feed_deliveries(farm, supplier, owner)
+            # Order matters: the batches and their daily records must exist
+            # before deliveries can be sized to match what they consume.
             self._create_batches(farm, houses, owner, worker, buyer)
+            self._create_feed_deliveries(farm, supplier, owner)
 
         self._report()
 
-    # ── teardown ────────────────────────────────────────────
+    # -- teardown --------------------------------------------
 
     def _reset(self):
         self.stdout.write("Removing existing DEMO- data...")
@@ -87,7 +90,7 @@ class Command(BaseCommand):
         FeedDelivery.objects.filter(invoice_ref__startswith=DEMO_PREFIX).delete()
         self.stdout.write(f"  removed {count} demo batches")
 
-    # ── people ──────────────────────────────────────────────
+    # -- people ----------------------------------------------
 
     def _create_staff(self):
         owner, created = User.objects.get_or_create(
@@ -126,7 +129,7 @@ class Command(BaseCommand):
             worker.set_password("333333")
             worker.save()
 
-        self.stdout.write(self.style.SUCCESS("✓ staff accounts"))
+        self.stdout.write(self.style.SUCCESS("- staff accounts"))
         return owner, manager, worker
 
     def _create_farm(self, owner, manager, worker):
@@ -148,7 +151,7 @@ class Command(BaseCommand):
             farm=farm, user=worker,
             defaults={"role": FarmMembership.Role.WORKER, "invited_by": manager},
         )
-        self.stdout.write(self.style.SUCCESS(f"✓ farm: {farm.name}"))
+        self.stdout.write(self.style.SUCCESS(f"- farm: {farm.name}"))
         return farm
 
     def _create_partners(self, farm, owner):
@@ -186,7 +189,7 @@ class Command(BaseCommand):
             link_type=FarmPartnerLink.LinkType.CONSUMER,
             defaults={"business_name": "Bautista Poultry Dealers", "linked_by": owner},
         )
-        self.stdout.write(self.style.SUCCESS("✓ supplier and buyer links"))
+        self.stdout.write(self.style.SUCCESS("- supplier and buyer links"))
         return supplier, buyer
 
     def _create_houses(self, farm):
@@ -197,15 +200,19 @@ class Command(BaseCommand):
                 farm=farm, name=name, defaults={"capacity": capacity}
             )
             houses.append(house)
-        self.stdout.write(self.style.SUCCESS(f"✓ {len(houses)} houses"))
+        self.stdout.write(self.style.SUCCESS(f"- {len(houses)} houses"))
         return houses
 
-    # ── feed ────────────────────────────────────────────────
+    # -- feed ------------------------------------------------
 
     def _create_feed_deliveries(self, farm, supplier, owner):
         """
-        Deliveries spread over eight months, with feed prices drifting upward
-        — so cost-per-kg is not a flat line and the profitability chart has
+        Deliveries are sized to what the batches actually consume, plus a
+        10-20% buffer - so the farm's feed balance ends positive without
+        being absurd. Total consumption is computed from the daily records
+        (which must already exist), then distributed across eight months of
+        delivery dates. Feed prices still drift upward over the period so
+        cost-per-kg is not a flat line and the profitability chart has
         something to show.
         """
         today = timezone.localdate()
@@ -215,41 +222,70 @@ class Command(BaseCommand):
             (FeedDelivery.FeedType.FINISHER, Decimal("28.75")),
         ]
 
+        total_consumed = DailyRecord.objects.filter(
+            batch__house__farm=farm
+        ).aggregate(kg=Sum("feed_kg"))["kg"] or Decimal("0")
+
+        buffer = Decimal(str(round(random.uniform(1.10, 1.20), 4)))
+        total_to_deliver = (total_consumed * buffer).quantize(Decimal("0.01"))
+
+        slots = [
+            (month_back, feed_type, base_price)
+            for month_back in range(8, 0, -1)
+            for feed_type, base_price in types
+        ]
+        # A random spread across slots, rescaled so the quantities sum
+        # exactly to total_to_deliver. The final slot takes the rounding
+        # remainder; its spread weight keeps that remainder comfortably
+        # positive.
+        spread = [random.uniform(0.7, 1.3) for _ in slots]
+        scale = total_to_deliver / Decimal(str(sum(spread)))
+
+        running = Decimal("0")
         created = 0
-        for month_back in range(8, 0, -1):
+        for idx, (month_back, feed_type, base_price) in enumerate(slots):
             delivery_date = today - timedelta(days=month_back * 30)
             drift = Decimal("1") + (Decimal(8 - month_back) * Decimal("0.015"))
+            unit = (base_price * drift).quantize(Decimal("0.01"))
 
-            for feed_type, base_price in types:
-                qty = Decimal(random.randrange(1500, 3500, 50))
-                unit = (base_price * drift).quantize(Decimal("0.01"))
+            if idx == len(slots) - 1:
+                qty = (total_to_deliver - running).quantize(Decimal("0.01"))
+            else:
+                qty = (Decimal(str(spread[idx])) * scale).quantize(Decimal("0.01"))
+                running += qty
 
-                FeedDelivery.objects.create(
-                    farm=farm,
-                    supplier_link=supplier,
-                    delivery_date=delivery_date,
-                    feed_type=feed_type,
-                    quantity_kg=qty,
-                    unit_cost=unit,
-                    invoice_ref=f"{DEMO_PREFIX}INV-{delivery_date:%Y%m}-{feed_type[:3]}",
-                    recorded_by=owner,
-                    recorded_at=timezone.now(),
-                )
-                created += 1
+            FeedDelivery.objects.create(
+                farm=farm,
+                supplier_link=supplier,
+                delivery_date=delivery_date,
+                feed_type=feed_type,
+                quantity_kg=qty,
+                unit_cost=unit,
+                invoice_ref=f"{DEMO_PREFIX}INV-{delivery_date:%Y%m}-{feed_type[:3]}",
+                recorded_by=owner,
+                recorded_at=timezone.now(),
+            )
+            created += 1
 
-        self.stdout.write(self.style.SUCCESS(f"✓ {created} feed deliveries"))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"- {created} feed deliveries - "
+                f"{total_to_deliver:,.0f} kg to cover {total_consumed:,.0f} kg "
+                f"consumed (x{buffer} buffer)"
+            )
+        )
 
-    # ── batches ─────────────────────────────────────────────
+    # -- batches ---------------------------------------------
 
     def _create_batches(self, farm, houses, owner, worker, buyer):
         """
         Five harvested batches with deliberately varied performance, plus two
-        still running. The spread is the point — a chart where every bar is
+        still running. The spread is the point - a chart where every bar is
         identical demonstrates nothing.
         """
         today = timezone.localdate()
 
-        # (label, days_ago_started, birds, quality) — quality drives the curves
+        # (label, days_ago_started, birds, quality) - quality drives the curves
         completed = [
             ("2025-09", 300, 4800, "good"),
             ("2025-11", 240, 4800, "average"),
@@ -294,9 +330,9 @@ class Command(BaseCommand):
             self._fill_daily_records(batch, age, "average", worker)
             self._fill_weight_samples(batch, age, "average", worker)
 
-        self.stdout.write(self.style.SUCCESS("✓ 5 harvested + 2 active batches"))
+        self.stdout.write(self.style.SUCCESS("- 5 harvested + 2 active batches"))
 
-    # ── curve generation ────────────────────────────────────
+    # -- curve generation ------------------------------------
 
     def _fill_daily_records(self, batch, days, quality, worker):
         """
@@ -355,8 +391,12 @@ class Command(BaseCommand):
                 culled = int(daily * 0.30)
             unknown = max(0, daily - heat - disease - culled)
 
-            # Feed intake per bird, grams/day, roughly Ross 308 shape.
-            g_per_bird = min(20 + (day * 4.2), 185)
+            # Feed intake per bird, grams/day, roughly Ross 308 shape. Tuned
+            # so the cumulative total lands near 4.1 kg/bird over a 42-day
+            # cycle (published Ross 308 intake is ~4.0-4.2 kg), which keeps
+            # FCR - feed consumed / harvest weight - in the realistic 1.5-1.9
+            # band once paired with the corrected weight curve below.
+            g_per_bird = min(18 + (day * 3.7), 175)
             feed_kg = Decimal(alive * g_per_bird / 1000).quantize(Decimal("0.01"))
 
             record_date = batch.start_date + timedelta(days=day)
@@ -394,9 +434,17 @@ class Command(BaseCommand):
         }
         m = multipliers[quality]
 
-        for week_day in range(7, days + 1, 7):
-            # Ross 308 approximate live weight by age.
-            grams = (0.045 * (week_day ** 2.35) + 42) * m
+        # Weekly, plus one at the true cycle end so the harvest has a
+        # weight sample that actually reflects slaughter age.
+        sample_days = list(range(7, days + 1, 7))
+        if days not in sample_days:
+            sample_days.append(days)
+
+        for week_day in sample_days:
+            # Ross 308 approximate live weight by age. The coefficient was
+            # 0.045, which put day-42 weight at ~340 g - roughly a seventh of
+            # reality - and drove FCR to ~15. 0.36 restores ~2.4 kg at day 42.
+            grams = (0.36 * (week_day ** 2.35) + 42) * m
             grams *= random.uniform(0.97, 1.03)
 
             WeightSample.objects.create(
@@ -436,19 +484,24 @@ class Command(BaseCommand):
         batch.status = Batch.Status.HARVESTED
         batch.save(update_fields=["status"])
 
-    # ── report ──────────────────────────────────────────────
+    # -- report ----------------------------------------------
 
     def _report(self):
-        from analytics.services import fcr_by_batch, profitability_by_batch
+        from analytics.services import (
+            farm_dashboard,
+            fcr_by_batch,
+            profitability_by_batch,
+        )
 
         farm = Farm.objects.get(name="Santos Broiler Farm")
         fcr = fcr_by_batch(farm)
         profit = profitability_by_batch(farm)
+        dash = farm_dashboard(farm)
 
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("─" * 68))
+        self.stdout.write(self.style.SUCCESS("-" * 68))
         self.stdout.write(self.style.SUCCESS("  SEEDED. Analytics preview:"))
-        self.stdout.write(self.style.SUCCESS("─" * 68))
+        self.stdout.write(self.style.SUCCESS("-" * 68))
 
         for row in fcr["rows"]:
             self.stdout.write(
@@ -459,16 +512,31 @@ class Command(BaseCommand):
             )
 
         s = fcr["summary"]
+        totals = dash["totals"]
+        avg_fcr = s.get("average_fcr")
+        balance = Decimal(totals["feed_balance_kg"])
+        fcr_ok = avg_fcr is not None and Decimal("1.5") <= Decimal(avg_fcr) <= Decimal("1.9")
+
         self.stdout.write("")
-        self.stdout.write(f"  Average FCR : {s.get('average_fcr')}")
+        self.stdout.write(
+            f"  Average FCR : {avg_fcr}   "
+            f"[{'OK' if fcr_ok else 'OUT OF RANGE'} - expect 1.5-1.9]"
+        )
         self.stdout.write(f"  Best        : {s.get('best_batch')} @ {s.get('best_fcr')}")
         self.stdout.write(f"  Worst       : {s.get('worst_batch')} @ {s.get('worst_fcr')}")
         self.stdout.write("")
-        self.stdout.write(f"  Revenue     : ₱{profit['summary']['total_revenue']}")
-        self.stdout.write(f"  Feed cost   : ₱{profit['summary']['total_allocated_feed_cost']}")
-        self.stdout.write(f"  Feed margin : ₱{profit['summary']['total_feed_margin']}")
+        self.stdout.write(f"  Feed delivered : {Decimal(totals['feed_delivered_kg']):,.2f} kg")
+        self.stdout.write(f"  Feed consumed  : {Decimal(totals['feed_consumed_kg']):,.2f} kg")
+        self.stdout.write(
+            f"  Feed balance   : {balance:,.2f} kg   "
+            f"[{'OK - positive' if balance > 0 else 'NEGATIVE'}]"
+        )
+        self.stdout.write("")
+        self.stdout.write(f"  Revenue     : PHP {profit['summary']['total_revenue']}")
+        self.stdout.write(f"  Feed cost   : PHP {profit['summary']['total_allocated_feed_cost']}")
+        self.stdout.write(f"  Feed margin : PHP {profit['summary']['total_feed_margin']}")
         self.stdout.write("")
         self.stdout.write(
             self.style.WARNING("  Reminder: synthetic data. Say so if asked.")
         )
-        self.stdout.write(self.style.SUCCESS("─" * 68))
+        self.stdout.write(self.style.SUCCESS("-" * 68))
