@@ -93,6 +93,32 @@ class TestRotationGate:
         client = auth(gated_worker)
         assert client.get(reverse("farms:farm-list")).status_code == 200
 
+    def test_login_after_rotation_reports_gate_cleared(self, api, auth, gated_worker):
+        """
+        End-to-end: rotate the PIN, then log in fresh with the NEW one. The
+        login response must report the gate as cleared — this is what the
+        client reads to decide whether to route to /change-pin.
+        """
+        auth(gated_worker).post(
+            reverse("accounts:credential-change"),
+            {
+                "current_pin": "444444",
+                "new_pin": "654321",
+                "confirm_pin": "654321",
+            },
+            format="json",
+        )
+
+        api.force_authenticate(user=None)
+        response = api.post(
+            reverse("accounts:login"),
+            {"phone_number": gated_worker.phone_number, "pin": "654321"},
+            format="json",
+        )
+        assert response.status_code == 200
+        assert response.data["must_change_credential"] is False
+        assert response.data["user"]["must_change_credential"] is False
+
     def test_new_pin_must_differ(self, auth, gated_worker):
         client = auth(gated_worker)
         response = client.post(
