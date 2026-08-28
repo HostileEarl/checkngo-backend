@@ -28,6 +28,7 @@ class OwnerManagerAnalyticsPermission(FarmScopedPermission):
     """Money figures — revenue, margins, supplier costs — are not worker data."""
 
     allowed_roles = {FarmMembership.Role.OWNER, FarmMembership.Role.MANAGER}
+    read_roles = {FarmMembership.Role.OWNER, FarmMembership.Role.MANAGER}
     message = "Financial analytics are restricted to owners and managers."
 
 

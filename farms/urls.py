@@ -1,7 +1,7 @@
 # farms/urls.py
 from django.urls import path
 
-from accounts.views import FarmInvitationListCreateView
+from accounts.views import FarmInvitationListCreateView, FarmInvitationRevokeView
 
 from .views import (
     FarmArchiveView,
@@ -20,6 +20,7 @@ urlpatterns = [
     path("farms/", FarmListCreateView.as_view(), name="farm-list"),
     path("farms/<int:pk>/", FarmDetailView.as_view(), name="farm-detail"),
     path("farms/<int:farm_pk>/invitations/", FarmInvitationListCreateView.as_view(), name="farm-invitations"),
+    path("farms/<int:farm_pk>/invitations/<int:pk>/revoke/", FarmInvitationRevokeView.as_view(), name="invitation-revoke"),
     path("farms/<int:farm_pk>/members/", FarmMemberListView.as_view(), name="farm-members"),
     path("farms/<int:farm_pk>/members/<int:pk>/revoke/", FarmMemberRevokeView.as_view(), name="member-revoke"),
     path("farms/<int:farm_pk>/ownership-history/", FarmOwnershipHistoryView.as_view(), name="ownership-history"),

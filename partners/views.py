@@ -1,4 +1,5 @@
 # partners/views.py
+from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
@@ -52,7 +53,13 @@ class FarmPartnerListCreateView(generics.ListCreateAPIView):
         payload = InvitationReadSerializer(invitation).data
 
         if serializer.issued_pin:
+            # See FarmInvitationListCreateView.create() — same split: the
+            # token travels in the accept link, the PIN travels out-of-band.
             payload["pin"] = serializer.issued_pin
+            payload["token"] = invitation.token
+            payload["accept_url"] = (
+                f"{settings.FRONTEND_URL}/accept-invite?token={invitation.token}"
+            )
             payload["detail"] = (
                 f"Invitation created. Give this PIN to {invitation.full_name}."
             )

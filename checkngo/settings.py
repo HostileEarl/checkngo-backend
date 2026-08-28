@@ -98,6 +98,14 @@ DATABASES = {
     }
 }
 
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+# Base URL of the frontend app. Used to build links that leave the API
+# entirely — e.g. the invite-accept deep link mailed/texted to an invitee.
+FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:5173")
 
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators

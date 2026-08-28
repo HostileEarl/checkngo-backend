@@ -8,15 +8,21 @@ class FarmScopedPermission(BasePermission):
     """
     Base for all farm-scoped access.
 
-    Resolves the farm from the URL, looks up the caller's ACTIVE membership,
-    and caches both on the request so views and serializers can reuse them.
+    Two role sets, because reads and writes are different questions:
 
-    Archived farms (is_active=False) are readable by the OWNER only, and
-    accept no writes from anyone — historical analytics stay available
-    without allowing new records to be backdated into a closed site.
+      read_roles    — who may see this farm's data. Empty means any active
+                      member, which is the common case: a worker needs to
+                      read the batch they are recording against.
+      allowed_roles — who may modify it.
+
+    Subclasses that restrict writes should set `allowed_roles` and leave
+    `read_roles` empty rather than overriding has_permission. An override
+    that calls super() first cannot re-open a read the base already denied,
+    which is how the worker read path got swallowed previously.
     """
 
     allowed_roles = set()
+    read_roles = set()
     farm_url_kwarg = "farm_pk"
     message = "You do not have access to this farm."
 
@@ -24,7 +30,7 @@ class FarmScopedPermission(BasePermission):
         farm_id = view.kwargs.get(self.farm_url_kwarg) or view.kwargs.get("pk")
         if not farm_id:
             return None
-        # No is_active filter here — archive rules are applied below, so we
+        # No is_active filter here — archive rules are applied below so we
         # can distinguish "no access" from "archived, read-only".
         return Farm.objects.filter(pk=farm_id).first()
 
@@ -52,6 +58,13 @@ class FarmScopedPermission(BasePermission):
         request.farm = farm
         request.membership = membership
 
+        # Reads resolve first. A worker must be able to read the batch they
+        # are recording against, even on a view whose writes are restricted.
+        if request.method in SAFE_METHODS:
+            if not self.read_roles:
+                return True
+            return membership.role in self.read_roles
+
         if not self.allowed_roles:
             return True
         return membership.role in self.allowed_roles
@@ -61,32 +74,28 @@ class IsFarmMember(FarmScopedPermission):
     """Any active member of this farm: owner, manager, or worker."""
 
     allowed_roles = set()
+    read_roles = set()
 
 
 class IsFarmManagerOrOwner(FarmScopedPermission):
-    """Staff-management authority. Workers are excluded."""
+    """Staff-management authority. Workers are excluded from writes."""
 
     allowed_roles = {FarmMembership.Role.OWNER, FarmMembership.Role.MANAGER}
+    read_roles = set()
 
 
 class IsFarmOwner(FarmScopedPermission):
-    """Owner-only. Manager promotion, ownership transfer, archiving."""
+    """Owner-only. Ownership transfer, archiving, the ownership ledger."""
 
     allowed_roles = {FarmMembership.Role.OWNER}
+    read_roles = {FarmMembership.Role.OWNER}
 
 
 class IsFarmMemberReadOnly(FarmScopedPermission):
-    """Everyone active can read; only owner/manager can write."""
+    """Everyone active can read; only owner and manager can write."""
 
-    def has_permission(self, request, view):
-        if not super().has_permission(request, view):
-            return False
-        if request.method in SAFE_METHODS:
-            return True
-        return request.membership.role in {
-            FarmMembership.Role.OWNER,
-            FarmMembership.Role.MANAGER,
-        }
+    allowed_roles = {FarmMembership.Role.OWNER, FarmMembership.Role.MANAGER}
+    read_roles = set()
 
 
 class CanInviteRole(FarmScopedPermission):
@@ -94,12 +103,13 @@ class CanInviteRole(FarmScopedPermission):
     Managers may invite workers only; granting MANAGER authority is
     reserved to the owner.
 
-    Checked here rather than in the serializer because "may this person
-    grant this level of authority" is authorization, not validation —
-    which is why it returns 403 and not 400.
+    The role check is authorization, not validation, which is why this
+    returns 403 rather than 400. The override is safe here because super()
+    already returns True for reads before the payload is inspected.
     """
 
     allowed_roles = {FarmMembership.Role.OWNER, FarmMembership.Role.MANAGER}
+    read_roles = {FarmMembership.Role.OWNER, FarmMembership.Role.MANAGER}
     message = "Only the farm owner can grant manager-level access."
 
     def has_permission(self, request, view):
@@ -128,8 +138,8 @@ class HasRotatedCredential(BasePermission):
 
     A user still holding an owner-issued PIN has not established sole
     knowledge of their credential, so nothing they do is yet non-repudiable.
-    Until they rotate it, every endpoint is closed to them except the ones
-    needed to fix that.
+    Until they rotate it, every endpoint is closed except the ones needed
+    to fix that.
     """
 
     message = "You must change your initial PIN before continuing."
