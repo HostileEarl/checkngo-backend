@@ -2,7 +2,7 @@
 from rest_framework import serializers
 
 from accounts.models import Invitation, User, UserManager
-from production.models import FeedDelivery
+from production.models import FeedDelivery, Harvest
 
 from .models import FarmPartnerLink
 
@@ -149,3 +149,46 @@ class SupplierDeliverySerializer(serializers.ModelSerializer):
             "invoice_ref",
         ]
         read_only_fields = fields
+
+
+class BuyerPurchaseSerializer(serializers.ModelSerializer):
+    """
+    A buyer's read-only view of one harvest a farm sold them: what arrived
+    and how much it weighed.
+
+    Revenue and revenue_per_kg are deliberately withheld. Revenue is the
+    FARM'S figure — entered by the farm after the sale — and showing it back
+    to the buyer means showing them what the farm recorded them as paying,
+    which may not match their own books. This endpoint is a delivery and
+    weight ledger, not an invoice; surfacing revenue here would manufacture
+    disputes the system has no business creating.
+
+    Also withheld: `notes` and `recorded_by` (the farm's internal
+    annotations), and anything about mortality, feed, or FCR (production
+    performance is the farm's business, not the buyer's).
+    """
+
+    farm = serializers.IntegerField(source="batch.house.farm_id", read_only=True)
+    farm_name = serializers.CharField(
+        source="batch.house.farm.name", read_only=True
+    )
+    batch_code = serializers.CharField(source="batch.batch_code", read_only=True)
+    average_weight_kg = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Harvest
+        fields = [
+            "id",
+            "harvest_date",
+            "farm",
+            "farm_name",
+            "batch_code",
+            "birds_harvested",
+            "total_weight_kg",
+            "average_weight_kg",
+        ]
+        read_only_fields = fields
+
+    def get_average_weight_kg(self, obj):
+        val = obj.average_weight_kg
+        return str(val) if val is not None else None

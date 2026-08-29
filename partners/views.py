@@ -8,10 +8,11 @@ from rest_framework.views import APIView
 
 from accounts.serializers import InvitationReadSerializer
 from farms.permissions import HasRotatedCredential, IsFarmManagerOrOwner
-from production.models import FeedDelivery
+from production.models import FeedDelivery, Harvest
 
 from .models import FarmPartnerLink
 from .serializers import (
+    BuyerPurchaseSerializer,
     FarmPartnerLinkSerializer,
     PartnerInvitationCreateSerializer,
     SupplierDeliverySerializer,
@@ -143,4 +144,36 @@ class MyDeliveriesView(generics.ListAPIView):
         farm_id = self.request.query_params.get("farm")
         if farm_id and str(farm_id).isdigit():
             qs = qs.filter(farm_id=farm_id)
+        return qs
+
+
+class MyPurchasesView(generics.ListAPIView):
+    """
+    GET /api/partners/my-purchases/ — a buyer's view of what farms recorded
+    selling them.
+
+    Scoped to Harvest rows whose buyer_link points at the requesting user.
+    A weight and delivery ledger only: no revenue (see BuyerPurchaseSerializer
+    for why), no farm annotations, nothing about mortality, feed, or FCR, and
+    never another buyer's rows. Internal staff have no buyer identity here, so
+    they get an empty list rather than a 403.
+    """
+
+    serializer_class = BuyerPurchaseSerializer
+    permission_classes = [IsAuthenticated, HasRotatedCredential]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_internal:
+            return Harvest.objects.none()
+
+        qs = (
+            Harvest.objects.filter(buyer_link__partner=user)
+            .select_related("batch__house__farm", "buyer_link")
+            .order_by("-harvest_date")
+        )
+
+        farm_id = self.request.query_params.get("farm")
+        if farm_id and str(farm_id).isdigit():
+            qs = qs.filter(batch__house__farm_id=farm_id)
         return qs
