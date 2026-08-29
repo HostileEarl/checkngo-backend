@@ -2,6 +2,7 @@
 from django.urls import path
 
 from .views import (
+    AlertsView,
     BatchGrowthCurveView,
     BatchMortalityView,
     FarmDashboardView,
@@ -21,4 +22,6 @@ urlpatterns = [
     path(f"{_base}/mortality-comparison/", FarmMortalityComparisonView.as_view(), name="mortality-comparison"),
     path(f"{_base}/fcr/", FarmFCRView.as_view(), name="fcr"),
     path(f"{_base}/profitability/", FarmProfitabilityView.as_view(), name="profitability"),
+
+    path("farms/<int:farm_pk>/alerts/", AlertsView.as_view(), name="alerts"),
 ]

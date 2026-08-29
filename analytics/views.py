@@ -7,6 +7,7 @@ from farms.models import FarmMembership
 from farms.permissions import FarmScopedPermission
 from production.models import Batch
 
+from .alerts import compute_alerts
 from .services import (
     farm_dashboard,
     farm_mortality_comparison,
@@ -192,3 +193,36 @@ class FarmProfitabilityView(APIView):
 
     def get(self, request, farm_pk):
         return Response(profitability_by_batch(request.farm))
+
+
+@extend_schema(
+    tags=["Analytics"],
+    summary="Computed alerts for the notification bell",
+    description=(
+        "Standing conditions derived from live data — high mortality, an "
+        "unbalanced feed ledger, a day not yet recorded, an approaching "
+        "harvest, an expiring invitation, a recent correction.\n\n"
+        "Nothing is persisted. Each alert carries a stable `id` so the "
+        "client can remember dismissals, and an `audience` — the list is "
+        "already filtered to the caller's role before it is returned. "
+        "`link` omits the role prefix; the client prepends it."
+    ),
+)
+class AlertsView(APIView):
+    """GET /api/farms/<farm_pk>/alerts/ — any active member; audience narrows further."""
+
+    permission_classes = [AnalyticsPermission]
+
+    def get(self, request, farm_pk):
+        role = request.membership.role
+        visible = [
+            alert
+            for alert in compute_alerts(request.farm)
+            if role in alert["audience"]
+        ]
+
+        counts = {"danger": 0, "warning": 0, "info": 0}
+        for alert in visible:
+            counts[alert["severity"]] += 1
+
+        return Response({"alerts": visible, "counts": counts})
