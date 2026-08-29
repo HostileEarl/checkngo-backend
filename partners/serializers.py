@@ -2,6 +2,7 @@
 from rest_framework import serializers
 
 from accounts.models import Invitation, User, UserManager
+from production.models import FeedDelivery
 
 from .models import FarmPartnerLink
 
@@ -9,6 +10,7 @@ from .models import FarmPartnerLink
 class FarmPartnerLinkSerializer(serializers.ModelSerializer):
     partner_name = serializers.CharField(source="partner.full_name", read_only=True)
     phone_number = serializers.CharField(source="partner.phone_number", read_only=True)
+    farm_name = serializers.CharField(source="farm.name", read_only=True)
     linked_by_name = serializers.CharField(
         source="linked_by.full_name", read_only=True, default=None
     )
@@ -17,6 +19,8 @@ class FarmPartnerLinkSerializer(serializers.ModelSerializer):
         model = FarmPartnerLink
         fields = [
             "id",
+            "farm",
+            "farm_name",
             "partner",
             "partner_name",
             "phone_number",
@@ -28,7 +32,7 @@ class FarmPartnerLinkSerializer(serializers.ModelSerializer):
             "deactivated_at",
             "linked_by_name",
         ]
-        read_only_fields = ["id", "partner", "linked_at", "deactivated_at"]
+        read_only_fields = ["id", "farm", "partner", "linked_at", "deactivated_at"]
 
 
 class PartnerInvitationCreateSerializer(serializers.ModelSerializer):
@@ -114,3 +118,34 @@ class PartnerInvitationCreateSerializer(serializers.ModelSerializer):
 
         invitation.save()
         return invitation
+
+
+class SupplierDeliverySerializer(serializers.ModelSerializer):
+    """
+    A supplier's read-only view of one delivery a farm recorded from them.
+
+    Exposes what the delivery was and what it cost. Withholds `notes` and
+    `recorded_by` — the farm's internal annotations, not the supplier's
+    business.
+    """
+
+    farm_name = serializers.CharField(source="farm.name", read_only=True)
+    feed_type_display = serializers.CharField(
+        source="get_feed_type_display", read_only=True
+    )
+
+    class Meta:
+        model = FeedDelivery
+        fields = [
+            "id",
+            "farm",
+            "farm_name",
+            "delivery_date",
+            "feed_type",
+            "feed_type_display",
+            "quantity_kg",
+            "unit_cost",
+            "total_cost",
+            "invoice_ref",
+        ]
+        read_only_fields = fields

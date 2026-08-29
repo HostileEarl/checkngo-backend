@@ -8,9 +8,14 @@ from rest_framework.views import APIView
 
 from accounts.serializers import InvitationReadSerializer
 from farms.permissions import HasRotatedCredential, IsFarmManagerOrOwner
+from production.models import FeedDelivery
 
 from .models import FarmPartnerLink
-from .serializers import FarmPartnerLinkSerializer, PartnerInvitationCreateSerializer
+from .serializers import (
+    FarmPartnerLinkSerializer,
+    PartnerInvitationCreateSerializer,
+    SupplierDeliverySerializer,
+)
 
 
 class FarmPartnerListCreateView(generics.ListCreateAPIView):
@@ -38,7 +43,7 @@ class FarmPartnerListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         qs = FarmPartnerLink.objects.filter(farm=self.request.farm).select_related(
-            "partner", "linked_by"
+            "farm", "partner", "linked_by"
         )
         link_type = self.request.query_params.get("type")
         if link_type:
@@ -108,3 +113,34 @@ class MyPartnerFarmsView(generics.ListAPIView):
         return FarmPartnerLink.objects.filter(
             partner=user, is_active=True
         ).select_related("farm", "partner", "linked_by")
+
+
+class MyDeliveriesView(generics.ListAPIView):
+    """
+    GET /api/partners/my-deliveries/ — a supplier's view of what farms
+    recorded receiving from them.
+
+    Scoped to FeedDelivery rows whose supplier_link points at the requesting
+    user. Nothing about flocks, staff, or production, and never another
+    supplier's rows. Internal staff have no supplier identity here, so they
+    get an empty list rather than a 403.
+    """
+
+    serializer_class = SupplierDeliverySerializer
+    permission_classes = [IsAuthenticated, HasRotatedCredential]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_internal:
+            return FeedDelivery.objects.none()
+
+        qs = (
+            FeedDelivery.objects.filter(supplier_link__partner=user)
+            .select_related("farm", "supplier_link")
+            .order_by("-delivery_date")
+        )
+
+        farm_id = self.request.query_params.get("farm")
+        if farm_id and str(farm_id).isdigit():
+            qs = qs.filter(farm_id=farm_id)
+        return qs
