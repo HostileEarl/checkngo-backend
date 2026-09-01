@@ -48,3 +48,22 @@ class CanManageFeed(FarmScopedPermission):
     allowed_roles = {FarmMembership.Role.OWNER, FarmMembership.Role.MANAGER}
     read_roles = set()
     message = "Only an owner or manager can record feed deliveries."
+
+
+class CanManageInventory(FarmScopedPermission):
+    """
+    Inventory items, their reorder thresholds, and stock-ins — owner and
+    manager only, the same split as feed deliveries. Reads stay open to
+    workers: a worker needs to see the item they are logging usage against.
+    """
+
+    allowed_roles = {FarmMembership.Role.OWNER, FarmMembership.Role.MANAGER}
+    read_roles = set()
+    message = "Only an owner or manager can manage inventory items."
+
+
+class CanRecordInventoryUsage(FarmScopedPermission):
+    """Inventory usage logs — every active member, workers included."""
+
+    allowed_roles = set()
+    read_roles = set()

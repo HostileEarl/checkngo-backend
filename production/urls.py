@@ -17,6 +17,12 @@ from .views import (
     HarvestDetailView,
     HouseDetailView,
     HouseListCreateView,
+    InventoryItemDetailView,
+    InventoryItemListCreateView,
+    InventoryStockInListCreateView,
+    InventoryUsageBulkSyncView,
+    InventoryUsageDetailView,
+    InventoryUsageListCreateView,
     WeightSampleDetailView,
     WeightSampleListCreateView,
 )
@@ -46,7 +52,14 @@ urlpatterns = [
 
     path(f"{_farm}/feed-deliveries/", FeedDeliveryListCreateView.as_view(), name="feed-list"),
     path(f"{_farm}/feed-stock/", FeedStockView.as_view(), name="feed-stock"),
-    
+
+    path(f"{_farm}/inventory/items/", InventoryItemListCreateView.as_view(), name="inventory-item-list"),
+    path(f"{_farm}/inventory/items/<int:pk>/", InventoryItemDetailView.as_view(), name="inventory-item-detail"),
+    path(f"{_farm}/inventory/items/<int:item_pk>/stock-ins/", InventoryStockInListCreateView.as_view(), name="inventory-stock-in-list"),
+    path(f"{_farm}/inventory/usage/", InventoryUsageListCreateView.as_view(), name="inventory-usage-list"),
+    path(f"{_farm}/inventory/usage/bulk-sync/", InventoryUsageBulkSyncView.as_view(), name="inventory-usage-bulk-sync"),
+    path(f"{_farm}/inventory/usage/<uuid:pk>/", InventoryUsageDetailView.as_view(), name="inventory-usage-detail"),
+
     path(f"{_batch}/daily-records/<uuid:pk>/correct/", DailyRecordCorrectView.as_view(), name="daily-correct"),
     path(f"{_batch}/corrections/", BatchCorrectionListView.as_view(), name="batch-corrections"),
     path(f"{_farm}/corrections/", FarmCorrectionListView.as_view(), name="farm-corrections"),

@@ -14,6 +14,9 @@ from .models import (
     FeedDelivery,
     Harvest,
     House,
+    InventoryItem,
+    InventoryStockIn,
+    InventoryUsageLog,
     RecordCorrection,
     WeightSample,
 )
@@ -803,3 +806,274 @@ class DailyRecordCorrectionSerializer(serializers.Serializer):
         )
         # The post_save signal on DailyRecord already refreshed batch totals.
         return correction
+
+
+# ─────────────────────────────────────────────────────────────
+# Inventory
+# ─────────────────────────────────────────────────────────────
+
+
+class InventoryItemSerializer(serializers.ModelSerializer):
+    """
+    Read + write for an item. The balance fields are derived, never stored —
+    read from the queryset annotation `with_levels()` adds, falling back to
+    the model properties for a bare instance (e.g. straight after create).
+    """
+
+    current_quantity = serializers.SerializerMethodField()
+    stocked_in = serializers.SerializerMethodField()
+    used_total = serializers.SerializerMethodField()
+    is_low = serializers.SerializerMethodField()
+    never_stocked = serializers.SerializerMethodField()
+
+    class Meta:
+        model = InventoryItem
+        fields = [
+            "id",
+            "name",
+            "unit",
+            "low_stock_threshold",
+            "is_active",
+            "current_quantity",
+            "stocked_in",
+            "used_total",
+            "is_low",
+            "never_stocked",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+    def _level(self, obj, annotated_attr, prop_name):
+        val = getattr(obj, annotated_attr, None)
+        if val is None:
+            val = getattr(obj, prop_name)
+        return str(val)
+
+    def get_current_quantity(self, obj) -> str:
+        return self._level(obj, "qty_current", "current_quantity")
+
+    def get_stocked_in(self, obj) -> str:
+        return self._level(obj, "qty_stocked_in", "stocked_in")
+
+    def get_used_total(self, obj) -> str:
+        return self._level(obj, "qty_used", "used_total")
+
+    def get_never_stocked(self, obj) -> bool:
+        stock_in_count = getattr(obj, "stock_in_count", None)
+        usage_count = getattr(obj, "usage_count", None)
+        if stock_in_count is not None and usage_count is not None:
+            return stock_in_count == 0 and usage_count == 0
+        return obj.never_stocked
+
+    def get_is_low(self, obj) -> bool:
+        if self.get_never_stocked(obj):
+            return False
+        current = getattr(obj, "qty_current", None)
+        if current is None:
+            current = obj.current_quantity
+        return current <= obj.low_stock_threshold
+
+    def validate_name(self, value):
+        farm = self.context["farm"]
+        qs = InventoryItem.objects.filter(farm=farm, name__iexact=value.strip())
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                "An item with this name already exists on this farm."
+            )
+        return value.strip()
+
+    def create(self, validated_data):
+        return InventoryItem.objects.create(
+            farm=self.context["farm"],
+            created_by=self.context["request"].user,
+            **validated_data,
+        )
+
+
+class InventoryStockInSerializer(serializers.ModelSerializer):
+    recorded_by_name = serializers.CharField(
+        source="recorded_by.full_name", read_only=True, default=None
+    )
+
+    class Meta:
+        model = InventoryStockIn
+        fields = [
+            "id",
+            "item",
+            "quantity",
+            "stock_in_date",
+            "note",
+            "recorded_by",
+            "recorded_by_name",
+            "created_at",
+        ]
+        read_only_fields = ["id", "item", "recorded_by", "created_at"]
+
+    def validate_quantity(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Quantity must be greater than zero.")
+        return value
+
+    def validate_stock_in_date(self, value):
+        if value > timezone.localdate():
+            raise serializers.ValidationError("Cannot record a future delivery.")
+        return value
+
+    def create(self, validated_data):
+        return InventoryStockIn.objects.create(
+            item=self.context["item"],
+            recorded_by=self.context["request"].user,
+            **validated_data,
+        )
+
+
+class InventoryUsageLogSerializer(serializers.ModelSerializer):
+    """
+    One worker drawing an item down.
+
+    `id` is declared explicitly for the same reason DailyRecordSerializer
+    does it: ModelSerializer forces a primary-key field to read_only, which
+    would discard the client-generated UUID and break idempotency. The
+    identity of a usage log is that UUID alone — it is an event, not a
+    one-per-day record, so there is no date fallback and a worker may log
+    the same item any number of times in a day.
+    """
+
+    id = serializers.UUIDField(required=False)
+    item_name = serializers.CharField(source="item.name", read_only=True)
+    unit = serializers.CharField(source="item.unit", read_only=True)
+    is_editable = serializers.BooleanField(read_only=True)
+    recorded_by_name = serializers.CharField(
+        source="recorded_by.full_name", read_only=True, default=None
+    )
+    sync_delay_seconds = serializers.FloatField(read_only=True)
+
+    class Meta:
+        model = InventoryUsageLog
+        fields = [
+            "id",
+            "item",
+            "item_name",
+            "unit",
+            "quantity_used",
+            "usage_date",
+            "notes",
+            "recorded_by",
+            "recorded_by_name",
+            "recorded_at",
+            "created_at",
+            "is_editable",
+            "sync_delay_seconds",
+        ]
+        read_only_fields = ["recorded_by", "created_at"]
+
+    def validate_item(self, value):
+        farm = self.context["farm"]
+        if value.farm_id != farm.pk:
+            raise serializers.ValidationError("That item belongs to another farm.")
+        if not value.is_active:
+            raise serializers.ValidationError("That item is no longer in use.")
+        return value
+
+    def validate_quantity_used(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Quantity must be greater than zero.")
+        return value
+
+    def validate_usage_date(self, value):
+        if value > timezone.localdate():
+            raise serializers.ValidationError("Cannot record a future date.")
+        return value
+
+    def update(self, instance, validated_data):
+        # The 24-hour lock has teeth here exactly as it does on a daily
+        # mortality record: after it closes the entry is evidence.
+        if not instance.is_editable:
+            raise serializers.ValidationError(
+                {
+                    "detail": (
+                        "This record is older than 24 hours and is locked. "
+                        "Ask a manager to make the change."
+                    )
+                }
+            )
+        validated_data.pop("item", None)  # the item is fixed once logged
+        validated_data.pop("usage_date", None)  # so is the day
+        return super().update(instance, validated_data)
+
+    def create(self, validated_data):
+        return InventoryUsageLog.objects.create(
+            recorded_by=self.context["request"].user, **validated_data
+        )
+
+
+class InventoryUsageBulkSyncSerializer(serializers.Serializer):
+    """
+    Offline sync for usage logs — a backlog of events in one round trip.
+
+    Simpler than the daily-record equivalent: identity is purely the
+    client UUID, so there is no (batch, date) fallback and no
+    same-date-different-id conflict to resolve. Each record is written in
+    its own savepoint; one bad row does not reject the rest.
+    """
+
+    records = InventoryUsageLogSerializer(many=True)
+
+    def validate_records(self, value):
+        if not value:
+            raise serializers.ValidationError("No records supplied.")
+        if len(value) > 60:
+            raise serializers.ValidationError(
+                "Sync at most 60 records per request."
+            )
+        return value
+
+    def save(self, **kwargs):
+        user = self.context["request"].user
+        created, updated, failed = [], [], []
+
+        for payload in self.validated_data["records"]:
+            supplied_id = payload.get("id")
+            try:
+                with transaction.atomic():
+                    existing = None
+                    if supplied_id is not None:
+                        existing = (
+                            InventoryUsageLog.objects.select_related("item")
+                            .filter(pk=supplied_id)
+                            .first()
+                        )
+
+                    if existing is None:
+                        record = InventoryUsageLog.objects.create(
+                            recorded_by=user, **payload
+                        )
+                        created.append(str(record.id))
+                    elif existing.is_editable:
+                        # The device is the source of truth for an event it
+                        # already reported — overwrite on re-sync.
+                        for field, val in payload.items():
+                            if field in ("id", "item", "usage_date"):
+                                continue
+                            setattr(existing, field, val)
+                        existing.recorded_by = user
+                        existing.save()
+                        updated.append(str(existing.id))
+                    else:
+                        failed.append(
+                            {
+                                "id": str(supplied_id),
+                                "error": "Locked — older than 24 hours.",
+                            }
+                        )
+            except Exception as exc:  # noqa: BLE001
+                failed.append(
+                    {
+                        "id": str(supplied_id) if supplied_id else None,
+                        "error": str(exc),
+                    }
+                )
+
+        return {"created": created, "updated": updated, "failed": failed}

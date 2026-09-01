@@ -8,6 +8,9 @@ from .models import (
     FeedDelivery,
     Harvest,
     House,
+    InventoryItem,
+    InventoryStockIn,
+    InventoryUsageLog,
     RecordCorrection,
     WeightSample,
 )
@@ -215,6 +218,62 @@ class FeedDeliveryAdmin(admin.ModelAdmin):
     readonly_fields = ["id", "created_at", "updated_at"]
     date_hierarchy = "delivery_date"
     
+class InventoryStockInInline(admin.TabularInline):
+    model = InventoryStockIn
+    extra = 0
+    fields = ["stock_in_date", "quantity", "note", "recorded_by"]
+    readonly_fields = ["recorded_by"]
+    ordering = ["-stock_in_date"]
+
+
+@admin.register(InventoryItem)
+class InventoryItemAdmin(admin.ModelAdmin):
+    list_display = ["name", "farm", "unit", "low_stock_threshold", "level", "is_active"]
+    list_filter = ["farm", "is_active"]
+    search_fields = ["name", "farm__name"]
+    readonly_fields = ["created_by", "created_at"]
+    inlines = [InventoryStockInInline]
+
+    @admin.display(description="On hand")
+    def level(self, obj):
+        qty = obj.current_quantity
+        colour = "#c0392b" if qty <= 0 else "#e67e22" if qty <= obj.low_stock_threshold else "#27ae60"
+        return format_html('<span style="color:{};">{} {}</span>', colour, qty, obj.unit)
+
+
+@admin.register(InventoryStockIn)
+class InventoryStockInAdmin(admin.ModelAdmin):
+    list_display = ["stock_in_date", "item", "quantity", "recorded_by"]
+    list_filter = ["item__farm", "item", "stock_in_date"]
+    date_hierarchy = "stock_in_date"
+    readonly_fields = ["created_at"]
+
+
+@admin.register(InventoryUsageLog)
+class InventoryUsageLogAdmin(admin.ModelAdmin):
+    """Editable only inside the 24-hour window, matching the API and DailyRecordAdmin."""
+
+    list_display = ["usage_date", "item", "quantity_used", "recorded_by", "lock_state"]
+    list_filter = ["item__farm", "item", "usage_date"]
+    date_hierarchy = "usage_date"
+    readonly_fields = ["id", "created_at", "updated_at", "sync_delay_seconds"]
+    ordering = ["-usage_date"]
+
+    @admin.display(description="Editable")
+    def lock_state(self, obj):
+        if obj.is_editable:
+            return format_html('<span style="color:#e67e22;">Open</span>')
+        return format_html('<span style="color:#7f8c8d;">Locked</span>')
+
+    def has_change_permission(self, request, obj=None):
+        if obj is None:
+            return True
+        return obj.is_editable
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(RecordCorrection)
 class RecordCorrectionAdmin(admin.ModelAdmin):
     """Fully read-only. The model's save() raises on update."""

@@ -38,6 +38,9 @@ from .models import (
     FeedDelivery,
     Harvest,
     House,
+    InventoryItem,
+    InventoryStockIn,
+    InventoryUsageLog,
     RecordCorrection,
     WeightSample,
 )
@@ -45,7 +48,9 @@ from .permissions import (
     CanCorrectLockedRecord,
     CanManageBatches,
     CanManageFeed,
+    CanManageInventory,
     CanRecordDaily,
+    CanRecordInventoryUsage,
     CanViewProduction,
 )
 from .serializers import (
@@ -57,6 +62,10 @@ from .serializers import (
     FeedDeliverySerializer,
     HarvestSerializer,
     HouseSerializer,
+    InventoryItemSerializer,
+    InventoryStockInSerializer,
+    InventoryUsageBulkSyncSerializer,
+    InventoryUsageLogSerializer,
     RecordCorrectionSerializer,
     WeightSampleSerializer,
 )
@@ -587,3 +596,196 @@ class FarmCorrectionListView(generics.ListAPIView):
         return RecordCorrection.objects.filter(
             batch__house__farm=self.request.farm
         ).select_related("batch", "content_type")
+
+
+# ─────────────────────────────────────────────────────────────
+# Inventory
+# ─────────────────────────────────────────────────────────────
+
+
+class InventoryItemListCreateView(generics.ListCreateAPIView):
+    """
+    GET  /api/farms/<farm_pk>/inventory/items/   — any active member
+    POST /api/farms/<farm_pk>/inventory/items/   — owner/manager only
+
+    CanManageInventory leaves reads open (empty read_roles), so a worker
+    can still fetch the list to pick an item to log usage against.
+    """
+
+    serializer_class = InventoryItemSerializer
+    permission_classes = [CanManageInventory]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["farm"] = self.request.farm
+        return context
+
+    def get_queryset(self):
+        qs = InventoryItem.objects.filter(farm=self.request.farm).with_levels()
+        if self.request.query_params.get("active") == "1":
+            qs = qs.filter(is_active=True)
+        return qs
+
+
+class InventoryItemDetailView(generics.RetrieveUpdateAPIView):
+    """GET / PATCH /api/farms/<farm_pk>/inventory/items/<pk>/ — owner/manager to write."""
+
+    serializer_class = InventoryItemSerializer
+    permission_classes = [CanManageInventory]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["farm"] = self.request.farm
+        return context
+
+    def get_queryset(self):
+        return InventoryItem.objects.filter(farm=self.request.farm).with_levels()
+
+
+class InventoryStockInListCreateView(generics.ListCreateAPIView):
+    """
+    GET  /api/farms/<farm_pk>/inventory/items/<item_pk>/stock-ins/
+    POST /api/farms/<farm_pk>/inventory/items/<item_pk>/stock-ins/  — owner/manager
+
+    Stock-in is the in-flow the balance is computed from. Without it the
+    balance only ever falls, goes negative, and the low-stock alert sticks.
+    """
+
+    serializer_class = InventoryStockInSerializer
+    permission_classes = [CanManageInventory]
+
+    @property
+    def item(self):
+        if not hasattr(self, "_item"):
+            self._item = get_object_or_404(
+                InventoryItem, pk=self.kwargs["item_pk"], farm=self.request.farm
+            )
+        return self._item
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["farm"] = self.request.farm
+        context["item"] = self.item
+        return context
+
+    def get_queryset(self):
+        return InventoryStockIn.objects.filter(item=self.item).select_related(
+            "recorded_by"
+        )
+
+
+class InventoryUsageListCreateView(generics.ListCreateAPIView):
+    """
+    GET  /api/farms/<farm_pk>/inventory/usage/            — any active member
+    POST /api/farms/<farm_pk>/inventory/usage/            — workers included
+
+    The worker's write path. Idempotent: a POST whose client-generated `id`
+    already exists is a retry, not a new event — it is routed through the
+    serializer's update() (which enforces the 24-hour lock) and returns
+    200, mirroring DailyRecordListCreateView. There is no same-date
+    conflict branch — a usage log is an event, and two events on one day
+    are legitimate.
+    """
+
+    serializer_class = InventoryUsageLogSerializer
+    permission_classes = [CanRecordInventoryUsage]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["farm"] = self.request.farm
+        return context
+
+    def get_queryset(self):
+        qs = InventoryUsageLog.objects.filter(
+            item__farm=self.request.farm
+        ).select_related("item", "recorded_by")
+        item_id = self.request.query_params.get("item")
+        if item_id:
+            qs = qs.filter(item_id=item_id)
+        if self.request.query_params.get("mine") == "1":
+            qs = qs.filter(recorded_by=self.request.user)
+        usage_date = self.request.query_params.get("date")
+        if usage_date:
+            qs = qs.filter(usage_date=usage_date)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        supplied_id = request.data.get("id")
+        existing = None
+        if supplied_id:
+            try:
+                uuid.UUID(str(supplied_id))
+            except (ValueError, AttributeError, TypeError):
+                pass
+            else:
+                existing = self.get_queryset().filter(pk=supplied_id).first()
+
+        if existing is not None:
+            # Reusing the serializer's update() keeps this retry path
+            # governed by the same 24-hour lock as any other edit.
+            serializer = self.get_serializer(existing, data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        return super().create(request, *args, **kwargs)
+
+
+class InventoryUsageDetailView(generics.RetrieveUpdateAPIView):
+    """
+    GET / PATCH /api/farms/<farm_pk>/inventory/usage/<pk>/
+
+    PATCH is refused by the serializer once the 24-hour window closes.
+    No DELETE — a recorded event is not removable.
+    """
+
+    serializer_class = InventoryUsageLogSerializer
+    permission_classes = [CanRecordInventoryUsage]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["farm"] = self.request.farm
+        return context
+
+    def get_queryset(self):
+        return InventoryUsageLog.objects.filter(
+            item__farm=self.request.farm
+        ).select_related("item", "recorded_by")
+
+
+@extend_schema(
+    tags=["Production"],
+    summary="Offline bulk sync — inventory usage logs",
+    request=InventoryUsageBulkSyncSerializer,
+    description=(
+        "Upload a backlog of usage events in one request.\n\n"
+        "**Idempotent.** Supply the client-generated UUID as `id`. "
+        "Re-syncing an event that already exists overwrites it, provided it "
+        "is still inside the 24-hour window.\n\n"
+        "**An event, not a daily record.** The same item may appear more "
+        "than once — each row is its own event, keyed only by `id`. There "
+        "is no per-day uniqueness.\n\n"
+        "**Partial success is normal.** `207 Multi-Status` means some rows "
+        "failed — read `failed[]` (each carries the offending `id`) and "
+        "retry only those. Maximum 60 records per request."
+    ),
+)
+class InventoryUsageBulkSyncView(APIView):
+    """POST /api/farms/<farm_pk>/inventory/usage/bulk-sync/"""
+
+    permission_classes = [CanRecordInventoryUsage]
+
+    def post(self, request, farm_pk):
+        serializer = InventoryUsageBulkSyncSerializer(
+            data=request.data,
+            context={"request": request, "farm": request.farm},
+        )
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
+
+        http_status = (
+            status.HTTP_207_MULTI_STATUS
+            if result["failed"]
+            else status.HTTP_200_OK
+        )
+        return Response(result, status=http_status)

@@ -7,6 +7,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.contrib.contenttypes.fields import GenericForeignKey
 
@@ -554,3 +555,236 @@ class RecordCorrection(models.Model):
         if self.corrected_by and not self.corrected_by_name:
             self.corrected_by_name = self.corrected_by.full_name
         super().save(*args, **kwargs)
+
+
+# ─────────────────────────────────────────────────────────────
+# Inventory — a lightweight store for farm consumables
+# ─────────────────────────────────────────────────────────────
+#
+# Modelled on feed, not on mortality. Feed has a stock-in stream
+# (FeedDelivery), a stock-out stream (DailyRecord.feed_kg), and a balance
+# computed on read and never stored (see analytics.services and
+# FeedStockView). Inventory is the same shape for anything else a worker
+# draws down day to day — vaccines, disinfectant, litter, LPG:
+#
+#   InventoryItem      the thing tracked, plus its reorder level
+#   InventoryStockIn   deliveries / manual top-ups   (manager/owner, online)
+#   InventoryUsageLog  a worker drawing some down     (worker, offline)
+#
+# There is no quantity column. current_quantity = Σ stock-in − Σ usage,
+# derived when asked. A denormalised column maintained by signal (the
+# Batch.total_mortality approach) buys instant reads at the cost of drift;
+# inventory is read in two low-traffic places only — the usage form and
+# the low-stock alert poll — so it does not earn that trade.
+
+
+_QTY = models.DecimalField(max_digits=12, decimal_places=2)
+
+
+def _item_sum_subquery(model, field):
+    """Σ `field` over `model` rows belonging to the outer InventoryItem, or 0."""
+    return Coalesce(
+        models.Subquery(
+            model.objects.filter(item=models.OuterRef("pk"))
+            .values("item")
+            .annotate(total=models.Sum(field))
+            .values("total")[:1],
+            output_field=_QTY,
+        ),
+        models.Value(Decimal("0")),
+        output_field=_QTY,
+    )
+
+
+def _item_count_subquery(model):
+    """How many `model` rows belong to the outer InventoryItem."""
+    return Coalesce(
+        models.Subquery(
+            model.objects.filter(item=models.OuterRef("pk"))
+            .values("item")
+            .annotate(c=models.Count("pk"))
+            .values("c")[:1],
+            output_field=models.IntegerField(),
+        ),
+        models.Value(0),
+        output_field=models.IntegerField(),
+    )
+
+
+class InventoryItemQuerySet(models.QuerySet):
+    def with_levels(self):
+        """
+        Annotate the running balance without a fan-out join.
+
+        Two reverse relations summed in one query would multiply their rows
+        together — the Sum-with-multiple-joins trap that recalculate_totals
+        sidesteps by staying on a single table. Independent subqueries keep
+        each aggregate honest.
+
+        The aliases are prefixed `qty_` / suffixed `_count` rather than
+        reusing the property names: an annotation alias that clashes with a
+        read-only property breaks row hydration (the ORM tries to setattr
+        it). Callers that always run through with_levels() — the low-stock
+        alert — read these directly; the serializer falls back to the
+        properties for a bare instance.
+        """
+        stocked = _item_sum_subquery(InventoryStockIn, "quantity")
+        used = _item_sum_subquery(InventoryUsageLog, "quantity_used")
+        return self.annotate(
+            qty_stocked_in=stocked,
+            qty_used=used,
+            qty_current=models.ExpressionWrapper(
+                stocked - used, output_field=_QTY
+            ),
+            stock_in_count=_item_count_subquery(InventoryStockIn),
+            usage_count=_item_count_subquery(InventoryUsageLog),
+        )
+
+
+class InventoryItem(models.Model):
+    farm = models.ForeignKey(
+        "farms.Farm", on_delete=models.CASCADE, related_name="inventory_items"
+    )
+    name = models.CharField(max_length=100)
+    unit = models.CharField(
+        max_length=20, help_text="How it is counted: kg, litre, sack, dose."
+    )
+    low_stock_threshold = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0"),
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text="Warn once the balance falls to or below this.",
+    )
+
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="inventory_items_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = InventoryItemQuerySet.as_manager()
+
+    class Meta:
+        db_table = "production_inventory_item"
+        ordering = ["farm", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["farm", "name"], name="unique_inventory_item_name_per_farm"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.farm.name})"
+
+    # --- Derived, never stored. Same treatment as the feed balance. ---
+
+    @property
+    def stocked_in(self):
+        return self.stock_ins.aggregate(t=models.Sum("quantity"))["t"] or Decimal("0")
+
+    @property
+    def used_total(self):
+        return (
+            self.usage_logs.aggregate(t=models.Sum("quantity_used"))["t"]
+            or Decimal("0")
+        )
+
+    @property
+    def current_quantity(self):
+        return self.stocked_in - self.used_total
+
+    @property
+    def never_stocked(self):
+        """
+        No stock-in and no usage — a brand-new item nobody has touched. It
+        is not "low", it has simply never been stocked, and warning on it
+        the moment a manager adds it would be noise.
+        """
+        return not self.stock_ins.exists() and not self.usage_logs.exists()
+
+    @property
+    def is_low(self):
+        if self.never_stocked:
+            return False
+        return self.current_quantity <= self.low_stock_threshold
+
+
+class InventoryStockIn(models.Model):
+    """A delivery or manual top-up. Manager/owner only, recorded online at the office."""
+
+    item = models.ForeignKey(
+        InventoryItem, on_delete=models.PROTECT, related_name="stock_ins"
+    )
+    quantity = models.DecimalField(
+        max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0"))]
+    )
+    stock_in_date = models.DateField(db_index=True)
+    note = models.CharField(max_length=255, blank=True)
+
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="inventory_stock_ins",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "production_inventory_stock_in"
+        ordering = ["-stock_in_date", "-created_at"]
+        indexes = [
+            models.Index(
+                fields=["item", "stock_in_date"], name="inv_stockin_item_date_idx"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.quantity} {self.item.unit} of {self.item.name} on {self.stock_in_date}"
+
+
+class InventoryUsageLog(OfflineSyncModel):
+    """
+    A worker drawing some of an item down.
+
+    An event, not a one-per-day record: a worker can log the same item
+    several times in a day, so the only identity is the client-generated
+    UUID primary key it inherits from OfflineSyncModel — there is
+    deliberately no (item, date, worker) uniqueness. A retried POST
+    carrying the same UUID updates in place rather than raising an
+    IntegrityError, and the inherited 24-hour edit lock applies exactly as
+    it does to a daily mortality record.
+    """
+
+    item = models.ForeignKey(
+        InventoryItem, on_delete=models.PROTECT, related_name="usage_logs"
+    )
+    quantity_used = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    usage_date = models.DateField(db_index=True)
+    notes = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        db_table = "production_inventory_usage_log"
+        ordering = ["-usage_date", "-created_at"]
+        indexes = [
+            models.Index(
+                fields=["item", "usage_date"], name="inv_usage_item_date_idx"
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.quantity_used} {self.item.unit} of {self.item.name} "
+            f"on {self.usage_date}"
+        )
+
+    def clean(self):
+        if self.usage_date and self.usage_date > timezone.localdate():
+            raise ValidationError({"usage_date": "Cannot record a future date."})

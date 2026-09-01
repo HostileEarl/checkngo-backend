@@ -19,7 +19,13 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from accounts.models import Invitation
-from production.models import Batch, DailyRecord, FeedDelivery, RecordCorrection
+from production.models import (
+    Batch,
+    DailyRecord,
+    FeedDelivery,
+    InventoryItem,
+    RecordCorrection,
+)
 
 from .services import _pct
 
@@ -49,6 +55,7 @@ def compute_alerts(farm):
     alerts = []
     alerts += _high_mortality(active)
     alerts += _negative_feed_balance(farm)
+    alerts += _low_stock(farm)
     alerts += _today_not_recorded(active, today)
     alerts += _harvest_approaching(active, today)
     alerts += _invitation_expiring(farm, now)
@@ -117,6 +124,85 @@ def _negative_feed_balance(farm):
             "audience": list(_OWNER_MANAGER),
         }
     ]
+
+
+# ─────────────────────────────────────────────────────────────
+# 2b. Low inventory stock
+# ─────────────────────────────────────────────────────────────
+
+
+def _fmt_qty(value):
+    """Trim a quantity to its shortest exact form: 5.00 -> 5, 5.50 -> 5.5."""
+    return f"{Decimal(str(value)).normalize():f}"
+
+
+def _low_stock(farm):
+    """
+    An inventory item at or below its reorder level.
+
+    Three states, told apart deliberately:
+
+      never stocked  — no stock-ins AND no usage. A brand-new item nobody
+                       has touched is not "low"; it has simply never been
+                       stocked. Suppressed, or a warning fires the instant
+                       a manager adds an item.
+      out of stock   — balance <= 0. Surfaced as `danger`: a worker
+                       recording usage against an empty item is a data
+                       problem, not a "reorder soon" nudge.
+      running low    — 0 < balance <= threshold. `warning`.
+
+    Restocking is a purchasing decision, so this goes to owners and
+    managers only — the same audience as the feed-balance alert.
+    """
+    items = InventoryItem.objects.filter(farm=farm, is_active=True).with_levels()
+
+    out = []
+    for item in items:
+        if item.stock_in_count == 0 and item.usage_count == 0:
+            continue  # never stocked
+
+        qty = item.qty_current
+        threshold = item.low_stock_threshold
+
+        # Structured quantities alongside the prose `detail`, so the client
+        # can offer a "copy reorder message" action straight from the alert
+        # without navigating to the inventory screen or parsing the text.
+        base = {
+            "id": f"low-stock:{item.id}",
+            "link": "/inventory",
+            "audience": list(_OWNER_MANAGER),
+            "item_name": item.name,
+            "unit": item.unit,
+            "on_hand": _fmt_qty(qty),
+            "reorder_level": _fmt_qty(threshold),
+        }
+
+        if qty <= 0:
+            out.append(
+                {
+                    **base,
+                    "severity": "danger",
+                    "title": f"Out of stock: {item.name}",
+                    "detail": (
+                        f"{item.name} is down to {_fmt_qty(qty)} {item.unit}. "
+                        "Usage is still being recorded against it — record a "
+                        "delivery or correct the logs."
+                    ),
+                }
+            )
+        elif qty <= threshold:
+            out.append(
+                {
+                    **base,
+                    "severity": "warning",
+                    "title": f"Low stock: {item.name}",
+                    "detail": (
+                        f"{_fmt_qty(qty)} {item.unit} left, at or below the "
+                        f"reorder level of {_fmt_qty(threshold)} {item.unit}."
+                    ),
+                }
+            )
+    return out
 
 
 # ─────────────────────────────────────────────────────────────
