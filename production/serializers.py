@@ -210,6 +210,11 @@ class DailyRecordSerializer(serializers.ModelSerializer):
     duplicating the day's data.
     """
 
+    # ModelSerializer forces a primary-key field to read_only=True by
+    # default, regardless of extra_kwargs — that override did nothing, and
+    # the client's UUID was silently discarded in favour of a server-
+    # generated one. Declaring it explicitly here bypasses that inference.
+    id = serializers.UUIDField(required=False)
     mortality = serializers.IntegerField(read_only=True)
     is_editable = serializers.BooleanField(read_only=True)
     recorded_by_name = serializers.CharField(
@@ -240,9 +245,6 @@ class DailyRecordSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["batch", "recorded_by", "created_at"]
         was_corrected = serializers.BooleanField(read_only=True)
-        extra_kwargs = {
-            "id": {"required": False},  # client-generated when syncing
-        }
 
     def validate_record_date(self, value):
         batch = self.context["batch"]
@@ -341,13 +343,51 @@ class DailyRecordBulkSyncSerializer(serializers.Serializer):
 
         for payload in self.validated_data["records"]:
             record_date = payload["record_date"]
+            supplied_id = payload.get("id")
+
             try:
                 with transaction.atomic():
-                    existing = DailyRecord.objects.filter(
-                        batch=batch, record_date=record_date
-                    ).first()
+                    # Identity is the client-generated id, not the date — that
+                    # is what makes a retry idempotent. (batch, record_date)
+                    # is a fallback only, for a caller that never supplied one.
+                    if supplied_id is not None:
+                        existing = DailyRecord.objects.filter(
+                            pk=supplied_id, batch=batch
+                        ).first()
+                    else:
+                        existing = DailyRecord.objects.filter(
+                            batch=batch, record_date=record_date
+                        ).first()
 
                     if existing is None:
+                        # An id was supplied and doesn't exist yet, but a
+                        # DIFFERENT record may already occupy this date —
+                        # two devices, or two ids, both claiming the same
+                        # day. "One entry per batch per day" is a business
+                        # rule, not just an idempotency mechanism, so this
+                        # is a genuine conflict, not a record to merge into:
+                        # reject it with a message worth reading, rather
+                        # than letting the unique constraint surface a raw
+                        # IntegrityError below.
+                        date_conflict = (
+                            DailyRecord.objects.filter(
+                                batch=batch, record_date=record_date
+                            ).first()
+                            if supplied_id is not None
+                            else None
+                        )
+                        if date_conflict is not None:
+                            failed.append(
+                                {
+                                    "record_date": str(record_date),
+                                    "error": (
+                                        "A record already exists for this "
+                                        "date under a different id."
+                                    ),
+                                }
+                            )
+                            continue
+
                         record = DailyRecord.objects.create(
                             batch=batch, recorded_by=user, **payload
                         )
@@ -391,6 +431,10 @@ class DailyRecordBulkSyncSerializer(serializers.Serializer):
 
 
 class WeightSampleSerializer(serializers.ModelSerializer):
+    # Same fix as DailyRecordSerializer: a primary-key field is forced
+    # read_only=True by ModelSerializer's field-building regardless of
+    # extra_kwargs, which silently discarded the client-supplied id.
+    id = serializers.UUIDField(required=False)
     age_days = serializers.IntegerField(read_only=True)
     is_editable = serializers.BooleanField(read_only=True)
     recorded_by_name = serializers.CharField(
@@ -414,7 +458,6 @@ class WeightSampleSerializer(serializers.ModelSerializer):
             "is_editable",
         ]
         read_only_fields = ["batch", "recorded_by", "created_at"]
-        extra_kwargs = {"id": {"required": False}}
 
     def validate_sample_date(self, value):
         batch = self.context["batch"]

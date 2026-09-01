@@ -1,4 +1,6 @@
 # production/views.py
+import uuid
+
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
 from rest_framework.response import Response
@@ -218,6 +220,59 @@ class DailyRecordListCreateView(BatchScopedMixin, generics.ListCreateAPIView):
         return DailyRecord.objects.filter(batch=self.batch).select_related(
             "recorded_by"
         )
+
+    def create(self, request, *args, **kwargs):
+        """
+        A client-generated id existing already means this is a retry, not a
+        new record — the whole point of naming it on the device before it
+        ever reaches the server. Without this, a retried POST hit the
+        primary key unique constraint directly and raised an unhandled
+        IntegrityError (a raw 500) instead of updating in place the way
+        the bulk-sync path already does.
+        """
+        supplied_id = request.data.get("id")
+        existing = None
+        if supplied_id:
+            try:
+                # A malformed id isn't a lookup miss, it's invalid input —
+                # let the serializer's own UUIDField validation reject it
+                # with a clean message instead of this query raising
+                # Django's ValidationError, which DRF does not catch.
+                uuid.UUID(str(supplied_id))
+            except (ValueError, AttributeError, TypeError):
+                pass
+            else:
+                existing = self.get_queryset().filter(pk=supplied_id).first()
+
+        if existing is not None:
+            # DailyRecordSerializer.update() already enforces the 24-hour
+            # lock and refuses to move the record to a different date —
+            # reusing it here means this retry path stays governed by
+            # exactly the same rules as editing the record any other way.
+            serializer = self.get_serializer(existing, data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        # No existing record under this id (or none was supplied) — but a
+        # DIFFERENT record may already occupy this date. "One entry per
+        # batch per day" is a business rule, not just an idempotency
+        # mechanism: reject that plainly instead of letting the unique
+        # constraint raise the same unhandled IntegrityError.
+        record_date = request.data.get("record_date")
+        if record_date and self.get_queryset().filter(record_date=record_date).exists():
+            return Response(
+                {
+                    "record_date": [
+                        "A record already exists for this date."
+                        if not supplied_id
+                        else "A record already exists for this date under a different id."
+                    ]
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return super().create(request, *args, **kwargs)
 
 
 class DailyRecordDetailView(BatchScopedMixin, generics.RetrieveUpdateAPIView):
