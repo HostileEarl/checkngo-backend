@@ -1,0 +1,5994 @@
+[
+{
+  "model": "accounts.user",
+  "pk": 8,
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$aU0Y4ljIWE4PAn1Mo2pwEM$xcddaDYtFqXyZw9pFQIDrZC2TmqP6UUHqrcUe+Ag+qA=",
+    "last_login": "2026-08-30T21:27:54.091Z",
+    "is_superuser": false,
+    "phone_number": "+639171112222",
+    "full_name": "Maria Santos",
+    "email": null,
+    "role": "OWNER",
+    "must_change_credential": false,
+    "credential_changed_at": null,
+    "is_active": true,
+    "is_staff": false,
+    "date_joined": "2026-08-23T14:43:50.974Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.user",
+  "pk": 9,
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$72vChzdfp3upieXv5VDtkN$hi2hg0g14wNCWGqbGLoKJhSCxNtdXfFvZiECWe/f2/4=",
+    "last_login": "2026-08-30T21:37:05.136Z",
+    "is_superuser": false,
+    "phone_number": "+639172223333",
+    "full_name": "Jose Cruz",
+    "email": null,
+    "role": "MANAGER",
+    "must_change_credential": false,
+    "credential_changed_at": null,
+    "is_active": true,
+    "is_staff": false,
+    "date_joined": "2026-08-23T14:43:51.572Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.user",
+  "pk": 10,
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$vx7ugKCCcCHfhkfKK3BnW9$Y4PkTa4x6367cxA51fO/K/crmHtHDQ1tmsk0DRzjyjw=",
+    "last_login": "2026-09-01T06:54:38.712Z",
+    "is_superuser": false,
+    "phone_number": "+639173334444",
+    "full_name": "Ana Reyes",
+    "email": null,
+    "role": "WORKER",
+    "must_change_credential": false,
+    "credential_changed_at": null,
+    "is_active": true,
+    "is_staff": false,
+    "date_joined": "2026-08-23T14:43:52.160Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.user",
+  "pk": 11,
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$IcXbUWG9Fslpa62EI5KndU$WjBdtIsGgpJ+GukjgImBvzNIjHXM4bsx3OnoNJpe9o0=",
+    "last_login": "2026-08-30T21:47:58.031Z",
+    "is_superuser": false,
+    "phone_number": "+639175556666",
+    "full_name": "Ricardo Lim",
+    "email": null,
+    "role": "SUPPLIER",
+    "must_change_credential": false,
+    "credential_changed_at": null,
+    "is_active": true,
+    "is_staff": false,
+    "date_joined": "2026-08-23T14:43:52.792Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.user",
+  "pk": 12,
+  "fields": {
+    "password": "pbkdf2_sha256$1500000$akcjqKB3gzemynDF2MQM45$uUenyU+l0oc1TyLmxFA+TbqhyjX8aB99M0DG5upfmTM=",
+    "last_login": "2026-08-30T17:46:23.562Z",
+    "is_superuser": false,
+    "phone_number": "+639176667777",
+    "full_name": "Elena Bautista",
+    "email": null,
+    "role": "CONSUMER",
+    "must_change_credential": false,
+    "credential_changed_at": null,
+    "is_active": true,
+    "is_staff": false,
+    "date_joined": "2026-08-23T14:43:53.526Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "farms.farm",
+  "pk": 3,
+  "fields": {
+    "name": "Santos Broiler Farm",
+    "owner": 8,
+    "address": "Barangay San Antonio",
+    "municipality": "San Pablo",
+    "province": "Laguna",
+    "is_active": true,
+    "created_at": "2026-08-23T14:43:52.780Z",
+    "updated_at": "2026-08-23T14:43:52.780Z"
+  }
+},
+{
+  "model": "farms.farmmembership",
+  "pk": 6,
+  "fields": {
+    "farm": 3,
+    "user": 9,
+    "role": "MANAGER",
+    "is_active": true,
+    "joined_at": "2026-08-23T14:43:52.790Z",
+    "deactivated_at": null,
+    "invited_by": 8
+  }
+},
+{
+  "model": "farms.farmmembership",
+  "pk": 5,
+  "fields": {
+    "farm": 3,
+    "user": 8,
+    "role": "OWNER",
+    "is_active": true,
+    "joined_at": "2026-08-23T14:43:52.786Z",
+    "deactivated_at": null,
+    "invited_by": null
+  }
+},
+{
+  "model": "farms.farmmembership",
+  "pk": 7,
+  "fields": {
+    "farm": 3,
+    "user": 10,
+    "role": "WORKER",
+    "is_active": true,
+    "joined_at": "2026-08-23T14:43:52.791Z",
+    "deactivated_at": null,
+    "invited_by": 9
+  }
+},
+{
+  "model": "farms.farmownershiphistory",
+  "pk": 2,
+  "fields": {
+    "farm": 3,
+    "from_owner": null,
+    "to_owner": 8,
+    "from_owner_name": "",
+    "to_owner_name": "Maria Santos",
+    "transferred_at": "2026-08-23T14:43:52.787Z",
+    "performed_by": 8,
+    "note": "Farm registered."
+  }
+},
+{
+  "model": "partners.farmpartnerlink",
+  "pk": 4,
+  "fields": {
+    "farm": 3,
+    "partner": 12,
+    "link_type": "CONSUMER",
+    "business_name": "Bautista Poultry Dealers",
+    "notes": "",
+    "is_active": true,
+    "linked_at": "2026-08-23T14:43:54.614Z",
+    "deactivated_at": null,
+    "linked_by": 8
+  }
+},
+{
+  "model": "partners.farmpartnerlink",
+  "pk": 3,
+  "fields": {
+    "farm": 3,
+    "partner": 11,
+    "link_type": "SUPPLIER",
+    "business_name": "Lim Feeds Trading",
+    "notes": "",
+    "is_active": true,
+    "linked_at": "2026-08-23T14:43:54.612Z",
+    "deactivated_at": null,
+    "linked_by": 8
+  }
+},
+{
+  "model": "production.house",
+  "pk": 4,
+  "fields": {
+    "farm": 3,
+    "name": "House 1",
+    "capacity": 500,
+    "notes": "",
+    "is_active": true,
+    "created_at": "2026-08-23T14:43:54.619Z"
+  }
+},
+{
+  "model": "production.house",
+  "pk": 5,
+  "fields": {
+    "farm": 3,
+    "name": "House 2",
+    "capacity": 5000,
+    "notes": "",
+    "is_active": true,
+    "created_at": "2026-08-23T14:43:54.621Z"
+  }
+},
+{
+  "model": "production.house",
+  "pk": 6,
+  "fields": {
+    "farm": 3,
+    "name": "House 3",
+    "capacity": 3500,
+    "notes": "",
+    "is_active": true,
+    "created_at": "2026-08-23T14:43:54.623Z"
+  }
+},
+{
+  "model": "production.batch",
+  "pk": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+  "fields": {
+    "house": 5,
+    "batch_code": "DEMO-2025-11",
+    "breed": "Ross 308",
+    "initial_bird_count": 4800,
+    "start_date": "2026-01-04",
+    "expected_harvest_date": "2026-02-15",
+    "status": "HARVESTED",
+    "termination_reason": "",
+    "terminated_at": null,
+    "terminated_by": null,
+    "total_mortality": 246,
+    "total_feed_kg": "18170.98",
+    "created_by": 8,
+    "created_at": "2026-09-01T07:33:28.938Z"
+  }
+},
+{
+  "model": "production.batch",
+  "pk": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+  "fields": {
+    "house": 6,
+    "batch_code": "DEMO-2026-01",
+    "breed": "Ross 308",
+    "initial_bird_count": 3400,
+    "start_date": "2026-03-05",
+    "expected_harvest_date": "2026-04-16",
+    "status": "HARVESTED",
+    "termination_reason": "",
+    "terminated_at": null,
+    "terminated_by": null,
+    "total_mortality": 526,
+    "total_feed_kg": "13551.66",
+    "created_by": 8,
+    "created_at": "2026-09-01T07:33:28.951Z"
+  }
+},
+{
+  "model": "production.batch",
+  "pk": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+  "fields": {
+    "house": 4,
+    "batch_code": "DEMO-2026-03",
+    "breed": "Ross 308",
+    "initial_bird_count": 4900,
+    "start_date": "2026-05-04",
+    "expected_harvest_date": "2026-06-15",
+    "status": "HARVESTED",
+    "termination_reason": "",
+    "terminated_at": null,
+    "terminated_by": null,
+    "total_mortality": 155,
+    "total_feed_kg": "18820.94",
+    "created_by": 8,
+    "created_at": "2026-09-01T07:33:28.963Z"
+  }
+},
+{
+  "model": "production.batch",
+  "pk": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+  "fields": {
+    "house": 4,
+    "batch_code": "DEMO-2025-09",
+    "breed": "Ross 308",
+    "initial_bird_count": 4800,
+    "start_date": "2025-11-05",
+    "expected_harvest_date": "2025-12-17",
+    "status": "HARVESTED",
+    "termination_reason": "",
+    "terminated_at": null,
+    "terminated_by": null,
+    "total_mortality": 199,
+    "total_feed_kg": "21577.87",
+    "created_by": 8,
+    "created_at": "2026-09-01T07:33:28.898Z"
+  }
+},
+{
+  "model": "production.batch",
+  "pk": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+  "fields": {
+    "house": 5,
+    "batch_code": "DEMO-2026-05",
+    "breed": "Ross 308",
+    "initial_bird_count": 4700,
+    "start_date": "2026-07-03",
+    "expected_harvest_date": "2026-08-14",
+    "status": "HARVESTED",
+    "termination_reason": "",
+    "terminated_at": null,
+    "terminated_by": null,
+    "total_mortality": 176,
+    "total_feed_kg": "17210.17",
+    "created_by": 8,
+    "created_at": "2026-09-01T07:33:28.975Z"
+  }
+},
+{
+  "model": "production.batch",
+  "pk": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+  "fields": {
+    "house": 4,
+    "batch_code": "DEMO-ACTIVE-1",
+    "breed": "Ross 308",
+    "initial_bird_count": 4600,
+    "start_date": "2026-08-06",
+    "expected_harvest_date": "2026-09-17",
+    "status": "ACTIVE",
+    "termination_reason": "",
+    "terminated_at": null,
+    "terminated_by": null,
+    "total_mortality": 223,
+    "total_feed_kg": "7804.37",
+    "created_by": 8,
+    "created_at": "2026-09-01T07:33:28.988Z"
+  }
+},
+{
+  "model": "production.batch",
+  "pk": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+  "fields": {
+    "house": 5,
+    "batch_code": "DEMO-ACTIVE-2",
+    "breed": "Ross 308",
+    "initial_bird_count": 4300,
+    "start_date": "2026-08-18",
+    "expected_harvest_date": "2026-09-29",
+    "status": "ACTIVE",
+    "termination_reason": "",
+    "terminated_at": null,
+    "terminated_by": null,
+    "total_mortality": 162,
+    "total_feed_kg": "2670.82",
+    "created_by": 8,
+    "created_at": "2026-09-01T07:33:28.995Z"
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "66d089ec-6412-40ec-9f32-33bd30c6e84c",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-05T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-05",
+    "mortality_disease": 15,
+    "mortality_heat": 0,
+    "mortality_culled": 7,
+    "mortality_unknown": 6,
+    "feed_kg": "103.55",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "99857f47-ddf3-4bb1-bc64-4fa7c6a212aa",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-06T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-06",
+    "mortality_disease": 12,
+    "mortality_heat": 0,
+    "mortality_culled": 5,
+    "mortality_unknown": 5,
+    "feed_kg": "120.65",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "bef262e5-79fd-43a7-8106-3367c3dd8be7",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-06T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-07",
+    "mortality_disease": 12,
+    "mortality_heat": 0,
+    "mortality_culled": 5,
+    "mortality_unknown": 5,
+    "feed_kg": "137.58",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d6dfe6c0-9c6e-4bc6-866d-541bfd14b61f",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-07T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-08",
+    "mortality_disease": 3,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "154.85",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "52cd36b2-cd4d-4249-98bd-4a645bf5d44c",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-09T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-09",
+    "mortality_disease": 8,
+    "mortality_heat": 0,
+    "mortality_culled": 3,
+    "mortality_unknown": 4,
+    "feed_kg": "171.77",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "12810156-0cc9-4b43-bc40-4f55e728c035",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-09T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-10",
+    "mortality_disease": 4,
+    "mortality_heat": 0,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "188.82",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "89dc8afe-75e1-41d2-b953-390f2d02baa6",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-11T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-11",
+    "mortality_disease": 6,
+    "mortality_heat": 0,
+    "mortality_culled": 3,
+    "mortality_unknown": 3,
+    "feed_kg": "205.67",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "ae9d9934-474f-495b-b792-e88994e5c3b4",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-12T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-12",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "222.91",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d2036413-0f6d-4575-8224-4b6f07233831",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-12T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-13",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "240.19",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "81f86fc1-06f9-474b-a539-7635a152e3bb",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-13T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-14",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "257.35",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "03d51f55-fdfd-41a1-9dbc-a61fe4cec767",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-14T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-15",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "274.60",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "99e4e388-f287-494c-8e07-9684e1ae8e0a",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-16T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-16",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "291.78",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "2bfcff29-e5c5-44a6-b7fa-83935e9ba8fb",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-17T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-17",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "308.95",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "ed3c7b1a-c97f-4770-b7cf-dd2586b80304",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-17T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-18",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "326.11",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "e878f2f8-b4d7-4018-8ba5-b8db0af02a83",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-19T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-19",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "343.10",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "dff7e66b-6042-4582-aa74-c5c4aa00e8d6",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-19T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-20",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "360.06",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "54eb4493-b641-4884-94b9-7b5cccfbbc44",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-21T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-21",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "377.24",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "40cfdcf4-423b-4c81-a4b3-7f35485edee2",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-21T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-22",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "394.32",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "4730216e-af16-4c13-87c0-fd66172aca42",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-22T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-23",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "411.39",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "96c7f8cb-dec3-4a41-b8eb-25d4d56fb544",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-24T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-24",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "428.63",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "740eb44f-ac4d-47b3-be82-20ce23699585",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-24T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-25",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "445.67",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "50470099-b88a-476f-a2f5-df79bf94c875",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-25T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-26",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "462.81",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "ca600bb3-7ff8-4cf5-b009-74209a4bb221",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-26T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-27",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "479.83",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "10a71c8c-5dc7-43a9-95b9-e86619d2284b",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-27T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-28",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "496.62",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "4dbc18a7-1ac8-4489-99af-9fa881dcd199",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-28T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-29",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "513.71",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d9d44ee9-dad6-44e9-914b-f8dced7ff05f",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-29T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-30",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "530.34",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "b974445a-d134-41e4-bc9f-35d5f7e6b71f",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-01-30T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.940Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-01-31",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "547.17",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "8eb833e5-d486-4a00-aa4f-dc91b717b4e4",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-02-01T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.941Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-02-01",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "564.10",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "7a8bebb8-63f8-4523-a616-5b6d831e4c09",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-02-01T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.941Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-02-02",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "581.14",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "af735b0c-32a6-4f10-a1aa-14263e9668e0",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-02-03T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.941Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-02-03",
+    "mortality_disease": 2,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "597.53",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "9a006290-cec4-495e-8dfe-58a1c0fbd973",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-02-03T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.941Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-02-04",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 2,
+    "feed_kg": "613.74",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "ed0257dc-bbf9-40a1-b998-496aa443dcf1",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-02-04T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.941Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-02-05",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "630.17",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "e09934a5-b28d-4713-b91e-a9edf7f2dade",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-02-05T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.941Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-02-06",
+    "mortality_disease": 3,
+    "mortality_heat": 1,
+    "mortality_culled": 3,
+    "mortality_unknown": 3,
+    "feed_kg": "645.86",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "1ce8c83c-ff1b-42ec-8981-cdd23ce01131",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-02-07T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.941Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-02-07",
+    "mortality_disease": 3,
+    "mortality_heat": 1,
+    "mortality_culled": 3,
+    "mortality_unknown": 3,
+    "feed_kg": "661.48",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "160b7e65-37d8-458a-b462-0566d2a73cf9",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-02-07T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.941Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-02-08",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "677.91",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "f0913e17-0085-4309-a8cd-085edd8d8b2e",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-02-09T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.941Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-02-09",
+    "mortality_disease": 2,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "694.01",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "3ddfa166-9d9c-4810-8159-bea73889ea05",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-02-10T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.941Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-02-10",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "710.37",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "c09c7d51-ecb5-43d9-a5dc-c43ee6b4b066",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-02-10T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.941Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-02-11",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "726.86",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "b1d0d89f-5adf-48c1-8bc4-f796bf857318",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-02-11T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.941Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-02-12",
+    "mortality_disease": 4,
+    "mortality_heat": 1,
+    "mortality_culled": 3,
+    "mortality_unknown": 4,
+    "feed_kg": "741.87",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d70e9fd8-511e-4fb6-af77-0fdf7ecbce0d",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-02-12T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.941Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-02-13",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "757.46",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d7d42c72-d742-4064-b67a-1ab22cee729a",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-02-14T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.940Z",
+    "updated_at": "2026-09-01T07:33:28.941Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "record_date": "2026-02-14",
+    "mortality_disease": 3,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "772.81",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "e203868e-8309-438c-91be-937380163aa1",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-05T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-06",
+    "mortality_disease": 8,
+    "mortality_heat": 0,
+    "mortality_culled": 4,
+    "mortality_unknown": 4,
+    "feed_kg": "73.43",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "bfcd15b9-66ac-4a1d-bab2-63454bb6e6e4",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-06T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-07",
+    "mortality_disease": 9,
+    "mortality_heat": 0,
+    "mortality_culled": 4,
+    "mortality_unknown": 4,
+    "feed_kg": "85.52",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "bed3c9be-fa47-47ce-94dd-01777f99f680",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-07T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-08",
+    "mortality_disease": 10,
+    "mortality_heat": 0,
+    "mortality_culled": 4,
+    "mortality_unknown": 5,
+    "feed_kg": "97.43",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "c6fe83fa-0bb6-4a51-a938-849fe26b5d5d",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-08T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-09",
+    "mortality_disease": 9,
+    "mortality_heat": 0,
+    "mortality_culled": 4,
+    "mortality_unknown": 5,
+    "feed_kg": "109.22",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "55c9a67c-0b79-4a12-aa53-eebe657f0620",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-10T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-10",
+    "mortality_disease": 4,
+    "mortality_heat": 0,
+    "mortality_culled": 2,
+    "mortality_unknown": 2,
+    "feed_kg": "121.25",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "de0f3fdc-6fae-473c-99ff-e101717e29c9",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-10T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-11",
+    "mortality_disease": 7,
+    "mortality_heat": 0,
+    "mortality_culled": 3,
+    "mortality_unknown": 4,
+    "feed_kg": "132.98",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "802535b2-730b-42c4-8660-24cd34bb0f66",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-11T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-12",
+    "mortality_disease": 2,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 1,
+    "feed_kg": "145.05",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "eec9b73c-7f6a-4bf6-85ad-668e306aa6ea",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-12T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-13",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "157.27",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "43dd2d5e-5d41-40fb-bf36-6a59ac0555ef",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-13T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-14",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "169.39",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "8b9db915-1971-41a8-8fdc-7ccd2cc427e6",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-14T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-15",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "181.39",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "5642fc9d-97ab-4c6c-a54a-dd1d81ee5429",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-15T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-16",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "193.36",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "a0bca740-aac9-4573-81d1-46066ae01cd4",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-16T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-17",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "205.23",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "8a925a83-1ecd-4473-974d-59de40a3854b",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-17T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-18",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "217.14",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d0d7e74f-72bf-45de-a3b6-0e61d6c447be",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-18T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-19",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "229.01",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "26d6a6d0-38a6-4b34-84cb-e388fed391a2",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-19T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-20",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "240.86",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "191ebd60-7c58-4fff-8514-7b2b88683fd7",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-20T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-21",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "252.98",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "aff5c1dc-bb8d-45b0-8876-787d192c08e4",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-21T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-22",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "264.95",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "40f2a036-684f-4b71-a3c0-ab3c06a3978c",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-22T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-23",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "276.90",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "46b40187-71a5-4764-a1db-c925ae2a8d18",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-23T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-24",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "288.56",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "ae82dde0-c442-449e-98a6-b89e9c445841",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-24T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-25",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "300.47",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "445b30e2-23a5-4e2c-b686-46d6d380e681",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-25T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-26",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "312.36",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "3f81d742-ba6e-4e3a-baf1-a48fd1733729",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-26T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-27",
+    "mortality_disease": 7,
+    "mortality_heat": 52,
+    "mortality_culled": 3,
+    "mortality_unknown": 8,
+    "feed_kg": "317.48",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "54b432e1-b223-4df5-92c5-06647bbef42f",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-27T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-28",
+    "mortality_disease": 9,
+    "mortality_heat": 69,
+    "mortality_culled": 4,
+    "mortality_unknown": 11,
+    "feed_kg": "319.71",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "cccc693c-4dbd-40ea-b99d-c231e518aa07",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-28T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-29",
+    "mortality_disease": 10,
+    "mortality_heat": 76,
+    "mortality_culled": 5,
+    "mortality_unknown": 11,
+    "feed_kg": "320.29",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "4ee79a5d-8e4d-4e9a-b6df-8661d69dae67",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-30T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-30",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "331.17",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "fc025f07-1f89-4321-a2fd-fc5a163dba13",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-31T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-03-31",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "342.14",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "3b3900bf-4fbe-4f00-b07f-805b24396704",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-03-31T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-01",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "352.87",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "84e8978c-75ed-47b8-844a-083938bcf5a7",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-01T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-02",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "363.71",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "5956ce60-3682-49d9-a15e-593cb1e4935c",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-03T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-03",
+    "mortality_disease": 3,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "373.64",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "57f512b3-7c89-4807-a6cb-7cfa50cbde2c",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-03T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-04",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "384.03",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "c926106a-042b-4ef9-92bc-1a3089dfb79b",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-05T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-05",
+    "mortality_disease": 2,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "394.25",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "44c48503-fbfa-43fa-9b77-bd4f37d29bba",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-05T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-06",
+    "mortality_disease": 2,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "404.43",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "dd2c6809-159c-42b1-a837-6b96649b4cd1",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-06T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-07",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "415.26",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "061b5d63-4d3f-48ea-9ba2-ffa8e8ae5e1b",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-07T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-08",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 2,
+    "feed_kg": "425.22",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "c3718f50-9a9e-4397-9355-8d23cbea78b7",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-08T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-09",
+    "mortality_disease": 3,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "434.83",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "fd6dcf0e-ceea-4167-a8cd-0103c45f5133",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-09T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-10",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "444.53",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "5800b4f5-7647-4b6e-ba41-faca0481b7df",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-10T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-11",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "454.79",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "373c0595-a8e1-4ca6-bf56-00d582047465",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-11T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-12",
+    "mortality_disease": 2,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "464.70",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "a88351f3-d26b-477b-a40a-4b6030242d2d",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-12T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-13",
+    "mortality_disease": 5,
+    "mortality_heat": 2,
+    "mortality_culled": 4,
+    "mortality_unknown": 4,
+    "feed_kg": "473.10",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "422246b4-6db4-4b9d-a905-5a64e1af512c",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-14T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-14",
+    "mortality_disease": 5,
+    "mortality_heat": 2,
+    "mortality_culled": 4,
+    "mortality_unknown": 4,
+    "feed_kg": "481.40",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "c78d73d6-3a3f-4fc7-aa10-cb8c318c993b",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-14T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-15",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "491.28",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "9c96e072-2aa8-40de-ba7e-792ac274d9c2",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-16T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-16",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 2,
+    "feed_kg": "500.78",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d4f367e8-3397-48a4-8357-a5b43970f80a",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-16T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-17",
+    "mortality_disease": 2,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "504.35",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "31422270-ae0b-468d-b943-69729e365c95",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-04-17T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.953Z",
+    "updated_at": "2026-09-01T07:33:28.953Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "record_date": "2026-04-18",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "502.95",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "2052ad91-94de-4271-bcc0-830bce8407a0",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-05T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-05",
+    "mortality_disease": 5,
+    "mortality_heat": 0,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "106.11",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "0ce8cf08-987c-4bfb-9569-40457198282e",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-06T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-06",
+    "mortality_disease": 6,
+    "mortality_heat": 0,
+    "mortality_culled": 3,
+    "mortality_unknown": 3,
+    "feed_kg": "123.90",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "95145342-6559-4874-a280-971fc5ec203b",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-07T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-07",
+    "mortality_disease": 3,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "141.78",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "f6ba61ed-1875-429d-9d75-0fc060548589",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-08T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-08",
+    "mortality_disease": 9,
+    "mortality_heat": 0,
+    "mortality_culled": 4,
+    "mortality_unknown": 5,
+    "feed_kg": "159.21",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "deef32ac-dc7b-4267-a14c-918239003fbe",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-08T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-09",
+    "mortality_disease": 7,
+    "mortality_heat": 0,
+    "mortality_culled": 3,
+    "mortality_unknown": 3,
+    "feed_kg": "176.70",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "4cf8c8e3-c1e4-4302-9f01-08c68d340eb0",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-10T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-10",
+    "mortality_disease": 3,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "194.37",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "bf8920d3-b44b-41aa-8e28-b11fa70a879a",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-10T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-11",
+    "mortality_disease": 4,
+    "mortality_heat": 0,
+    "mortality_culled": 2,
+    "mortality_unknown": 2,
+    "feed_kg": "211.91",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "c17d39b1-3abb-4e86-ae3f-431449f0ab61",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-11T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-12",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "229.67",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "0a8d41eb-695f-4dd2-8427-81b6456ba4ef",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-12T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-13",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "247.42",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "8af2d440-a524-4a5a-9c73-58fc89d83fa4",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-13T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-14",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "265.21",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "b54edca7-565f-4e85-a75e-6fb92d8f46ef",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-14T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-15",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "282.99",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "e853a8b0-a95b-4773-8aae-008922e26761",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-15T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-16",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "300.71",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "e4e95d4b-c93b-4187-bd6e-09625a15b3cb",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-17T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-17",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "318.47",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "8b57b3f1-cc58-4002-bc99-432d8f1b9727",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-17T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-18",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "336.30",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "26298333-2979-4d2e-997e-3c21489c5321",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-18T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-19",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "354.05",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "3639934b-1bbc-423e-a2d2-9e288315ea89",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-19T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-20",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "371.64",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "291c213f-f20c-44af-a14b-e1330d1e1bdd",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-20T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-21",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "389.45",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "6dda30b3-a4fc-45fd-92a1-f9a965c2e5a1",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-21T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-22",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "407.26",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "b02af02c-7d20-4251-8fb7-87b534dda713",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-22T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-23",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "424.99",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "ef20aac3-2365-4c34-9bae-b4f2e47d8b32",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-23T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-24",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "442.61",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "5316e02e-b127-4b24-83e2-2c4866281229",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-24T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-25",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "460.32",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "bc93a84a-5adf-485a-9473-2a7adb092175",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-26T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-26",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "478.11",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "06836a0b-8432-4035-b0c3-1380d3331da4",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-27T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-27",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "495.70",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "6d6fea92-33df-403d-8bc0-e862be1101fe",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-27T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-28",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "513.39",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "5930e8a4-75f6-4ca0-8863-7d8efdc6906b",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-29T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-29",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "531.17",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "b297c7b4-8f7e-42da-a230-22fdceb64b9d",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-30T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-30",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "548.85",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "c04bee5a-d844-4deb-97e4-333c3eb47bc4",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-30T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-05-31",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "566.39",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "707f423f-42ae-418e-8e74-a122a81cbca3",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-05-31T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-06-01",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "583.92",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "ccf38141-974c-4be2-a27d-db8d6dd1694a",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-06-01T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-06-02",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "601.06",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "a8ba0c84-deb2-4a59-bdbf-c956d6669a51",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-06-02T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-06-03",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "618.68",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "415b1c8b-e52d-4930-8fe7-dcd6e26d37f3",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-06-03T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-06-04",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "636.03",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "49f9d757-cf1e-47b2-859d-96fac4080743",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-06-04T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-06-05",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "653.22",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "03767305-62ba-4338-83ac-91d90ce37369",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-06-05T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-06-06",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "670.38",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "e586aee7-bb12-46eb-8065-37be5ddd2fdc",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-06-07T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-06-07",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "688.08",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "333b7e29-ceba-41c0-b427-92faf21a7669",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-06-07T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-06-08",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "705.20",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "a2b13be0-798d-496d-b988-0e37efbf8dc2",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-06-08T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-06-09",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "722.89",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d21832a4-d1f8-430d-bf82-75eeb5cad9d4",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-06-09T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-06-10",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "739.34",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "19963386-a407-4e80-80c2-4809d43c04e0",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-06-10T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-06-11",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "756.36",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "8cde2be3-3946-4779-9631-642bb7dab11d",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-06-11T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-06-12",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 2,
+    "feed_kg": "772.87",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "44386914-c6be-467a-a9d8-2ffc763015bd",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-06-13T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-06-13",
+    "mortality_disease": 3,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "789.00",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d0d563a9-1327-46f1-bc1f-48595ba72451",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-06-13T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.965Z",
+    "updated_at": "2026-09-01T07:33:28.965Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "record_date": "2026-06-14",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "805.23",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "01ce6bb8-3c30-4d42-9bf8-bbf7bb7218d9",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-05T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-06",
+    "mortality_disease": 10,
+    "mortality_heat": 0,
+    "mortality_culled": 4,
+    "mortality_unknown": 5,
+    "feed_kg": "103.75",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "5f3aa5ca-98aa-4f5a-98bc-032cfed5cac6",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-06T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-07",
+    "mortality_disease": 8,
+    "mortality_heat": 0,
+    "mortality_culled": 4,
+    "mortality_unknown": 4,
+    "feed_kg": "121.03",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "69d11811-a6a2-43ec-9f99-7cdf382a395d",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-08T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-08",
+    "mortality_disease": 6,
+    "mortality_heat": 0,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "138.34",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "b61812f8-15e5-465a-bb56-32fcfb222079",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-09T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-09",
+    "mortality_disease": 5,
+    "mortality_heat": 0,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "155.60",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "338c4a43-9f71-4b73-a3b2-1bfc6d36d58b",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-09T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-10",
+    "mortality_disease": 5,
+    "mortality_heat": 0,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "172.79",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "84fcae8c-bd5b-46f9-a9b2-77c7ee456ac8",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-10T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-11",
+    "mortality_disease": 4,
+    "mortality_heat": 0,
+    "mortality_culled": 2,
+    "mortality_unknown": 2,
+    "feed_kg": "189.99",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "324b3fdf-4e3c-422c-bb32-5b5c2a78e192",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-11T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-12",
+    "mortality_disease": 3,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "207.21",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "3fcf3a27-6db4-4e3a-8baf-c1eba9732898",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-13T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-13",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "224.58",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "411ec2a5-39c6-49a4-95de-d4e01cc1bd7c",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-14T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-14",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "241.93",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "b2da9b35-2067-48a8-8578-41458d6ce910",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-14T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-15",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "259.21",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "f951cfe8-8802-4324-a313-4a19f2842d39",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-15T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-16",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "276.54",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "83a28ec3-f559-451f-a073-4c717174c902",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-16T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-17",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "293.78",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "1d270914-836f-49d4-8850-281f08ccc88c",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-17T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-18",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "311.13",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "98642d37-25cd-4d9d-bd73-618d79c2341e",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-18T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-19",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "328.48",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "cb39a0a9-c940-48d8-8eee-7bb8df6ffa20",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-19T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-20",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "345.74",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "923cc693-acff-41b9-8f82-12a300072ced",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-20T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-21",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "363.07",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "6e9151e6-5dcc-4c52-b961-f9e1bc732a0e",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-22T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-22",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "380.23",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "bc8b4a79-1249-4f39-94a3-35635cd3a6ca",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-22T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-23",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "397.45",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "6af591f5-4b51-4515-bfc4-97d3e78d40ce",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-24T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-24",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "414.66",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "2d38e174-0b3d-4bed-9c6b-3cdfd6803f87",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-24T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-25",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "432.03",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "29d7758e-56fb-4a4a-b0d3-38944b3835c5",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-26T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-26",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "449.22",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "14e901c1-7528-4428-b755-bb624f88dbb9",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-26T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-27",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "466.48",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "f96893a7-3c6a-4e5d-971f-90cbcfba5338",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-27T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-28",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "483.64",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "dbc7a722-0994-4561-b0cf-6ea9aa9ccbfe",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-29T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-29",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "500.89",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "5bba78c7-c33d-4e16-a984-f21977fd1af7",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-30T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-11-30",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "518.02",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "29e6820d-2b8e-413e-872a-69c0a5f66520",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-11-30T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-01",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "535.14",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "76ac98ac-88b7-40ee-ab04-c50dba4117f2",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-01T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-02",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "552.24",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "589a14d8-8d71-44f7-b941-4ae3f890a381",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-02T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-03",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "569.57",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "3713fc76-3b4d-4424-bbdf-f559d3621e36",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-03T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-04",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "586.65",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "44f952c6-b04f-43c3-a54b-d99a7dda6bf2",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-04T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-05",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "603.46",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "8fbbef36-d3f3-4847-a2f1-db4bc17a973f",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-05T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-06",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "620.37",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "999a150c-e4b8-412f-b01c-a6536a8f8be8",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-07T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-07",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "637.12",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d2e77b46-8d10-474f-8511-1d3b5e4202f0",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-08T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-08",
+    "mortality_disease": 2,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "653.57",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "fa1592fb-70d7-408f-95f7-1bdd30d32fd6",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-09T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-09",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "670.40",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "ef4940ed-c857-4a64-93d7-d4d2c99f0530",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-09T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.901Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-10",
+    "mortality_disease": 2,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "686.76",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "6d124968-c974-4860-95ad-f08fa7e1acf6",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-10T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.902Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-11",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 2,
+    "feed_kg": "702.93",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "df9d4a40-7107-4475-990b-c4977bcf3c31",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-12T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.902Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-12",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "720.13",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "54e98188-e6e2-40eb-ad9b-059b1d6beee3",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-13T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.902Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-13",
+    "mortality_disease": 3,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "735.90",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d2aed48e-4522-44aa-bead-a5324504039a",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-13T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.902Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-14",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "752.75",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "4386861e-b9b6-4689-bd28-598375afefc2",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-14T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.902Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-15",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "769.24",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "fcd17318-8ebd-472b-b020-b4f4ecb4abc9",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-15T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.902Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-16",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 2,
+    "feed_kg": "785.20",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "a71f5050-ce8e-4461-8b32-c2ffb6b95522",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-16T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.902Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-17",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "801.98",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d0eca464-457f-4957-81fd-27d7274bc268",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-18T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.902Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-18",
+    "mortality_disease": 3,
+    "mortality_heat": 1,
+    "mortality_culled": 3,
+    "mortality_unknown": 4,
+    "feed_kg": "807.45",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "2e0c369e-ba35-47a7-8be9-9124b6aa27df",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-19T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.902Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-19",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "806.05",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "7513d86b-e0f2-468f-95fa-d6f8477badd3",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2025-12-19T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.902Z",
+    "updated_at": "2026-09-01T07:33:28.902Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "record_date": "2025-12-20",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "805.17",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "66b0c7e2-4f1c-4dc7-a138-2481746705bc",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-03T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-04",
+    "mortality_disease": 4,
+    "mortality_heat": 0,
+    "mortality_culled": 2,
+    "mortality_unknown": 2,
+    "feed_kg": "101.82",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "985149a5-cc93-4080-8e2b-aee14c9fc857",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-05T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-05",
+    "mortality_disease": 6,
+    "mortality_heat": 0,
+    "mortality_culled": 3,
+    "mortality_unknown": 3,
+    "feed_kg": "118.87",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "5f67f4ea-184c-4ff0-9299-1c8ca4dfc108",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-06T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-06",
+    "mortality_disease": 11,
+    "mortality_heat": 0,
+    "mortality_culled": 5,
+    "mortality_unknown": 5,
+    "feed_kg": "135.58",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "b9291cab-2542-4eb9-9d8a-081c801d8b39",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-06T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-07",
+    "mortality_disease": 6,
+    "mortality_heat": 0,
+    "mortality_culled": 3,
+    "mortality_unknown": 3,
+    "feed_kg": "152.42",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d3c63817-a4bd-4248-b428-4aa936bf07a3",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-07T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-08",
+    "mortality_disease": 6,
+    "mortality_heat": 0,
+    "mortality_culled": 3,
+    "mortality_unknown": 3,
+    "feed_kg": "169.18",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "06007132-cf69-4df8-9959-406ae2416e35",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-08T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-09",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "186.33",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "b940d7eb-07a4-46a9-b77f-f83502563303",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-09T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-10",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "203.34",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "c8896d36-1d24-4445-8bf8-36bd1f2f3ecb",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-10T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-11",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "220.39",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "2d58eee7-7914-4463-a521-b729cf3900d6",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-11T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-12",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "237.42",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "dbb7b088-1b8b-46a8-a192-2708027610e8",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-12T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-13",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "254.49",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "a3e0d68e-7a26-45c0-adb5-d27fce199852",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-14T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-14",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "271.49",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "73590c07-f7d4-436a-ae92-52a1f291b06e",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-14T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-15",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "288.41",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "a3d49869-7306-452a-9325-0b2c4677219c",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-15T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-16",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "305.32",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "9339d85b-bb3a-471e-a425-ca74facf1ab8",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-17T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-17",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "322.41",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "fd9ae0d6-c2be-45f3-8f77-0eb7d9052305",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-18T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-18",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "339.35",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "35fd0318-8769-4466-a09e-badcfb62dbba",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-18T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-19",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "356.12",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "43f246b9-29c3-4578-a906-2640f462d409",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-19T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-20",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "373.03",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "c5565e21-2fa5-4af4-9746-2a9a84c3a2ce",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-20T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-21",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "390.09",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "6a07e2a2-79d1-4943-90a6-d9f8e1ef82f3",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-22T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-22",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "406.80",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "e07a14cd-ddb7-415c-b491-3d44e87fbfd5",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-23T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-23",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "423.66",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "6284f785-702f-4023-8987-a4aa3bee6927",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-23T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-24",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "440.22",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "6632d535-1ac4-4684-97b8-93f68537cc99",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-24T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-25",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "457.14",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "16d4fb6d-0323-4f65-a9bd-5056607d2b6c",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-25T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-26",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "473.95",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "ee9dbf9f-665c-403c-91f9-7e3b094c4576",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-26T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-27",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "490.75",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "22bb339a-b1f6-455e-b02a-6e523b403b68",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-27T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-28",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "507.64",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "f6a965db-6e19-489c-ad5f-a39c8aa71346",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-29T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-29",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "524.41",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "71c406a3-b58b-4e4f-af8a-5a625042b204",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-29T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-30",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "541.28",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "af8c4b87-defb-4ddf-bc38-4d1617c4f16f",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-31T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-07-31",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "558.02",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "7cc811a5-d25c-4a2d-ac97-91c159c4cbcd",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-07-31T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-08-01",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "574.63",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "5fb8817f-5bc9-49a9-93f4-3d83204a363d",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-02T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-08-02",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "591.08",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "837937d1-4fc9-4689-9621-9e7cbdb9be86",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-03T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-08-03",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 2,
+    "feed_kg": "607.10",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "a55b0004-a93c-484f-a78a-eeece041ef49",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-03T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-08-04",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "623.48",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "5d617ab4-8533-42a4-ad77-9bfc3534cc69",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-05T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-08-05",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "639.98",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "cbb9a917-d163-4a81-b3a6-d148cf0e460a",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-06T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-08-06",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 2,
+    "feed_kg": "655.87",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "ca798d8c-b9ad-4b61-a058-b0bfa1013b17",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-06T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-08-07",
+    "mortality_disease": 3,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "671.42",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "a3cb266b-4018-4d5d-90b8-b4ac9ac56d9f",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-08T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-08-08",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "687.51",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "07e21821-4883-453e-967e-e829ce39ec3c",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-09T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-08-09",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "703.56",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "64dc767c-d40b-46c3-a698-a2f745796298",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-09T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-08-10",
+    "mortality_disease": 2,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "719.41",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "0608cdc2-640d-4f4a-822d-ba44625550fa",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-11T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-08-11",
+    "mortality_disease": 2,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "735.22",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "ff54400e-d284-43a8-a21c-d633ea28e405",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-11T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.977Z",
+    "updated_at": "2026-09-01T07:33:28.977Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "record_date": "2026-08-12",
+    "mortality_disease": 2,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "750.98",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d43fa8f6-784c-47ab-ba56-72ed51b2460b",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-06T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-07",
+    "mortality_disease": 26,
+    "mortality_heat": 0,
+    "mortality_culled": 12,
+    "mortality_unknown": 10,
+    "feed_kg": "98.78",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "212b57ca-d630-4101-9c33-adb2cabf0bee",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-08T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-08",
+    "mortality_disease": 14,
+    "mortality_heat": 0,
+    "mortality_culled": 6,
+    "mortality_unknown": 7,
+    "feed_kg": "114.94",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "29563279-76a0-4b7d-abbb-0ff7de065ec0",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-09T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-09",
+    "mortality_disease": 8,
+    "mortality_heat": 0,
+    "mortality_culled": 4,
+    "mortality_unknown": 4,
+    "feed_kg": "131.21",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "56011987-3f64-4643-be05-d4061de9fda5",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-09T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-10",
+    "mortality_disease": 5,
+    "mortality_heat": 0,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "147.57",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d5f05375-5764-433d-a9b4-ef9aa5460bcb",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-10T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-11",
+    "mortality_disease": 10,
+    "mortality_heat": 0,
+    "mortality_culled": 4,
+    "mortality_unknown": 5,
+    "feed_kg": "163.52",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "eaac137b-f4b9-4033-b954-661f31f7df64",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-12T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-12",
+    "mortality_disease": 10,
+    "mortality_heat": 0,
+    "mortality_culled": 4,
+    "mortality_unknown": 5,
+    "feed_kg": "179.33",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "20f6c6d0-ce38-4bfd-82fa-0f6df0b2a8d7",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-13T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-13",
+    "mortality_disease": 8,
+    "mortality_heat": 0,
+    "mortality_culled": 4,
+    "mortality_unknown": 4,
+    "feed_kg": "195.14",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "76f09e3c-b5fb-49c5-8191-15c00f142c7d",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-13T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-14",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "211.58",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "1d7c1e0d-313a-445a-9c3f-d6dafaad4457",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-15T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-15",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "227.93",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d481820d-c072-4986-bd83-862cf30765be",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-15T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-16",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "244.09",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "5fa5fd37-6bd3-4a80-8d07-50b5178b38a7",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-17T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-17",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 1,
+    "feed_kg": "260.45",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "6f51e276-6d9e-46cb-ae39-84fbecefb3a9",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-17T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-18",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "276.68",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "9b252537-c1ad-4044-a84f-dffa9a52aee6",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-18T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-19",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "292.82",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "28811b05-23d7-4078-8bd0-c69a6f975bc1",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-20T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-20",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "308.93",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "896d736e-b6cf-4e69-976e-72b2f8e03452",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-20T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-21",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "324.94",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "566ad09b-f505-49d7-9088-07c8d1223f78",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-22T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-22",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "340.99",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "b2ac84ef-34c8-4fb7-95f9-6b6e186ab010",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-22T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-23",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "357.17",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "296009c1-e934-40f0-a258-c30b63338488",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-23T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-24",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "373.17",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "4b15d182-f00b-46de-bc5c-a1d06a3fdc03",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-24T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-25",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "389.05",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "6cd54770-bee0-446e-80fd-da1676293576",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-26T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-26",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "404.98",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "7146d72e-9ae9-4fa9-b69a-3b940dc811ca",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-26T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-27",
+    "mortality_disease": 2,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "420.70",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "3e4c1d64-f580-4105-8a24-32936aed584b",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-28T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-28",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "436.47",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "a40bd26e-4bed-4ab5-8f3b-7d43228ec240",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-28T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-29",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "452.20",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "6f00bba9-3efe-49db-ad53-d07b2e8c3cb9",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-29T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-30",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "468.00",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "e5426834-2c9d-43b4-8367-b16eddaf01f4",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-30T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-08-31",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "483.88",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "2d9ecf40-f4e8-4425-8faf-415dc0511c1b",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-31T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.989Z",
+    "updated_at": "2026-09-01T07:33:28.989Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "record_date": "2026-09-01",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "499.85",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "02037b28-c485-46e2-bb44-bcf45698a2a1",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-18T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.996Z",
+    "updated_at": "2026-09-01T07:33:28.996Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "record_date": "2026-08-19",
+    "mortality_disease": 17,
+    "mortality_heat": 0,
+    "mortality_culled": 7,
+    "mortality_unknown": 7,
+    "feed_kg": "92.64",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "514cede5-6ffa-4be0-b73b-43482bb86966",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-19T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.996Z",
+    "updated_at": "2026-09-01T07:33:28.996Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "record_date": "2026-08-20",
+    "mortality_disease": 17,
+    "mortality_heat": 0,
+    "mortality_culled": 8,
+    "mortality_unknown": 7,
+    "feed_kg": "107.62",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "3accc902-992c-4bd4-9d1f-78117405d821",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-21T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.996Z",
+    "updated_at": "2026-09-01T07:33:28.996Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "record_date": "2026-08-21",
+    "mortality_disease": 3,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "123.12",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "d868fc3f-d0ea-4475-b6b6-4d974e4ae781",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-22T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.996Z",
+    "updated_at": "2026-09-01T07:33:28.996Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "record_date": "2026-08-22",
+    "mortality_disease": 13,
+    "mortality_heat": 0,
+    "mortality_culled": 6,
+    "mortality_unknown": 6,
+    "feed_kg": "137.96",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "ad6f33a5-6005-4150-9b9a-f7319c9b598c",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-22T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.996Z",
+    "updated_at": "2026-09-01T07:33:28.996Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "record_date": "2026-08-23",
+    "mortality_disease": 5,
+    "mortality_heat": 0,
+    "mortality_culled": 2,
+    "mortality_unknown": 3,
+    "feed_kg": "153.15",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "5c82c044-92d8-4889-a9ed-a2e90dfa42e5",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-23T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.996Z",
+    "updated_at": "2026-09-01T07:33:28.996Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "record_date": "2026-08-24",
+    "mortality_disease": 6,
+    "mortality_heat": 0,
+    "mortality_culled": 3,
+    "mortality_unknown": 3,
+    "feed_kg": "168.20",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "593503a9-b0e8-401b-9dc6-1a43fdae6090",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-24T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.996Z",
+    "updated_at": "2026-09-01T07:33:28.996Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "record_date": "2026-08-25",
+    "mortality_disease": 8,
+    "mortality_heat": 0,
+    "mortality_culled": 3,
+    "mortality_unknown": 4,
+    "feed_kg": "183.02",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "aec4caab-a847-46b0-8323-6d259ec71bca",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-25T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.996Z",
+    "updated_at": "2026-09-01T07:33:28.996Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "record_date": "2026-08-26",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 2,
+    "feed_kg": "198.35",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "b00762ba-d17c-411b-9ad7-812b8f654efc",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-27T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.996Z",
+    "updated_at": "2026-09-01T07:33:28.996Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "record_date": "2026-08-27",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 2,
+    "feed_kg": "213.41",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "63056f09-8a64-447f-8e08-e753c9b8d047",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-27T22:00:00Z",
+    "created_at": "2026-09-01T07:33:28.996Z",
+    "updated_at": "2026-09-01T07:33:28.996Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "record_date": "2026-08-28",
+    "mortality_disease": 2,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "228.47",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "f7609ea2-4ef2-48a1-a71b-5396a967479b",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-29T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.996Z",
+    "updated_at": "2026-09-01T07:33:28.996Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "record_date": "2026-08-29",
+    "mortality_disease": 2,
+    "mortality_heat": 1,
+    "mortality_culled": 2,
+    "mortality_unknown": 2,
+    "feed_kg": "243.43",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "76a71f27-5932-4396-b935-daf723cf9c7f",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-30T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.996Z",
+    "updated_at": "2026-09-01T07:33:28.996Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "record_date": "2026-08-30",
+    "mortality_disease": 0,
+    "mortality_heat": 0,
+    "mortality_culled": 0,
+    "mortality_unknown": 0,
+    "feed_kg": "258.77",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "b31b2ffb-7658-4784-bacc-4db4dcf329ec",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-31T00:00:00Z",
+    "created_at": "2026-09-01T07:33:28.996Z",
+    "updated_at": "2026-09-01T07:33:28.996Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "record_date": "2026-08-31",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 2,
+    "feed_kg": "273.85",
+    "notes": ""
+  }
+},
+{
+  "model": "production.dailyrecord",
+  "pk": "02cdf1d9-28d7-4669-af46-3f4803bbcf97",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-08-31T23:00:00Z",
+    "created_at": "2026-09-01T07:33:28.996Z",
+    "updated_at": "2026-09-01T07:33:28.996Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "record_date": "2026-09-01",
+    "mortality_disease": 1,
+    "mortality_heat": 0,
+    "mortality_culled": 1,
+    "mortality_unknown": 3,
+    "feed_kg": "288.83",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "6fab4ed1-8af2-4f86-9f6d-c099faa749e1",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.946Z",
+    "created_at": "2026-09-01T07:33:28.946Z",
+    "updated_at": "2026-09-01T07:33:28.946Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "sample_date": "2026-01-11",
+    "birds_weighed": 30,
+    "average_grams": "77.11",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "03f3ea74-5fea-417e-8f18-4a26167b0a56",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.947Z",
+    "created_at": "2026-09-01T07:33:28.947Z",
+    "updated_at": "2026-09-01T07:33:28.947Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "sample_date": "2026-01-18",
+    "birds_weighed": 25,
+    "average_grams": "213.21",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "82f24875-fe88-4f90-ba15-0dc7ae7ad211",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.947Z",
+    "created_at": "2026-09-01T07:33:28.947Z",
+    "updated_at": "2026-09-01T07:33:28.947Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "sample_date": "2026-01-25",
+    "birds_weighed": 25,
+    "average_grams": "494.63",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "83d7073c-3c3a-420e-a1cf-b34f7d53ec04",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.947Z",
+    "created_at": "2026-09-01T07:33:28.948Z",
+    "updated_at": "2026-09-01T07:33:28.948Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "sample_date": "2026-02-01",
+    "birds_weighed": 25,
+    "average_grams": "968.45",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "45f7372e-d7d4-44e7-ab90-e2d735b11d1d",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.948Z",
+    "created_at": "2026-09-01T07:33:28.948Z",
+    "updated_at": "2026-09-01T07:33:28.948Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "sample_date": "2026-02-08",
+    "birds_weighed": 40,
+    "average_grams": "1573.94",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "9dfdbb53-4e08-4481-82aa-8e3bbec4d96c",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.948Z",
+    "created_at": "2026-09-01T07:33:28.948Z",
+    "updated_at": "2026-09-01T07:33:28.948Z",
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "sample_date": "2026-02-14",
+    "birds_weighed": 30,
+    "average_grams": "2284.89",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "c5573ef9-a1d8-4f5c-acad-7c5f168eb2a7",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.958Z",
+    "created_at": "2026-09-01T07:33:28.958Z",
+    "updated_at": "2026-09-01T07:33:28.958Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "sample_date": "2026-03-12",
+    "birds_weighed": 40,
+    "average_grams": "69.88",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "fffec1ee-782a-4957-ba18-3261057234dc",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.958Z",
+    "created_at": "2026-09-01T07:33:28.958Z",
+    "updated_at": "2026-09-01T07:33:28.958Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "sample_date": "2026-03-19",
+    "birds_weighed": 50,
+    "average_grams": "194.64",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "0f95beee-f6a2-41b7-ad7c-d81b87facd14",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.959Z",
+    "created_at": "2026-09-01T07:33:28.959Z",
+    "updated_at": "2026-09-01T07:33:28.959Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "sample_date": "2026-03-26",
+    "birds_weighed": 40,
+    "average_grams": "442.50",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "e04cd265-ae68-431d-bc6f-3a371ec3becb",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.959Z",
+    "created_at": "2026-09-01T07:33:28.959Z",
+    "updated_at": "2026-09-01T07:33:28.959Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "sample_date": "2026-04-02",
+    "birds_weighed": 25,
+    "average_grams": "851.00",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "4566b383-7250-4dcf-a179-0c9682f77812",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.959Z",
+    "created_at": "2026-09-01T07:33:28.960Z",
+    "updated_at": "2026-09-01T07:33:28.960Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "sample_date": "2026-04-09",
+    "birds_weighed": 25,
+    "average_grams": "1373.67",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "cab2b9b3-db58-414e-9ae5-8e1798c17a7b",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.960Z",
+    "created_at": "2026-09-01T07:33:28.960Z",
+    "updated_at": "2026-09-01T07:33:28.960Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "sample_date": "2026-04-16",
+    "birds_weighed": 30,
+    "average_grams": "2097.06",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "8a608012-b078-45b0-bf82-2a84a2f4e34b",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.960Z",
+    "created_at": "2026-09-01T07:33:28.960Z",
+    "updated_at": "2026-09-01T07:33:28.960Z",
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "sample_date": "2026-04-18",
+    "birds_weighed": 30,
+    "average_grams": "2397.27",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "37fc1681-2676-4b7f-bed9-1861bfe4ea7f",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.969Z",
+    "created_at": "2026-09-01T07:33:28.970Z",
+    "updated_at": "2026-09-01T07:33:28.970Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "sample_date": "2026-05-11",
+    "birds_weighed": 25,
+    "average_grams": "79.80",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "21626ebe-99f6-493c-82d0-e734e00c5b23",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.970Z",
+    "created_at": "2026-09-01T07:33:28.970Z",
+    "updated_at": "2026-09-01T07:33:28.970Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "sample_date": "2026-05-18",
+    "birds_weighed": 25,
+    "average_grams": "231.25",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "9a63139c-0b72-4d9a-b538-9251f4bea41c",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.970Z",
+    "created_at": "2026-09-01T07:33:28.970Z",
+    "updated_at": "2026-09-01T07:33:28.970Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "sample_date": "2026-05-25",
+    "birds_weighed": 30,
+    "average_grams": "544.44",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "2f2e6972-6c34-478a-9cc3-68900eb7dc7e",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.971Z",
+    "created_at": "2026-09-01T07:33:28.971Z",
+    "updated_at": "2026-09-01T07:33:28.971Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "sample_date": "2026-06-01",
+    "birds_weighed": 50,
+    "average_grams": "986.76",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "7ef59606-d9f3-4603-8776-8fd541829dfa",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.971Z",
+    "created_at": "2026-09-01T07:33:28.971Z",
+    "updated_at": "2026-09-01T07:33:28.971Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "sample_date": "2026-06-08",
+    "birds_weighed": 30,
+    "average_grams": "1651.92",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "7587978d-6ff5-43c5-8d00-935bf3964c8a",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.971Z",
+    "created_at": "2026-09-01T07:33:28.971Z",
+    "updated_at": "2026-09-01T07:33:28.971Z",
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "sample_date": "2026-06-14",
+    "birds_weighed": 30,
+    "average_grams": "2357.81",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "05641bae-d6db-4f3d-80aa-fa15c824f0f1",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.916Z",
+    "created_at": "2026-09-01T07:33:28.916Z",
+    "updated_at": "2026-09-01T07:33:28.916Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "sample_date": "2025-11-12",
+    "birds_weighed": 50,
+    "average_grams": "80.20",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "af7879f7-45c6-4bf2-8228-aa1037628d05",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.929Z",
+    "created_at": "2026-09-01T07:33:28.929Z",
+    "updated_at": "2026-09-01T07:33:28.929Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "sample_date": "2025-11-19",
+    "birds_weighed": 30,
+    "average_grams": "219.30",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "53bafb8b-56f5-46b4-b78a-980cf0c435db",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.930Z",
+    "created_at": "2026-09-01T07:33:28.930Z",
+    "updated_at": "2026-09-01T07:33:28.930Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "sample_date": "2025-11-26",
+    "birds_weighed": 40,
+    "average_grams": "505.07",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "725ba14a-aa8d-461c-96b1-0b0dd484f754",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.931Z",
+    "created_at": "2026-09-01T07:33:28.931Z",
+    "updated_at": "2026-09-01T07:33:28.931Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "sample_date": "2025-12-03",
+    "birds_weighed": 50,
+    "average_grams": "981.28",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "b44575a3-dd6d-4bd2-80c8-05ac5053eea8",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.931Z",
+    "created_at": "2026-09-01T07:33:28.931Z",
+    "updated_at": "2026-09-01T07:33:28.931Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "sample_date": "2025-12-10",
+    "birds_weighed": 50,
+    "average_grams": "1642.34",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "200e00ac-3a42-4410-81b0-fc156127f87d",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.932Z",
+    "created_at": "2026-09-01T07:33:28.932Z",
+    "updated_at": "2026-09-01T07:33:28.932Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "sample_date": "2025-12-17",
+    "birds_weighed": 30,
+    "average_grams": "2418.93",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "3bcb0e62-4dfa-4027-b19b-90e888f1ce83",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.932Z",
+    "created_at": "2026-09-01T07:33:28.932Z",
+    "updated_at": "2026-09-01T07:33:28.932Z",
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "sample_date": "2025-12-20",
+    "birds_weighed": 25,
+    "average_grams": "2862.55",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "f9316173-9f42-4491-886d-9896bf50639f",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.981Z",
+    "created_at": "2026-09-01T07:33:28.981Z",
+    "updated_at": "2026-09-01T07:33:28.981Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "sample_date": "2026-07-10",
+    "birds_weighed": 30,
+    "average_grams": "74.66",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "4e218df2-4cda-4526-afbb-9a928fc7530b",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.982Z",
+    "created_at": "2026-09-01T07:33:28.982Z",
+    "updated_at": "2026-09-01T07:33:28.982Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "sample_date": "2026-07-17",
+    "birds_weighed": 25,
+    "average_grams": "226.09",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "090f9b94-e0f6-419b-adbf-0d7d1e320296",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.982Z",
+    "created_at": "2026-09-01T07:33:28.983Z",
+    "updated_at": "2026-09-01T07:33:28.983Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "sample_date": "2026-07-24",
+    "birds_weighed": 30,
+    "average_grams": "501.46",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "962db736-7711-483f-9a07-0d38eea4da2e",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.983Z",
+    "created_at": "2026-09-01T07:33:28.983Z",
+    "updated_at": "2026-09-01T07:33:28.983Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "sample_date": "2026-07-31",
+    "birds_weighed": 50,
+    "average_grams": "960.41",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "c5313705-9c1e-46e5-b0aa-e08d4ff66fdb",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.983Z",
+    "created_at": "2026-09-01T07:33:28.983Z",
+    "updated_at": "2026-09-01T07:33:28.983Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "sample_date": "2026-08-07",
+    "birds_weighed": 30,
+    "average_grams": "1572.07",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "7b97cc31-4136-440b-94fd-09b9cc5cc20f",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.984Z",
+    "created_at": "2026-09-01T07:33:28.984Z",
+    "updated_at": "2026-09-01T07:33:28.984Z",
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "sample_date": "2026-08-12",
+    "birds_weighed": 25,
+    "average_grams": "2091.62",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "ce24b79c-810f-48c7-a266-7ba3ab8ee2b3",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.993Z",
+    "created_at": "2026-09-01T07:33:28.993Z",
+    "updated_at": "2026-09-01T07:33:28.993Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "sample_date": "2026-08-13",
+    "birds_weighed": 50,
+    "average_grams": "78.39",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "bc3fed5e-c015-4b08-aa61-0053093f39dc",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.993Z",
+    "created_at": "2026-09-01T07:33:28.994Z",
+    "updated_at": "2026-09-01T07:33:28.994Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "sample_date": "2026-08-20",
+    "birds_weighed": 25,
+    "average_grams": "225.04",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "644b3f22-a2c6-404d-8257-96320d0e88ab",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.994Z",
+    "created_at": "2026-09-01T07:33:28.994Z",
+    "updated_at": "2026-09-01T07:33:28.994Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "sample_date": "2026-08-27",
+    "birds_weighed": 50,
+    "average_grams": "513.57",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "55c5494f-b0fe-46ed-88ff-b606764ce40e",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.994Z",
+    "created_at": "2026-09-01T07:33:28.994Z",
+    "updated_at": "2026-09-01T07:33:28.994Z",
+    "batch": "a08a2f90-0dd7-489a-8615-9a21914a1484",
+    "sample_date": "2026-09-01",
+    "birds_weighed": 40,
+    "average_grams": "802.08",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "1b734bd3-938c-45bf-b7a5-7ba253a14daa",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.999Z",
+    "created_at": "2026-09-01T07:33:28.999Z",
+    "updated_at": "2026-09-01T07:33:28.999Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "sample_date": "2026-08-25",
+    "birds_weighed": 50,
+    "average_grams": "75.18",
+    "notes": ""
+  }
+},
+{
+  "model": "production.weightsample",
+  "pk": "5e9255a9-f384-4e80-ae2f-9c9613769975",
+  "fields": {
+    "recorded_by": 10,
+    "recorded_at": "2026-09-01T07:33:28.999Z",
+    "created_at": "2026-09-01T07:33:28.999Z",
+    "updated_at": "2026-09-01T07:33:28.999Z",
+    "batch": "a3aa3a45-c865-4f12-84dc-a3cd35844c05",
+    "sample_date": "2026-09-01",
+    "birds_weighed": 40,
+    "average_grams": "215.51",
+    "notes": ""
+  }
+},
+{
+  "model": "production.harvest",
+  "pk": 42,
+  "fields": {
+    "batch": "17aeb24c-15de-454b-8f25-6a3aa705014e",
+    "harvest_date": "2026-02-14",
+    "birds_harvested": 4517,
+    "total_weight_kg": "10320.85",
+    "revenue": "1358636.69",
+    "buyer_link": 4,
+    "notes": "Synthetic demo harvest (average performance profile).",
+    "recorded_by": 8,
+    "created_at": "2026-09-01T07:33:28.950Z"
+  }
+},
+{
+  "model": "production.harvest",
+  "pk": 43,
+  "fields": {
+    "batch": "7b3ace66-7d1e-4b4b-aa45-305b6c267c04",
+    "harvest_date": "2026-04-18",
+    "birds_harvested": 2865,
+    "total_weight_kg": "6868.18",
+    "revenue": "928990.03",
+    "buyer_link": 4,
+    "notes": "Synthetic demo harvest (poor performance profile).",
+    "recorded_by": 8,
+    "created_at": "2026-09-01T07:33:28.962Z"
+  }
+},
+{
+  "model": "production.harvest",
+  "pk": 44,
+  "fields": {
+    "batch": "7c00abe2-5140-4e48-98e0-0adbd7a33c7a",
+    "harvest_date": "2026-06-14",
+    "birds_harvested": 4698,
+    "total_weight_kg": "11076.99",
+    "revenue": "1344857.36",
+    "buyer_link": 4,
+    "notes": "Synthetic demo harvest (excellent performance profile).",
+    "recorded_by": 8,
+    "created_at": "2026-09-01T07:33:28.974Z"
+  }
+},
+{
+  "model": "production.harvest",
+  "pk": 41,
+  "fields": {
+    "batch": "99e0f418-8fb2-475f-98a5-444cf0a991ff",
+    "harvest_date": "2025-12-20",
+    "birds_harvested": 4577,
+    "total_weight_kg": "13101.89",
+    "revenue": "1766265.79",
+    "buyer_link": 4,
+    "notes": "Synthetic demo harvest (good performance profile).",
+    "recorded_by": 8,
+    "created_at": "2026-09-01T07:33:28.934Z"
+  }
+},
+{
+  "model": "production.harvest",
+  "pk": 45,
+  "fields": {
+    "batch": "9bf342ac-234a-4da1-9745-70aad5370ecc",
+    "harvest_date": "2026-08-12",
+    "birds_harvested": 4508,
+    "total_weight_kg": "9429.02",
+    "revenue": "1270937.61",
+    "buyer_link": 4,
+    "notes": "Synthetic demo harvest (average performance profile).",
+    "recorded_by": 8,
+    "created_at": "2026-09-01T07:33:28.986Z"
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "56396489-4c34-43df-90c1-9d8f94335d65",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.001Z",
+    "created_at": "2026-09-01T07:33:29.001Z",
+    "updated_at": "2026-09-01T07:33:29.001Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-01-04",
+    "feed_type": "STARTER",
+    "quantity_kg": "3988.98",
+    "unit_cost": "32.50",
+    "total_cost": "129641.85",
+    "invoice_ref": "DEMO-INV-202601-STA",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "8b81fda1-4909-4e50-aaa2-8ea2a0279d78",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.011Z",
+    "created_at": "2026-09-01T07:33:29.012Z",
+    "updated_at": "2026-09-01T07:33:29.012Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-01-04",
+    "feed_type": "GROWER",
+    "quantity_kg": "4322.33",
+    "unit_cost": "30.00",
+    "total_cost": "129669.90",
+    "invoice_ref": "DEMO-INV-202601-GRO",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "c976ebca-aba3-4c1f-b0dd-e6c07302f8f9",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.012Z",
+    "created_at": "2026-09-01T07:33:29.013Z",
+    "updated_at": "2026-09-01T07:33:29.013Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-01-04",
+    "feed_type": "FINISHER",
+    "quantity_kg": "5579.47",
+    "unit_cost": "28.75",
+    "total_cost": "160409.76",
+    "invoice_ref": "DEMO-INV-202601-FIN",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "4da76f51-0e48-4d83-9ffc-d3323ee4465a",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.014Z",
+    "created_at": "2026-09-01T07:33:29.014Z",
+    "updated_at": "2026-09-01T07:33:29.014Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-02-03",
+    "feed_type": "FINISHER",
+    "quantity_kg": "5784.06",
+    "unit_cost": "29.18",
+    "total_cost": "168778.87",
+    "invoice_ref": "DEMO-INV-202602-FIN",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "5d377986-a9dd-4261-8860-e57616fe94f7",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.013Z",
+    "created_at": "2026-09-01T07:33:29.013Z",
+    "updated_at": "2026-09-01T07:33:29.013Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-02-03",
+    "feed_type": "STARTER",
+    "quantity_kg": "4473.63",
+    "unit_cost": "32.99",
+    "total_cost": "147585.05",
+    "invoice_ref": "DEMO-INV-202602-STA",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "9ec5dfb2-c9ed-41a3-a393-0723a91a2df8",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.013Z",
+    "created_at": "2026-09-01T07:33:29.014Z",
+    "updated_at": "2026-09-01T07:33:29.014Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-02-03",
+    "feed_type": "GROWER",
+    "quantity_kg": "5552.79",
+    "unit_cost": "30.45",
+    "total_cost": "169082.46",
+    "invoice_ref": "DEMO-INV-202602-GRO",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "afa372cc-fdf5-4d60-8cc4-57404f4cb461",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.015Z",
+    "created_at": "2026-09-01T07:33:29.015Z",
+    "updated_at": "2026-09-01T07:33:29.015Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-03-05",
+    "feed_type": "FINISHER",
+    "quantity_kg": "3432.51",
+    "unit_cost": "29.61",
+    "total_cost": "101636.62",
+    "invoice_ref": "DEMO-INV-202603-FIN",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "d09e897a-aca6-4215-987a-d2bb8b13998d",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.015Z",
+    "created_at": "2026-09-01T07:33:29.015Z",
+    "updated_at": "2026-09-01T07:33:29.015Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-03-05",
+    "feed_type": "GROWER",
+    "quantity_kg": "3613.46",
+    "unit_cost": "30.90",
+    "total_cost": "111655.91",
+    "invoice_ref": "DEMO-INV-202603-GRO",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "fec8b304-f2c1-43f8-b8a9-58c7799fb924",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.014Z",
+    "created_at": "2026-09-01T07:33:29.014Z",
+    "updated_at": "2026-09-01T07:33:29.014Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-03-05",
+    "feed_type": "STARTER",
+    "quantity_kg": "4106.51",
+    "unit_cost": "33.48",
+    "total_cost": "137485.95",
+    "invoice_ref": "DEMO-INV-202603-STA",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "3e358d48-b35c-4750-842a-f35acbf8cf4b",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.017Z",
+    "created_at": "2026-09-01T07:33:29.017Z",
+    "updated_at": "2026-09-01T07:33:29.017Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-04-04",
+    "feed_type": "FINISHER",
+    "quantity_kg": "4389.23",
+    "unit_cost": "30.04",
+    "total_cost": "131852.47",
+    "invoice_ref": "DEMO-INV-202604-FIN",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "c9720b64-5aee-4fbe-80e0-f7699e69eb85",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.016Z",
+    "created_at": "2026-09-01T07:33:29.017Z",
+    "updated_at": "2026-09-01T07:33:29.017Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-04-04",
+    "feed_type": "GROWER",
+    "quantity_kg": "6270.22",
+    "unit_cost": "31.35",
+    "total_cost": "196571.40",
+    "invoice_ref": "DEMO-INV-202604-GRO",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "f734ee3e-620c-4a68-9f8d-e40563636446",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.016Z",
+    "created_at": "2026-09-01T07:33:29.016Z",
+    "updated_at": "2026-09-01T07:33:29.016Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-04-04",
+    "feed_type": "STARTER",
+    "quantity_kg": "4937.53",
+    "unit_cost": "33.96",
+    "total_cost": "167678.52",
+    "invoice_ref": "DEMO-INV-202604-STA",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "26eabfcb-a4db-4b48-bd97-454e5c6ab57a",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.018Z",
+    "created_at": "2026-09-01T07:33:29.018Z",
+    "updated_at": "2026-09-01T07:33:29.018Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-05-04",
+    "feed_type": "STARTER",
+    "quantity_kg": "5257.98",
+    "unit_cost": "34.45",
+    "total_cost": "181137.41",
+    "invoice_ref": "DEMO-INV-202605-STA",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "5ca978e6-0fae-45ab-8282-d1702d20e584",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.019Z",
+    "created_at": "2026-09-01T07:33:29.019Z",
+    "updated_at": "2026-09-01T07:33:29.019Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-05-04",
+    "feed_type": "FINISHER",
+    "quantity_kg": "5262.64",
+    "unit_cost": "30.48",
+    "total_cost": "160405.27",
+    "invoice_ref": "DEMO-INV-202605-FIN",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "5deaecda-b598-45f9-8519-ee07ee7dad93",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.018Z",
+    "created_at": "2026-09-01T07:33:29.018Z",
+    "updated_at": "2026-09-01T07:33:29.018Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-05-04",
+    "feed_type": "GROWER",
+    "quantity_kg": "5637.36",
+    "unit_cost": "31.80",
+    "total_cost": "179268.05",
+    "invoice_ref": "DEMO-INV-202605-GRO",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "1793794a-c1ce-4c51-af2f-7f9ec39cbac3",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.019Z",
+    "created_at": "2026-09-01T07:33:29.019Z",
+    "updated_at": "2026-09-01T07:33:29.019Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-06-03",
+    "feed_type": "STARTER",
+    "quantity_kg": "5559.22",
+    "unit_cost": "34.94",
+    "total_cost": "194239.15",
+    "invoice_ref": "DEMO-INV-202606-STA",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "e28bcd0f-1a36-4481-bc61-39c4db6c2766",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.020Z",
+    "created_at": "2026-09-01T07:33:29.020Z",
+    "updated_at": "2026-09-01T07:33:29.020Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-06-03",
+    "feed_type": "GROWER",
+    "quantity_kg": "6124.66",
+    "unit_cost": "32.25",
+    "total_cost": "197520.28",
+    "invoice_ref": "DEMO-INV-202606-GRO",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "efa7b4bd-f7f5-46e2-b98e-ede2de304a0c",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.020Z",
+    "created_at": "2026-09-01T07:33:29.021Z",
+    "updated_at": "2026-09-01T07:33:29.021Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-06-03",
+    "feed_type": "FINISHER",
+    "quantity_kg": "3953.38",
+    "unit_cost": "30.91",
+    "total_cost": "122198.98",
+    "invoice_ref": "DEMO-INV-202606-FIN",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "95c3463c-4ecd-47c9-a5cd-afa0cf52c506",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.022Z",
+    "created_at": "2026-09-01T07:33:29.022Z",
+    "updated_at": "2026-09-01T07:33:29.022Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-07-03",
+    "feed_type": "FINISHER",
+    "quantity_kg": "3741.71",
+    "unit_cost": "31.34",
+    "total_cost": "117265.19",
+    "invoice_ref": "DEMO-INV-202607-FIN",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "d067c6ad-e51c-4a1a-9c07-b6113d93b74a",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.021Z",
+    "created_at": "2026-09-01T07:33:29.022Z",
+    "updated_at": "2026-09-01T07:33:29.022Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-07-03",
+    "feed_type": "GROWER",
+    "quantity_kg": "3817.42",
+    "unit_cost": "32.70",
+    "total_cost": "124829.63",
+    "invoice_ref": "DEMO-INV-202607-GRO",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "e95645c0-df76-430c-81bb-992599927900",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.021Z",
+    "created_at": "2026-09-01T07:33:29.021Z",
+    "updated_at": "2026-09-01T07:33:29.021Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-07-03",
+    "feed_type": "STARTER",
+    "quantity_kg": "3435.40",
+    "unit_cost": "35.42",
+    "total_cost": "121681.87",
+    "invoice_ref": "DEMO-INV-202607-STA",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "78774262-cf09-441a-acf7-7ae553f696f9",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.022Z",
+    "created_at": "2026-09-01T07:33:29.023Z",
+    "updated_at": "2026-09-01T07:33:29.023Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-08-02",
+    "feed_type": "STARTER",
+    "quantity_kg": "5313.88",
+    "unit_cost": "35.91",
+    "total_cost": "190821.43",
+    "invoice_ref": "DEMO-INV-202608-STA",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "da18c26c-b492-45d8-847f-e188b44b95e1",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.023Z",
+    "created_at": "2026-09-01T07:33:29.023Z",
+    "updated_at": "2026-09-01T07:33:29.023Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-08-02",
+    "feed_type": "GROWER",
+    "quantity_kg": "5008.58",
+    "unit_cost": "33.15",
+    "total_cost": "166034.43",
+    "invoice_ref": "DEMO-INV-202608-GRO",
+    "notes": ""
+  }
+},
+{
+  "model": "production.feeddelivery",
+  "pk": "e27b1633-5350-49fe-bd1c-192e4485c75d",
+  "fields": {
+    "recorded_by": 8,
+    "recorded_at": "2026-09-01T07:33:29.023Z",
+    "created_at": "2026-09-01T07:33:29.023Z",
+    "updated_at": "2026-09-01T07:33:29.023Z",
+    "farm": 3,
+    "supplier_link": 3,
+    "delivery_date": "2026-08-02",
+    "feed_type": "FINISHER",
+    "quantity_kg": "4007.22",
+    "unit_cost": "31.77",
+    "total_cost": "127309.38",
+    "invoice_ref": "DEMO-INV-202608-FIN",
+    "notes": ""
+  }
+}
+]
