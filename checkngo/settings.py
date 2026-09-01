@@ -14,6 +14,8 @@ from pathlib import Path
 from decouple import config
 from datetime import timedelta
 
+import dj_database_url
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -56,6 +58,10 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
+    # Serves collected static files (incl. the admin's CSS) directly from
+    # Django when DEBUG is False, so the API host needs no separate static
+    # server. Must sit immediately after SecurityMiddleware.
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -87,20 +93,46 @@ WSGI_APPLICATION = 'checkngo.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": config("DB_NAME"),
-        "USER": config("DB_USER"),
-        "PASSWORD": config("DB_PASSWORD"),
-        "HOST": config("DB_HOST", default="localhost"),
-        "PORT": config("DB_PORT", default="5432"),
-    }
-}
+# Production (Render) provides a single DATABASE_URL. When it is absent we
+# fall back to the discrete DB_* variables used for local development,
+# unchanged — so a dev machine with no DATABASE_URL behaves exactly as before.
+DATABASE_URL = config("DATABASE_URL", default="")
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+if DATABASE_URL:
+    DATABASES = {"default": dj_database_url.parse(DATABASE_URL)}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": config("DB_NAME"),
+            "USER": config("DB_USER"),
+            "PASSWORD": config("DB_PASSWORD"),
+            "HOST": config("DB_HOST", default="localhost"),
+            "PORT": config("DB_PORT", default="5432"),
+        }
+    }
+
+# Comma-separated in the environment. The default is the local dev/preview
+# origin list, so nothing changes without CORS_ALLOWED_ORIGINS set.
+CORS_ALLOWED_ORIGINS = config(
+    "CORS_ALLOWED_ORIGINS",
+    default=(
+        "http://localhost:5173,"
+        "http://127.0.0.1:5173,"
+        "http://localhost:4173,"
+        "http://127.0.0.1:4173,"
+        "http://11.0.2.244:4173"
+    ),
+).split(",")
+
+# Origins Django accepts for unsafe (POST) requests behind CSRF protection —
+# needed for the admin login form once it is served over HTTPS on a real
+# domain. Comma-separated, scheme included (e.g. https://checkngo-api.onrender.com);
+# empty locally, where admin is same-origin over http.
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in config("CSRF_TRUSTED_ORIGINS", default="").split(",")
+    if origin.strip()
 ]
 
 # Base URL of the frontend app. Used to build links that leave the API
@@ -143,6 +175,22 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# `collectstatic` target. WhiteNoise serves from here when DEBUG is False;
+# without it the admin renders unstyled in production.
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Django 6.1 removed the STATICFILES_STORAGE setting — the equivalent is the
+# "staticfiles" entry in STORAGES. CompressedManifestStaticFilesStorage adds
+# content hashes and pre-compressed (gzip/brotli) copies for WhiteNoise.
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
@@ -173,17 +221,41 @@ REST_FRAMEWORK = {
         "anon": "60/hour",
     },
 }
-# Throttle counters live in the cache. LocMemCache is per-process, so it
-# resets on reload and is not shared across workers — adequate for the
-# defense demo, but Redis is the correct production backend.
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "checkngo-throttle-cache",
+# Throttle counters live in the cache. LocMemCache is per-process, so with
+# multiple Gunicorn workers each keeps its own counters and the effective
+# rate limits multiply by the worker count. When REDIS_URL is set we use a
+# shared Redis cache; locally, with no REDIS_URL, LocMemCache is unchanged.
+REDIS_URL = config("REDIS_URL", default="")
+
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+        }
     }
-}
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "checkngo-throttle-cache",
+        }
+    }
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG   # tighten this before deployment
+
+# Production hardening. Only applied when DEBUG is False, so local
+# development over plain HTTP is untouched.
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    # Render terminates TLS at its load balancer and forwards plain HTTP to
+    # the app, setting X-Forwarded-Proto. Without this, SECURE_SSL_REDIRECT
+    # never sees "https", redirects forever, and the site is dead.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=8),      # one farm shift
