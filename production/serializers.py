@@ -1155,6 +1155,7 @@ class TaskCompletionSerializer(serializers.ModelSerializer):
     suggested_time = serializers.CharField(
         source="template.suggested_time", read_only=True
     )
+    house_name = serializers.CharField(source="house.name", read_only=True)
     is_editable = serializers.BooleanField(read_only=True)
     recorded_by_name = serializers.CharField(
         source="recorded_by.full_name", read_only=True, default=None
@@ -1167,6 +1168,8 @@ class TaskCompletionSerializer(serializers.ModelSerializer):
             "template",
             "template_name",
             "suggested_time",
+            "house",
+            "house_name",
             "completion_date",
             "recorded_by",
             "recorded_by_name",
@@ -1175,12 +1178,13 @@ class TaskCompletionSerializer(serializers.ModelSerializer):
             "is_editable",
         ]
         read_only_fields = ["recorded_by", "created_at"]
-        # `template` is a writable field, so ModelSerializer would auto-add a
-        # UniqueTogetherValidator for unique(template, completion_date) and
-        # reject a second device ticking the same item the same day with a
-        # 400. That conflict is handled deliberately upstream — absorbed in
-        # the view and the bulk-sync serializer — so the auto validator is
-        # dropped. The DB constraint still guards integrity.
+        # `template` and `house` are writable, so ModelSerializer would
+        # auto-add a UniqueTogetherValidator for
+        # unique(template, completion_date, house) and reject a second
+        # device ticking the same item the same day for the same shed with
+        # a 400. That conflict is handled deliberately upstream — absorbed
+        # in the view and the bulk-sync serializer — so the auto validator
+        # is dropped. The DB constraint still guards integrity.
         validators = []
 
     def validate_template(self, value):
@@ -1191,10 +1195,28 @@ class TaskCompletionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("That routine item is no longer in use.")
         return value
 
+    def validate_house(self, value):
+        farm = self.context["farm"]
+        if value.farm_id != farm.pk:
+            raise serializers.ValidationError("That house belongs to another farm.")
+        if not value.is_active:
+            raise serializers.ValidationError("That house is not in service.")
+        return value
+
     def validate_completion_date(self, value):
         if value > timezone.localdate():
             raise serializers.ValidationError("Cannot record a future date.")
         return value
+
+    def validate(self, attrs):
+        # The routine is farm-wide but ticked per shed — the two must line up.
+        template = attrs.get("template")
+        house = attrs.get("house")
+        if template and house and template.farm_id != house.farm_id:
+            raise serializers.ValidationError(
+                {"house": "That house belongs to a different farm than the routine."}
+            )
+        return attrs
 
     def update(self, instance, validated_data):
         # The 24-hour lock has teeth here exactly as it does on a daily
@@ -1209,6 +1231,7 @@ class TaskCompletionSerializer(serializers.ModelSerializer):
                 }
             )
         validated_data.pop("template", None)  # the item is fixed once ticked
+        validated_data.pop("house", None)  # so is the shed
         validated_data.pop("completion_date", None)  # so is the day
         return super().update(instance, validated_data)
 
@@ -1222,14 +1245,18 @@ class TaskCompletionBulkSyncSerializer(serializers.Serializer):
     """
     Offline sync for routine ticks — a backlog in one round trip.
 
-    Identity is the client UUID. The wrinkle is the (template,
-    completion_date) unique constraint: two devices can generate different
-    UUIDs for the same item on the same day. A completion carries no
-    content, so the second one is ABSORBED — its client id is reported in
-    `updated` so the device drops it, and the existing row stands. This is
-    the one place the routine deliberately diverges from
-    DailyRecordBulkSyncSerializer, which rejects a same-day conflict
-    because a daily record's numbers would be lost.
+    Identity is the client UUID. The wrinkle is the
+    (template, completion_date, house) unique constraint: two devices can
+    generate different UUIDs for the same item on the same day for the same
+    shed. A completion carries no content, so the second one is ABSORBED —
+    its client id is reported in `updated` so the device drops it, and the
+    existing row stands. This is the one place the routine deliberately
+    diverges from DailyRecordBulkSyncSerializer, which rejects a same-day
+    conflict because a daily record's numbers would be lost.
+
+    House-level write scoping is enforced per record here rather than in a
+    permission class, so a worker who lost a house assignment gets that
+    row back in `failed[]` instead of a 403 on the whole backlog.
     """
 
     records = TaskCompletionSerializer(many=True)
@@ -1244,11 +1271,28 @@ class TaskCompletionBulkSyncSerializer(serializers.Serializer):
         return value
 
     def save(self, **kwargs):
-        user = self.context["request"].user
+        request = self.context["request"]
+        user = request.user
+        membership = getattr(request, "membership", None)
         created, updated, failed = [], [], []
 
         for payload in self.validated_data["records"]:
             supplied_id = payload.get("id")
+
+            if membership is not None and not membership.may_write_to_house(
+                payload["house"]
+            ):
+                failed.append(
+                    {
+                        "id": str(supplied_id) if supplied_id else None,
+                        "error": (
+                            f"You are not assigned to {payload['house'].name}. "
+                            "Ask your manager to assign you."
+                        ),
+                    }
+                )
+                continue
+
             try:
                 with transaction.atomic():
                     existing = None
@@ -1259,11 +1303,13 @@ class TaskCompletionBulkSyncSerializer(serializers.Serializer):
 
                     if existing is None:
                         # A different device may already have ticked this
-                        # item today under another id. Absorb it: the task
-                        # is done, and there is no content to merge.
+                        # item today for this shed under another id. Absorb
+                        # it: the task is done, and there is no content to
+                        # merge.
                         dupe = TaskCompletion.objects.filter(
                             template=payload["template"],
                             completion_date=payload["completion_date"],
+                            house=payload["house"],
                         ).first()
                         if dupe is not None:
                             updated.append(

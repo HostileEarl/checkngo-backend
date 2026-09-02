@@ -76,7 +76,7 @@ class Command(BaseCommand):
             supplier, buyer = self._create_partners(farm, owner)
             houses = self._create_houses(farm)
             self._scope_worker_to_house(farm, worker, houses[0])
-            self._create_routine(farm, worker)
+            self._create_routine(farm, worker, houses[0])
             # Order matters: the batches and their daily records must exist
             # before deliveries can be sized to match what they consume.
             self._create_batches(farm, houses, owner, worker, buyer)
@@ -207,11 +207,13 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"- {len(houses)} houses"))
         return houses
 
-    def _create_routine(self, farm, worker):
+    def _create_routine(self, farm, worker, house):
         """
-        A fixed daily checklist for the farm, with a few items already
-        ticked off today by Ana Reyes so the manager view has something to
-        show and the incomplete state is visible.
+        A fixed daily checklist for the farm. The routine is farm-wide;
+        completions are per-house. Three of the five items are ticked off
+        for House 1 only (where Ana Reyes is scoped), leaving House 2 and
+        House 3 with nothing recorded — so a manager opening the Tasks page
+        sees a genuinely mixed state.
         """
         specs = [
             ("Morning feed", "6:00 AM"),
@@ -235,13 +237,15 @@ class Command(BaseCommand):
             TaskCompletion.objects.get_or_create(
                 template=template,
                 completion_date=today,
+                house=house,
                 defaults={"recorded_by": worker, "recorded_at": timezone.now()},
             )
 
         self.stdout.write(
             self.style.SUCCESS(
                 f"- daily routine: {len(templates)} tasks, "
-                f"{len(done_today)} ticked off today by {worker.full_name}"
+                f"{len(done_today)} ticked off today for {house.name} "
+                f"by {worker.full_name}"
             )
         )
 

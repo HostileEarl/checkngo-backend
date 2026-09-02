@@ -2,11 +2,13 @@
 """
 Daily routine — task templates and completions.
 
-A manager defines the routine (TaskTemplate); any worker ticks items off
-for the day (TaskCompletion). Completions extend OfflineSyncModel, so they
-carry the client UUID PK and the 24-hour edit lock. The one divergence
-from the daily-record path: a second device ticking the same item the same
-day is absorbed, not rejected — a completion has no content to lose.
+A manager defines the routine (TaskTemplate), farm-wide; any worker ticks
+items off for their shed on the day (TaskCompletion, per-house).
+Completions extend OfflineSyncModel, so they carry the client UUID PK and
+the 24-hour edit lock. Two divergences from the daily-record path: a
+second device ticking the same (item, day, house) is absorbed rather than
+rejected — a completion has no content to lose — and the routine is
+farm-wide while its completion is per-house.
 """
 from datetime import timedelta
 
@@ -14,7 +16,7 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from production.models import TaskCompletion, TaskTemplate
+from production.models import House, TaskCompletion, TaskTemplate
 
 pytestmark = pytest.mark.django_db
 
@@ -26,6 +28,14 @@ def templates(staffed_farm):
             farm=staffed_farm, name=name, order=i, suggested_time="6:00 AM"
         )
         for i, name in enumerate(["Morning feed", "Health check", "Water check"], start=1)
+    ]
+
+
+@pytest.fixture
+def houses(staffed_farm):
+    return [
+        House.objects.create(farm=staffed_farm, name=f"House {n}", capacity=5000)
+        for n in (1, 2, 3)
     ]
 
 
@@ -56,9 +66,10 @@ def bulk_sync_url(farm):
     )
 
 
-def tick_payload(template, *, id=None, date=None):
+def tick_payload(template, house, *, id=None, date=None):
     body = {
         "template": template.pk,
+        "house": house.pk,
         "completion_date": (date or timezone.localdate()).isoformat(),
     }
     if id:
@@ -68,12 +79,12 @@ def tick_payload(template, *, id=None, date=None):
 
 class TestTickAndUntick:
     def test_worker_ticks_then_unticks_within_24h(
-        self, auth, worker, staffed_farm, templates
+        self, auth, worker, staffed_farm, templates, houses
     ):
         client = auth(worker)
         resp = client.post(
             completion_list_url(staffed_farm),
-            tick_payload(templates[0]),
+            tick_payload(templates[0], houses[0]),
             format="json",
         )
         assert resp.status_code == 201
@@ -85,12 +96,12 @@ class TestTickAndUntick:
         assert not TaskCompletion.objects.filter(pk=completion_id).exists()
 
     def test_locked_completion_cannot_be_edited_or_deleted_by_worker(
-        self, auth, worker, staffed_farm, templates
+        self, auth, worker, staffed_farm, templates, houses
     ):
         client = auth(worker)
         created = client.post(
             completion_list_url(staffed_farm),
-            tick_payload(templates[0]),
+            tick_payload(templates[0], houses[0]),
             format="json",
         )
         completion_id = created.data["id"]
@@ -103,7 +114,7 @@ class TestTickAndUntick:
         # "Edit" is a re-POST carrying the same id — routed through update().
         edit = client.post(
             completion_list_url(staffed_farm),
-            tick_payload(templates[0], id=completion_id),
+            tick_payload(templates[0], houses[0], id=completion_id),
             format="json",
         )
         assert edit.status_code == 400
@@ -115,30 +126,69 @@ class TestTickAndUntick:
         assert TaskCompletion.objects.filter(pk=completion_id).exists()
 
 
+class TestPerHouse:
+    def test_same_template_completed_once_per_house_same_day(
+        self, auth, worker, staffed_farm, templates, houses
+    ):
+        client = auth(worker)
+        for house in (houses[0], houses[1]):
+            resp = client.post(
+                completion_list_url(staffed_farm),
+                tick_payload(templates[0], house),
+                format="json",
+            )
+            assert resp.status_code == 201
+        assert TaskCompletion.objects.filter(template=templates[0]).count() == 2
+
+    def test_completions_list_can_filter_by_house(
+        self, auth, worker, staffed_farm, templates, houses
+    ):
+        client = auth(worker)
+        client.post(
+            completion_list_url(staffed_farm),
+            tick_payload(templates[0], houses[0]),
+            format="json",
+        )
+        client.post(
+            completion_list_url(staffed_farm),
+            tick_payload(templates[0], houses[1]),
+            format="json",
+        )
+
+        all_rows = client.get(completion_list_url(staffed_farm)).data
+        assert len(all_rows) == 2
+
+        h1_rows = client.get(
+            f"{completion_list_url(staffed_farm)}?house={houses[0].pk}"
+        ).data
+        assert len(h1_rows) == 1
+        assert h1_rows[0]["house"] == houses[0].pk
+
+
 class TestIdempotency:
     def test_duplicate_post_same_id_returns_200_not_integrity_error(
-        self, auth, worker, staffed_farm, templates
+        self, auth, worker, staffed_farm, templates, houses
     ):
         client = auth(worker)
         cid = "11111111-1111-1111-1111-111111111111"
 
         first = client.post(
             completion_list_url(staffed_farm),
-            tick_payload(templates[0], id=cid),
+            tick_payload(templates[0], houses[0], id=cid),
             format="json",
         )
         assert first.status_code == 201
 
         again = client.post(
             completion_list_url(staffed_farm),
-            tick_payload(templates[0], id=cid),
+            tick_payload(templates[0], houses[0], id=cid),
             format="json",
         )
         assert again.status_code == 200
         assert TaskCompletion.objects.filter(template=templates[0]).count() == 1
 
-    def test_two_ids_same_template_and_day_are_absorbed(
-        self, auth, worker, staffed_farm, templates
+    def test_two_ids_same_template_day_and_house_are_absorbed(
+        self, auth, worker, staffed_farm, templates, houses
     ):
         """
         Decided divergence from DailyRecordListCreateView: a completion has
@@ -149,33 +199,33 @@ class TestIdempotency:
 
         a = client.post(
             completion_list_url(staffed_farm),
-            tick_payload(templates[0], id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            tick_payload(templates[0], houses[0], id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             format="json",
         )
         assert a.status_code == 201
 
         b = client.post(
             completion_list_url(staffed_farm),
-            tick_payload(templates[0], id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+            tick_payload(templates[0], houses[0], id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
             format="json",
         )
         assert b.status_code == 200
         assert TaskCompletion.objects.filter(template=templates[0]).count() == 1
 
     def test_bulk_sync_absorbs_a_same_day_conflict(
-        self, auth, worker, staffed_farm, templates
+        self, auth, worker, staffed_farm, templates, houses
     ):
         client = auth(worker)
         client.post(
             completion_list_url(staffed_farm),
-            tick_payload(templates[0], id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            tick_payload(templates[0], houses[0], id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             format="json",
         )
 
         conflicting_id = "cccccccc-cccc-cccc-cccc-cccccccccccc"
         resp = client.post(
             bulk_sync_url(staffed_farm),
-            {"records": [tick_payload(templates[0], id=conflicting_id)]},
+            {"records": [tick_payload(templates[0], houses[0], id=conflicting_id)]},
             format="json",
         )
         assert resp.status_code == 200
@@ -183,6 +233,72 @@ class TestIdempotency:
         assert resp.data["updated"] == [conflicting_id]
         assert resp.data["failed"] == []
         assert TaskCompletion.objects.filter(template=templates[0]).count() == 1
+
+
+class TestHouseWriteScoping:
+    def test_assigned_worker_is_refused_another_house(
+        self, auth, worker, staffed_farm, templates, houses
+    ):
+        staffed_farm.memberships.get(user=worker).houses.set([houses[0]])
+        resp = auth(worker).post(
+            completion_list_url(staffed_farm),
+            tick_payload(templates[0], houses[2]),
+            format="json",
+        )
+        assert resp.status_code == 403
+        assert "House 3" in str(resp.data)
+        assert not TaskCompletion.objects.filter(template=templates[0]).exists()
+
+    def test_bulk_sync_rejects_unassigned_house_per_record(
+        self, auth, worker, staffed_farm, templates, houses
+    ):
+        staffed_farm.memberships.get(user=worker).houses.set([houses[0]])
+        resp = auth(worker).post(
+            bulk_sync_url(staffed_farm),
+            {"records": [tick_payload(templates[0], houses[2], id="dddddddd-dddd-dddd-dddd-dddddddddddd")]},
+            format="json",
+        )
+        assert resp.status_code == 207
+        assert resp.data["created"] == []
+        assert len(resp.data["failed"]) == 1
+        assert "House 3" in resp.data["failed"][0]["error"]
+        assert not TaskCompletion.objects.filter(template=templates[0]).exists()
+
+    def test_unassigned_worker_can_tick_any_house(
+        self, auth, worker, staffed_farm, templates, houses
+    ):
+        assert not staffed_farm.memberships.get(user=worker).houses.exists()
+        for house in houses:
+            resp = auth(worker).post(
+                completion_list_url(staffed_farm),
+                tick_payload(templates[0], house),
+                format="json",
+            )
+            assert resp.status_code == 201
+
+    def test_owner_and_manager_can_tick_any_house(
+        self, auth, owner, manager, staffed_farm, templates, houses
+    ):
+        assert (
+            auth(owner)
+            .post(
+                completion_list_url(staffed_farm),
+                tick_payload(templates[0], houses[2]),
+                format="json",
+            )
+            .status_code
+            == 201
+        )
+        assert (
+            auth(manager)
+            .post(
+                completion_list_url(staffed_farm),
+                tick_payload(templates[1], houses[2]),
+                format="json",
+            )
+            .status_code
+            == 201
+        )
 
 
 class TestTemplateAuthority:

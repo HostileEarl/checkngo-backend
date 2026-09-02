@@ -23,6 +23,7 @@ from production.models import (
     Batch,
     DailyRecord,
     FeedDelivery,
+    House,
     InventoryItem,
     RecordCorrection,
     TaskCompletion,
@@ -264,34 +265,31 @@ def _today_not_recorded(active_batches, today, membership=None):
 
 def _routine_incomplete(farm, now, today):
     """
-    An active routine item with no completion for today, once the day is
-    late enough for that to mean something.
+    A shed with an active routine item it has not recorded today, once the
+    day is late enough for that to mean something.
 
-    Owner/manager only — workers see their own checklist and do not need
-    nagging. Suppressed entirely when the farm has no routine, and when no
-    daily record was filed either: a farm with no activity at all is
-    already covered by "today not recorded", and two alerts for one
-    situation is noise.
+    The routine is farm-wide but ticked per house, so a template is
+    incomplete if ANY active house lacks a completion for it. One alert per
+    incomplete house (grouped, naming its outstanding tasks) rather than
+    one per template per house, which would flood the bell.
+
+    Owner/manager only — workers see their own checklist. Suppressed
+    entirely when the farm has no routine, no active houses, or no daily
+    record at all: a farm with no activity is already covered by "today
+    not recorded", and two alerts for one situation is noise.
     """
     # `now` is UTC; the cutoff is a wall-clock hour on the farm.
     if timezone.localtime(now).hour < ROUTINE_ALERT_HOUR:
         return []
 
-    active_ids = list(
-        TaskTemplate.objects.filter(farm=farm, is_active=True).values_list(
-            "id", flat=True
-        )
+    active_templates = list(
+        TaskTemplate.objects.filter(farm=farm, is_active=True)
     )
-    if not active_ids:
+    if not active_templates:
         return []
 
-    done_ids = set(
-        TaskCompletion.objects.filter(
-            template__farm=farm, completion_date=today
-        ).values_list("template_id", flat=True)
-    )
-    open_count = sum(1 for tid in active_ids if tid not in done_ids)
-    if open_count == 0:
+    active_houses = list(House.objects.filter(farm=farm, is_active=True))
+    if not active_houses:
         return []
 
     daily_filed = DailyRecord.objects.filter(
@@ -300,20 +298,30 @@ def _routine_incomplete(farm, now, today):
     if not daily_filed:
         return []
 
-    total = len(active_ids)
-    return [
-        {
-            "id": "routine-incomplete",
-            "severity": "warning",
-            "title": "Daily routine not finished",
-            "detail": (
-                f"{total - open_count} of {total} routine tasks done. "
-                f"{open_count} still open after {ROUTINE_ALERT_HOUR}:00."
-            ),
-            "link": "/tasks",
-            "audience": list(_OWNER_MANAGER),
-        }
-    ]
+    done = set(
+        TaskCompletion.objects.filter(
+            template__farm=farm, completion_date=today
+        ).values_list("house_id", "template_id")
+    )
+
+    out = []
+    for house in active_houses:
+        missing = [
+            t.name for t in active_templates if (house.id, t.id) not in done
+        ]
+        if not missing:
+            continue
+        out.append(
+            {
+                "id": f"routine-incomplete:{house.id}",
+                "severity": "warning",
+                "title": f"{house.name}: daily routine not finished",
+                "detail": f"{house.name} has not recorded: {', '.join(missing)}.",
+                "link": "/tasks",
+                "audience": list(_OWNER_MANAGER),
+            }
+        )
+    return out
 
 
 # ─────────────────────────────────────────────────────────────

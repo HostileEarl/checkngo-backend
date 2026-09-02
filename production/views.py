@@ -4,6 +4,7 @@ import uuid
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, serializers, status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -860,9 +861,16 @@ class TaskCompletionListCreateView(generics.ListCreateAPIView):
     Idempotent, mirroring InventoryUsageListCreateView: a POST whose
     client-generated `id` already exists routes through the serializer's
     update() and returns 200. Unlike the daily-record path, a POST whose
-    id is new but whose (template, date) is already taken is ABSORBED —
-    the existing completion is returned with a 200 — because a completion
-    has no content to merge and a shared routine item is simply done.
+    id is new but whose (template, date, house) is already taken is
+    ABSORBED — the existing completion is returned with a 200 — because a
+    completion has no content to merge and a shed's routine item is simply
+    done.
+
+    A worker may only tick for a house they may write to
+    (FarmMembership.may_write_to_house — the same rule as daily records).
+    That check is here on the single-POST path; the bulk-sync serializer
+    does it per record so a lost assignment lands in failed[] instead of
+    403-ing the whole backlog.
     """
 
     serializer_class = TaskCompletionSerializer
@@ -876,11 +884,30 @@ class TaskCompletionListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         qs = TaskCompletion.objects.filter(
             template__farm=self.request.farm
-        ).select_related("template", "recorded_by")
+        ).select_related("template", "recorded_by", "house")
         date = self.request.query_params.get("date") or timezone.localdate().isoformat()
-        return qs.filter(completion_date=date)
+        qs = qs.filter(completion_date=date)
+        house = self.request.query_params.get("house")
+        if house:
+            qs = qs.filter(house_id=house)
+        return qs
 
     def create(self, request, *args, **kwargs):
+        # Resolve the target shed and enforce house-level write scoping.
+        house = House.objects.filter(
+            pk=request.data.get("house"), farm=request.farm
+        ).first()
+        membership = getattr(request, "membership", None)
+        if (
+            house is not None
+            and membership is not None
+            and not membership.may_write_to_house(house)
+        ):
+            raise PermissionDenied(
+                f"You are not assigned to {house.name}. "
+                "Ask your manager to assign you."
+            )
+
         supplied_id = request.data.get("id")
         existing = None
         if supplied_id:
@@ -893,7 +920,7 @@ class TaskCompletionListCreateView(generics.ListCreateAPIView):
                     TaskCompletion.objects.filter(
                         pk=supplied_id, template__farm=request.farm
                     )
-                    .select_related("template", "recorded_by")
+                    .select_related("template", "recorded_by", "house")
                     .first()
                 )
 
@@ -903,22 +930,24 @@ class TaskCompletionListCreateView(generics.ListCreateAPIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
 
-        # A different device may already have ticked this item today under
-        # another id. Absorb it rather than letting the unique constraint
-        # raise an IntegrityError (contrast DailyRecordListCreateView, which
-        # rejects a same-date conflict because its numbers would be lost).
+        # A different device may already have ticked this item today for
+        # this shed under another id. Absorb it rather than letting the
+        # unique constraint raise an IntegrityError (contrast
+        # DailyRecordListCreateView, which rejects a same-date conflict
+        # because its numbers would be lost).
         template_id = request.data.get("template")
         completion_date = (
             request.data.get("completion_date") or timezone.localdate().isoformat()
         )
-        if template_id:
+        if template_id and house is not None:
             dupe = (
                 TaskCompletion.objects.filter(
                     template_id=template_id,
                     template__farm=request.farm,
                     completion_date=completion_date,
+                    house_id=house.pk,
                 )
-                .select_related("template", "recorded_by")
+                .select_related("template", "recorded_by", "house")
                 .first()
             )
             if dupe is not None:
@@ -949,9 +978,18 @@ class TaskCompletionDetailView(generics.RetrieveDestroyAPIView):
     def get_queryset(self):
         return TaskCompletion.objects.filter(
             template__farm=self.request.farm
-        ).select_related("template", "recorded_by")
+        ).select_related("template", "recorded_by", "house")
 
     def perform_destroy(self, instance):
+        # A worker who cannot tick this shed cannot un-tick it either.
+        membership = getattr(self.request, "membership", None)
+        if membership is not None and not membership.may_write_to_house(
+            instance.house
+        ):
+            raise PermissionDenied(
+                f"You are not assigned to {instance.house.name}. "
+                "Ask your manager to assign you."
+            )
         if not instance.is_editable:
             raise serializers.ValidationError(
                 {

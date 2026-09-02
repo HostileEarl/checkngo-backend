@@ -168,16 +168,19 @@ class TestEmpty:
 
 class TestRoutineIncomplete:
     """
-    "Daily routine not finished" — owner/manager only, after the cutoff
-    hour, and only when the farm has an incomplete routine AND filed a
-    daily record (a dead farm is covered by "today not recorded").
+    "{House}: daily routine not finished" — owner/manager only, after the
+    cutoff hour, once per incomplete house, and only when the farm has an
+    incomplete routine AND filed a daily record (a dead farm is covered by
+    "today not recorded").
 
     Each test runs its whole body under a frozen clock so the seeded
     completion_date / record_date and the alert's notion of "today" agree
     regardless of when the suite actually runs.
     """
 
-    def _seed(self, staffed_farm, house, owner, *, complete):
+    def _seed(self, staffed_farm, house, owner, *, done_templates):
+        """Templates farm-wide; a daily record in `house`; completions for
+        `done_templates` in `house`."""
         today = timezone.localdate()
         templates = [
             TaskTemplate.objects.create(farm=staffed_farm, name=n, order=i)
@@ -185,50 +188,69 @@ class TestRoutineIncomplete:
         ]
         batch = make_batch(house, owner, code="ROUTINE-1", started_days_ago=5)
         add_record(batch, owner, day=today)
-        for t in templates if complete else templates[:1]:
+        for t in done_templates(templates):
             TaskCompletion.objects.create(
-                template=t, completion_date=today, recorded_by=owner
+                template=t, house=house, completion_date=today, recorded_by=owner
             )
         return templates
 
-    def _ids(self, client, url):
-        return {a["id"] for a in client.get(url).data["alerts"]}
+    def _alerts(self, client, url):
+        return {a["id"]: a for a in client.get(url).data["alerts"]}
 
     def test_does_not_fire_before_the_cutoff_hour(
         self, auth, owner, url, staffed_farm, house
     ):
         with patch("django.utils.timezone.now", return_value=BEFORE_CUTOFF_UTC):
-            self._seed(staffed_farm, house, owner, complete=False)
-            assert "routine-incomplete" not in self._ids(auth(owner), url)
+            self._seed(staffed_farm, house, owner, done_templates=lambda t: t[:1])
+            assert f"routine-incomplete:{house.id}" not in self._alerts(auth(owner), url)
 
     def test_fires_after_the_cutoff_hour_for_owner_not_worker(
         self, auth, owner, worker, url, staffed_farm, house
     ):
         with patch("django.utils.timezone.now", return_value=AFTER_CUTOFF_UTC):
-            self._seed(staffed_farm, house, owner, complete=False)
-            owner_alerts = {
-                a["id"]: a for a in auth(owner).get(url).data["alerts"]
-            }
-            worker_ids = self._ids(auth(worker), url)
+            self._seed(staffed_farm, house, owner, done_templates=lambda t: t[:1])
+            owner_alerts = self._alerts(auth(owner), url)
+            worker_alerts = self._alerts(auth(worker), url)
 
-        assert "routine-incomplete" in owner_alerts
-        assert owner_alerts["routine-incomplete"]["severity"] == "warning"
-        assert "routine-incomplete" not in worker_ids
+        alert_id = f"routine-incomplete:{house.id}"
+        assert alert_id in owner_alerts
+        alert = owner_alerts[alert_id]
+        assert alert["severity"] == "warning"
+        assert house.name in alert["detail"]
+        # "Feed" was ticked; "Health" and "Water" are still outstanding.
+        assert "Health" in alert["detail"] and "Water" in alert["detail"]
+        assert "Feed" not in alert["detail"]
+        assert alert_id not in worker_alerts
 
     def test_does_not_fire_when_the_routine_is_complete(
         self, auth, owner, url, staffed_farm, house
     ):
         with patch("django.utils.timezone.now", return_value=AFTER_CUTOFF_UTC):
-            self._seed(staffed_farm, house, owner, complete=True)
-            assert "routine-incomplete" not in self._ids(auth(owner), url)
+            self._seed(staffed_farm, house, owner, done_templates=lambda t: t)
+            assert f"routine-incomplete:{house.id}" not in self._alerts(auth(owner), url)
+
+    def test_a_fully_complete_house_is_not_in_the_alert(
+        self, auth, owner, url, staffed_farm, house
+    ):
+        other = House.objects.create(
+            farm=staffed_farm, name="House 2", capacity=20000
+        )
+        with patch("django.utils.timezone.now", return_value=AFTER_CUTOFF_UTC):
+            # House 1: every task done. House 2: nothing recorded.
+            self._seed(staffed_farm, house, owner, done_templates=lambda t: t)
+            alerts = self._alerts(auth(owner), url)
+
+        assert f"routine-incomplete:{house.id}" not in alerts
+        assert f"routine-incomplete:{other.id}" in alerts
+        assert other.name in alerts[f"routine-incomplete:{other.id}"]["detail"]
 
     def test_does_not_fire_when_no_daily_record_was_filed(
-        self, auth, owner, url, staffed_farm
+        self, auth, owner, url, staffed_farm, house
     ):
         with patch("django.utils.timezone.now", return_value=AFTER_CUTOFF_UTC):
-            # Templates but no batch / no daily record — the dead-farm case.
+            # Templates and an active house but no daily record — dead-farm case.
             TaskTemplate.objects.create(farm=staffed_farm, name="Feed", order=1)
-            assert "routine-incomplete" not in self._ids(auth(owner), url)
+            assert f"routine-incomplete:{house.id}" not in self._alerts(auth(owner), url)
 
     def test_does_not_fire_for_a_farm_with_no_templates(
         self, auth, owner, url, staffed_farm, house
@@ -236,4 +258,4 @@ class TestRoutineIncomplete:
         with patch("django.utils.timezone.now", return_value=AFTER_CUTOFF_UTC):
             batch = make_batch(house, owner, code="NOTMPL-1", started_days_ago=5)
             add_record(batch, owner, day=timezone.localdate())
-            assert "routine-incomplete" not in self._ids(auth(owner), url)
+            assert f"routine-incomplete:{house.id}" not in self._alerts(auth(owner), url)

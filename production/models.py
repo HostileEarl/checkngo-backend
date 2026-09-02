@@ -805,9 +805,13 @@ class InventoryUsageLog(OfflineSyncModel):
 # offline-capable child event. TaskCompletion extends OfflineSyncModel for
 # the client UUID PK and the 24-hour edit lock, exactly like
 # InventoryUsageLog. The one difference is the unique(template,
-# completion_date) constraint — a completion carries no content, so a
-# second device ticking the same item the same day is absorbed, not
-# rejected.
+# completion_date, house) constraint — a completion carries no content, so
+# a second device ticking the same item the same day for the same shed is
+# absorbed, not rejected.
+#
+# The routine is farm-wide (TaskTemplate); its completion is per-shed
+# (TaskCompletion.house), because "morning feed" is a task each worker
+# performs at their own house, not one thing done once for the farm.
 
 
 class TaskTemplate(models.Model):
@@ -847,17 +851,21 @@ class TaskTemplate(models.Model):
 
 class TaskCompletion(OfflineSyncModel):
     """
-    A routine item ticked off on a given day.
+    A routine item ticked off for a given shed on a given day.
 
-    One per template per day, farm-wide: if two workers both tick "morning
-    feed", the second submission updates the first rather than creating a
-    duplicate — a shared routine item is simply done or not. The template
-    FK is PROTECT so completion history survives a template being retired;
-    that is what TaskTemplate.is_active is for.
+    One per (template, day, house): if two workers both tick "morning feed"
+    for House 1, the second submission is absorbed rather than creating a
+    duplicate — that shed's task is simply done or not. Different sheds are
+    independent. The template FK is PROTECT so completion history survives
+    a template being retired (that is what TaskTemplate.is_active is for);
+    the house FK is PROTECT for the same reason.
     """
 
     template = models.ForeignKey(
         TaskTemplate, on_delete=models.PROTECT, related_name="completions"
+    )
+    house = models.ForeignKey(
+        "production.House", on_delete=models.PROTECT, related_name="task_completions"
     )
     completion_date = models.DateField(db_index=True)
 
@@ -866,13 +874,13 @@ class TaskCompletion(OfflineSyncModel):
         ordering = ["-completion_date"]
         constraints = [
             models.UniqueConstraint(
-                fields=["template", "completion_date"],
-                name="unique_completion_per_template_day",
+                fields=["template", "completion_date", "house"],
+                name="unique_completion_per_template_house_day",
             ),
         ]
 
     def __str__(self):
-        return f"{self.template.name} — {self.completion_date}"
+        return f"{self.template.name} @ {self.house.name} — {self.completion_date}"
 
     def clean(self):
         if self.completion_date and self.completion_date > timezone.localdate():
