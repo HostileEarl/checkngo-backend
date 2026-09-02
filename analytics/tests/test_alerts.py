@@ -6,16 +6,22 @@ The endpoint derives standing conditions from live data. These tests pin
 the two things that matter: the arithmetic that decides whether a condition
 fires, and the role filter that decides who is told about it.
 """
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from production.models import Batch, DailyRecord, House
+from production.models import Batch, DailyRecord, House, TaskCompletion, TaskTemplate
 
 pytestmark = pytest.mark.django_db
+
+# Asia/Manila is UTC+8. These instants land the local wall clock either
+# side of the 18:00 routine-alert cutoff.
+BEFORE_CUTOFF_UTC = datetime(2026, 9, 2, 9, 0, tzinfo=dt_timezone.utc)   # 17:00 Manila
+AFTER_CUTOFF_UTC = datetime(2026, 9, 2, 10, 30, tzinfo=dt_timezone.utc)  # 18:30 Manila
 
 
 @pytest.fixture
@@ -158,3 +164,76 @@ class TestEmpty:
         assert resp.status_code == 200
         assert resp.data["alerts"] == []
         assert resp.data["counts"] == {"danger": 0, "warning": 0, "info": 0}
+
+
+class TestRoutineIncomplete:
+    """
+    "Daily routine not finished" — owner/manager only, after the cutoff
+    hour, and only when the farm has an incomplete routine AND filed a
+    daily record (a dead farm is covered by "today not recorded").
+
+    Each test runs its whole body under a frozen clock so the seeded
+    completion_date / record_date and the alert's notion of "today" agree
+    regardless of when the suite actually runs.
+    """
+
+    def _seed(self, staffed_farm, house, owner, *, complete):
+        today = timezone.localdate()
+        templates = [
+            TaskTemplate.objects.create(farm=staffed_farm, name=n, order=i)
+            for i, n in enumerate(["Feed", "Health", "Water"], start=1)
+        ]
+        batch = make_batch(house, owner, code="ROUTINE-1", started_days_ago=5)
+        add_record(batch, owner, day=today)
+        for t in templates if complete else templates[:1]:
+            TaskCompletion.objects.create(
+                template=t, completion_date=today, recorded_by=owner
+            )
+        return templates
+
+    def _ids(self, client, url):
+        return {a["id"] for a in client.get(url).data["alerts"]}
+
+    def test_does_not_fire_before_the_cutoff_hour(
+        self, auth, owner, url, staffed_farm, house
+    ):
+        with patch("django.utils.timezone.now", return_value=BEFORE_CUTOFF_UTC):
+            self._seed(staffed_farm, house, owner, complete=False)
+            assert "routine-incomplete" not in self._ids(auth(owner), url)
+
+    def test_fires_after_the_cutoff_hour_for_owner_not_worker(
+        self, auth, owner, worker, url, staffed_farm, house
+    ):
+        with patch("django.utils.timezone.now", return_value=AFTER_CUTOFF_UTC):
+            self._seed(staffed_farm, house, owner, complete=False)
+            owner_alerts = {
+                a["id"]: a for a in auth(owner).get(url).data["alerts"]
+            }
+            worker_ids = self._ids(auth(worker), url)
+
+        assert "routine-incomplete" in owner_alerts
+        assert owner_alerts["routine-incomplete"]["severity"] == "warning"
+        assert "routine-incomplete" not in worker_ids
+
+    def test_does_not_fire_when_the_routine_is_complete(
+        self, auth, owner, url, staffed_farm, house
+    ):
+        with patch("django.utils.timezone.now", return_value=AFTER_CUTOFF_UTC):
+            self._seed(staffed_farm, house, owner, complete=True)
+            assert "routine-incomplete" not in self._ids(auth(owner), url)
+
+    def test_does_not_fire_when_no_daily_record_was_filed(
+        self, auth, owner, url, staffed_farm
+    ):
+        with patch("django.utils.timezone.now", return_value=AFTER_CUTOFF_UTC):
+            # Templates but no batch / no daily record — the dead-farm case.
+            TaskTemplate.objects.create(farm=staffed_farm, name="Feed", order=1)
+            assert "routine-incomplete" not in self._ids(auth(owner), url)
+
+    def test_does_not_fire_for_a_farm_with_no_templates(
+        self, auth, owner, url, staffed_farm, house
+    ):
+        with patch("django.utils.timezone.now", return_value=AFTER_CUTOFF_UTC):
+            batch = make_batch(house, owner, code="NOTMPL-1", started_days_ago=5)
+            add_record(batch, owner, day=timezone.localdate())
+            assert "routine-incomplete" not in self._ids(auth(owner), url)

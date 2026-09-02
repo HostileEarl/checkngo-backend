@@ -28,6 +28,8 @@ from production.models import (
     FeedDelivery,
     Harvest,
     House,
+    TaskCompletion,
+    TaskTemplate,
     WeightSample,
 )
 
@@ -74,6 +76,7 @@ class Command(BaseCommand):
             supplier, buyer = self._create_partners(farm, owner)
             houses = self._create_houses(farm)
             self._scope_worker_to_house(farm, worker, houses[0])
+            self._create_routine(farm, worker)
             # Order matters: the batches and their daily records must exist
             # before deliveries can be sized to match what they consume.
             self._create_batches(farm, houses, owner, worker, buyer)
@@ -203,6 +206,44 @@ class Command(BaseCommand):
             houses.append(house)
         self.stdout.write(self.style.SUCCESS(f"- {len(houses)} houses"))
         return houses
+
+    def _create_routine(self, farm, worker):
+        """
+        A fixed daily checklist for the farm, with a few items already
+        ticked off today by Ana Reyes so the manager view has something to
+        show and the incomplete state is visible.
+        """
+        specs = [
+            ("Morning feed", "6:00 AM"),
+            ("Health check", "7:00 AM"),
+            ("Water system check", "10:00 AM"),
+            ("Afternoon feed", "2:00 PM"),
+            ("Evening mortality count", "5:00 PM"),
+        ]
+        templates = []
+        for order, (name, when) in enumerate(specs, start=1):
+            template, _ = TaskTemplate.objects.get_or_create(
+                farm=farm,
+                name=name,
+                defaults={"suggested_time": when, "order": order},
+            )
+            templates.append(template)
+
+        today = timezone.localdate()
+        done_today = templates[:3]  # morning feed, health check, water check
+        for template in done_today:
+            TaskCompletion.objects.get_or_create(
+                template=template,
+                completion_date=today,
+                defaults={"recorded_by": worker, "recorded_at": timezone.now()},
+            )
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"- daily routine: {len(templates)} tasks, "
+                f"{len(done_today)} ticked off today by {worker.full_name}"
+            )
+        )
 
     def _scope_worker_to_house(self, farm, worker, house):
         """

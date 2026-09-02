@@ -18,6 +18,8 @@ from .models import (
     InventoryStockIn,
     InventoryUsageLog,
     RecordCorrection,
+    TaskCompletion,
+    TaskTemplate,
     WeightSample,
 )
 
@@ -1077,6 +1079,203 @@ class InventoryUsageBulkSyncSerializer(serializers.Serializer):
                             if field in ("id", "item", "usage_date"):
                                 continue
                             setattr(existing, field, val)
+                        existing.recorded_by = user
+                        existing.save()
+                        updated.append(str(existing.id))
+                    else:
+                        failed.append(
+                            {
+                                "id": str(supplied_id),
+                                "error": "Locked — older than 24 hours.",
+                            }
+                        )
+            except Exception as exc:  # noqa: BLE001
+                failed.append(
+                    {
+                        "id": str(supplied_id) if supplied_id else None,
+                        "error": str(exc),
+                    }
+                )
+
+        return {"created": created, "updated": updated, "failed": failed}
+
+
+# ─────────────────────────────────────────────────────────────
+# Daily routine
+# ─────────────────────────────────────────────────────────────
+
+
+class TaskTemplateSerializer(serializers.ModelSerializer):
+    """One item in the farm's daily routine. Owner/manager writes."""
+
+    class Meta:
+        model = TaskTemplate
+        fields = [
+            "id",
+            "name",
+            "suggested_time",
+            "order",
+            "is_active",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+    def validate_name(self, value):
+        farm = self.context["farm"]
+        qs = TaskTemplate.objects.filter(farm=farm, name__iexact=value.strip())
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                "A routine item with this name already exists on this farm."
+            )
+        return value.strip()
+
+    def create(self, validated_data):
+        return TaskTemplate.objects.create(
+            farm=self.context["farm"],
+            created_by=self.context["request"].user,
+            **validated_data,
+        )
+
+
+class TaskCompletionSerializer(serializers.ModelSerializer):
+    """
+    A routine item ticked off for a day.
+
+    `id` is declared explicitly for the same reason DailyRecordSerializer
+    does it: ModelSerializer forces a primary-key field to read_only, which
+    would discard the client-generated UUID and break offline idempotency.
+    A completion has no editable content — it exists or it does not — so
+    the only write after creation is the 24-hour-locked delete (un-tick).
+    """
+
+    id = serializers.UUIDField(required=False)
+    template_name = serializers.CharField(source="template.name", read_only=True)
+    suggested_time = serializers.CharField(
+        source="template.suggested_time", read_only=True
+    )
+    is_editable = serializers.BooleanField(read_only=True)
+    recorded_by_name = serializers.CharField(
+        source="recorded_by.full_name", read_only=True, default=None
+    )
+
+    class Meta:
+        model = TaskCompletion
+        fields = [
+            "id",
+            "template",
+            "template_name",
+            "suggested_time",
+            "completion_date",
+            "recorded_by",
+            "recorded_by_name",
+            "recorded_at",
+            "created_at",
+            "is_editable",
+        ]
+        read_only_fields = ["recorded_by", "created_at"]
+        # `template` is a writable field, so ModelSerializer would auto-add a
+        # UniqueTogetherValidator for unique(template, completion_date) and
+        # reject a second device ticking the same item the same day with a
+        # 400. That conflict is handled deliberately upstream — absorbed in
+        # the view and the bulk-sync serializer — so the auto validator is
+        # dropped. The DB constraint still guards integrity.
+        validators = []
+
+    def validate_template(self, value):
+        farm = self.context["farm"]
+        if value.farm_id != farm.pk:
+            raise serializers.ValidationError("That routine item belongs to another farm.")
+        if not value.is_active:
+            raise serializers.ValidationError("That routine item is no longer in use.")
+        return value
+
+    def validate_completion_date(self, value):
+        if value > timezone.localdate():
+            raise serializers.ValidationError("Cannot record a future date.")
+        return value
+
+    def update(self, instance, validated_data):
+        # The 24-hour lock has teeth here exactly as it does on a daily
+        # mortality record or an inventory usage log.
+        if not instance.is_editable:
+            raise serializers.ValidationError(
+                {
+                    "detail": (
+                        "This task was ticked more than 24 hours ago and is "
+                        "locked. Ask your manager."
+                    )
+                }
+            )
+        validated_data.pop("template", None)  # the item is fixed once ticked
+        validated_data.pop("completion_date", None)  # so is the day
+        return super().update(instance, validated_data)
+
+    def create(self, validated_data):
+        return TaskCompletion.objects.create(
+            recorded_by=self.context["request"].user, **validated_data
+        )
+
+
+class TaskCompletionBulkSyncSerializer(serializers.Serializer):
+    """
+    Offline sync for routine ticks — a backlog in one round trip.
+
+    Identity is the client UUID. The wrinkle is the (template,
+    completion_date) unique constraint: two devices can generate different
+    UUIDs for the same item on the same day. A completion carries no
+    content, so the second one is ABSORBED — its client id is reported in
+    `updated` so the device drops it, and the existing row stands. This is
+    the one place the routine deliberately diverges from
+    DailyRecordBulkSyncSerializer, which rejects a same-day conflict
+    because a daily record's numbers would be lost.
+    """
+
+    records = TaskCompletionSerializer(many=True)
+
+    def validate_records(self, value):
+        if not value:
+            raise serializers.ValidationError("No records supplied.")
+        if len(value) > 60:
+            raise serializers.ValidationError(
+                "Sync at most 60 records per request."
+            )
+        return value
+
+    def save(self, **kwargs):
+        user = self.context["request"].user
+        created, updated, failed = [], [], []
+
+        for payload in self.validated_data["records"]:
+            supplied_id = payload.get("id")
+            try:
+                with transaction.atomic():
+                    existing = None
+                    if supplied_id is not None:
+                        existing = TaskCompletion.objects.filter(
+                            pk=supplied_id
+                        ).first()
+
+                    if existing is None:
+                        # A different device may already have ticked this
+                        # item today under another id. Absorb it: the task
+                        # is done, and there is no content to merge.
+                        dupe = TaskCompletion.objects.filter(
+                            template=payload["template"],
+                            completion_date=payload["completion_date"],
+                        ).first()
+                        if dupe is not None:
+                            updated.append(
+                                str(supplied_id) if supplied_id else str(dupe.id)
+                            )
+                            continue
+
+                        record = TaskCompletion.objects.create(
+                            recorded_by=user, **payload
+                        )
+                        created.append(str(record.id))
+                    elif existing.is_editable:
                         existing.recorded_by = user
                         existing.save()
                         updated.append(str(existing.id))

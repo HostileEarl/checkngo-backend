@@ -788,3 +788,94 @@ class InventoryUsageLog(OfflineSyncModel):
     def clean(self):
         if self.usage_date and self.usage_date > timezone.localdate():
             raise ValidationError({"usage_date": "Cannot record a future date."})
+
+
+# ─────────────────────────────────────────────────────────────
+# Daily routine — a fixed checklist, not task assignment
+# ─────────────────────────────────────────────────────────────
+#
+# A poultry farm runs the same round every day: morning feed, health
+# check, water system check, and so on. The manager defines that routine
+# once (TaskTemplate); any worker ticks an item off for the day
+# (TaskCompletion). There are deliberately no due dates, no per-worker
+# assignment, and no house scoping — the task is done or it is not, farm
+# wide.
+#
+# Same shape as inventory: a manager-configured parent record and an
+# offline-capable child event. TaskCompletion extends OfflineSyncModel for
+# the client UUID PK and the 24-hour edit lock, exactly like
+# InventoryUsageLog. The one difference is the unique(template,
+# completion_date) constraint — a completion carries no content, so a
+# second device ticking the same item the same day is absorbed, not
+# rejected.
+
+
+class TaskTemplate(models.Model):
+    """One item in a farm's daily routine. Defined once by an owner or manager."""
+
+    farm = models.ForeignKey(
+        "farms.Farm", on_delete=models.CASCADE, related_name="task_templates"
+    )
+    name = models.CharField(max_length=150)
+    suggested_time = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text='Free text — "6:00 AM", or "after morning rounds".',
+    )
+    order = models.PositiveIntegerField(default=0, help_text="Display sequence.")
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="task_templates_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "production_task_template"
+        ordering = ["farm", "order", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["farm", "name"], name="unique_task_template_name_per_farm"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.farm.name})"
+
+
+class TaskCompletion(OfflineSyncModel):
+    """
+    A routine item ticked off on a given day.
+
+    One per template per day, farm-wide: if two workers both tick "morning
+    feed", the second submission updates the first rather than creating a
+    duplicate — a shared routine item is simply done or not. The template
+    FK is PROTECT so completion history survives a template being retired;
+    that is what TaskTemplate.is_active is for.
+    """
+
+    template = models.ForeignKey(
+        TaskTemplate, on_delete=models.PROTECT, related_name="completions"
+    )
+    completion_date = models.DateField(db_index=True)
+
+    class Meta:
+        db_table = "production_task_completion"
+        ordering = ["-completion_date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["template", "completion_date"],
+                name="unique_completion_per_template_day",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.template.name} — {self.completion_date}"
+
+    def clean(self):
+        if self.completion_date and self.completion_date > timezone.localdate():
+            raise ValidationError(
+                {"completion_date": "Cannot record a future date."}
+            )

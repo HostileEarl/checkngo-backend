@@ -2,7 +2,8 @@
 import uuid
 
 from django.shortcuts import get_object_or_404
-from rest_framework import generics, status
+from django.utils import timezone
+from rest_framework import generics, serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -42,6 +43,8 @@ from .models import (
     InventoryStockIn,
     InventoryUsageLog,
     RecordCorrection,
+    TaskCompletion,
+    TaskTemplate,
     WeightSample,
 )
 from .permissions import (
@@ -49,6 +52,7 @@ from .permissions import (
     CanManageBatches,
     CanManageFeed,
     CanManageInventory,
+    CanManageRoutine,
     CanRecordDaily,
     CanRecordInventoryUsage,
     CanViewProduction,
@@ -67,6 +71,9 @@ from .serializers import (
     InventoryUsageBulkSyncSerializer,
     InventoryUsageLogSerializer,
     RecordCorrectionSerializer,
+    TaskCompletionBulkSyncSerializer,
+    TaskCompletionSerializer,
+    TaskTemplateSerializer,
     WeightSampleSerializer,
 )
 from drf_spectacular.utils import OpenApiExample, extend_schema
@@ -781,6 +788,194 @@ class InventoryUsageBulkSyncView(APIView):
 
     def post(self, request, farm_pk):
         serializer = InventoryUsageBulkSyncSerializer(
+            data=request.data,
+            context={"request": request, "farm": request.farm},
+        )
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
+
+        http_status = (
+            status.HTTP_207_MULTI_STATUS
+            if result["failed"]
+            else status.HTTP_200_OK
+        )
+        return Response(result, status=http_status)
+
+
+# ─────────────────────────────────────────────────────────────
+# Daily routine — task templates and completions
+# ─────────────────────────────────────────────────────────────
+
+
+class TaskTemplateListCreateView(generics.ListCreateAPIView):
+    """
+    GET  /api/farms/<farm_pk>/tasks/templates/         — any active member
+    POST /api/farms/<farm_pk>/tasks/templates/         — owner/manager only
+
+    CanManageRoutine leaves reads open, so a worker can fetch the routine
+    to know what to tick off.
+    """
+
+    serializer_class = TaskTemplateSerializer
+    permission_classes = [CanManageRoutine]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["farm"] = self.request.farm
+        return context
+
+    def get_queryset(self):
+        qs = TaskTemplate.objects.filter(farm=self.request.farm)
+        if self.request.query_params.get("active") == "1":
+            qs = qs.filter(is_active=True)
+        return qs
+
+
+class TaskTemplateDetailView(generics.RetrieveUpdateAPIView):
+    """
+    GET / PATCH /api/farms/<farm_pk>/tasks/templates/<pk>/ — owner/manager to write.
+
+    No DELETE: TaskCompletion.template is PROTECT, and retiring an item is
+    what is_active is for — deactivating it hides it from tomorrow's
+    checklist without touching past completions.
+    """
+
+    serializer_class = TaskTemplateSerializer
+    permission_classes = [CanManageRoutine]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["farm"] = self.request.farm
+        return context
+
+    def get_queryset(self):
+        return TaskTemplate.objects.filter(farm=self.request.farm)
+
+
+class TaskCompletionListCreateView(generics.ListCreateAPIView):
+    """
+    GET  /api/farms/<farm_pk>/tasks/completions/?date=YYYY-MM-DD  — defaults to today
+    POST /api/farms/<farm_pk>/tasks/completions/                  — workers included
+
+    Idempotent, mirroring InventoryUsageListCreateView: a POST whose
+    client-generated `id` already exists routes through the serializer's
+    update() and returns 200. Unlike the daily-record path, a POST whose
+    id is new but whose (template, date) is already taken is ABSORBED —
+    the existing completion is returned with a 200 — because a completion
+    has no content to merge and a shared routine item is simply done.
+    """
+
+    serializer_class = TaskCompletionSerializer
+    permission_classes = [CanRecordDaily]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["farm"] = self.request.farm
+        return context
+
+    def get_queryset(self):
+        qs = TaskCompletion.objects.filter(
+            template__farm=self.request.farm
+        ).select_related("template", "recorded_by")
+        date = self.request.query_params.get("date") or timezone.localdate().isoformat()
+        return qs.filter(completion_date=date)
+
+    def create(self, request, *args, **kwargs):
+        supplied_id = request.data.get("id")
+        existing = None
+        if supplied_id:
+            try:
+                uuid.UUID(str(supplied_id))
+            except (ValueError, AttributeError, TypeError):
+                pass
+            else:
+                existing = (
+                    TaskCompletion.objects.filter(
+                        pk=supplied_id, template__farm=request.farm
+                    )
+                    .select_related("template", "recorded_by")
+                    .first()
+                )
+
+        if existing is not None:
+            serializer = self.get_serializer(existing, data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        # A different device may already have ticked this item today under
+        # another id. Absorb it rather than letting the unique constraint
+        # raise an IntegrityError (contrast DailyRecordListCreateView, which
+        # rejects a same-date conflict because its numbers would be lost).
+        template_id = request.data.get("template")
+        completion_date = (
+            request.data.get("completion_date") or timezone.localdate().isoformat()
+        )
+        if template_id:
+            dupe = (
+                TaskCompletion.objects.filter(
+                    template_id=template_id,
+                    template__farm=request.farm,
+                    completion_date=completion_date,
+                )
+                .select_related("template", "recorded_by")
+                .first()
+            )
+            if dupe is not None:
+                return Response(
+                    self.get_serializer(dupe).data, status=status.HTTP_200_OK
+                )
+
+        return super().create(request, *args, **kwargs)
+
+
+class TaskCompletionDetailView(generics.RetrieveDestroyAPIView):
+    """
+    GET / DELETE /api/farms/<farm_pk>/tasks/completions/<pk>/
+
+    DELETE is the un-tick. Subject to the same 24-hour rule as editing any
+    field record: a worker who ticks the wrong item can undo it within the
+    day, after which it is locked and the response is a clean 400.
+    """
+
+    serializer_class = TaskCompletionSerializer
+    permission_classes = [CanRecordDaily]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["farm"] = self.request.farm
+        return context
+
+    def get_queryset(self):
+        return TaskCompletion.objects.filter(
+            template__farm=self.request.farm
+        ).select_related("template", "recorded_by")
+
+    def perform_destroy(self, instance):
+        if not instance.is_editable:
+            raise serializers.ValidationError(
+                {
+                    "detail": (
+                        "This task was ticked more than 24 hours ago and is "
+                        "locked. Ask your manager."
+                    )
+                }
+            )
+        instance.delete()
+
+
+class TaskCompletionBulkSyncView(APIView):
+    """
+    POST /api/farms/<farm_pk>/tasks/completions/bulk-sync/
+
+    Per-record outcomes in the same 207/failed[] shape as the daily-record
+    and inventory-usage bulk-sync paths.
+    """
+
+    permission_classes = [CanRecordDaily]
+
+    def post(self, request, farm_pk):
+        serializer = TaskCompletionBulkSyncSerializer(
             data=request.data,
             context={"request": request, "farm": request.farm},
         )

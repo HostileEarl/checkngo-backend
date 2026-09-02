@@ -67,3 +67,15 @@ class CanRecordInventoryUsage(FarmScopedPermission):
 
     allowed_roles = set()
     read_roles = set()
+
+
+class CanManageRoutine(FarmScopedPermission):
+    """
+    The daily task routine (templates) — owner and manager only, the same
+    split as feed and inventory. Reads stay open to workers: a worker needs
+    the routine to know what to tick off. Ticking itself is CanRecordDaily.
+    """
+
+    allowed_roles = {FarmMembership.Role.OWNER, FarmMembership.Role.MANAGER}
+    read_roles = set()
+    message = "Only an owner or manager can change the daily routine."

@@ -23,6 +23,11 @@ from .views import (
     InventoryUsageBulkSyncView,
     InventoryUsageDetailView,
     InventoryUsageListCreateView,
+    TaskCompletionBulkSyncView,
+    TaskCompletionDetailView,
+    TaskCompletionListCreateView,
+    TaskTemplateDetailView,
+    TaskTemplateListCreateView,
     WeightSampleDetailView,
     WeightSampleListCreateView,
 )
@@ -63,4 +68,10 @@ urlpatterns = [
     path(f"{_batch}/daily-records/<uuid:pk>/correct/", DailyRecordCorrectView.as_view(), name="daily-correct"),
     path(f"{_batch}/corrections/", BatchCorrectionListView.as_view(), name="batch-corrections"),
     path(f"{_farm}/corrections/", FarmCorrectionListView.as_view(), name="farm-corrections"),
+
+    path(f"{_farm}/tasks/templates/", TaskTemplateListCreateView.as_view(), name="task-template-list"),
+    path(f"{_farm}/tasks/templates/<int:pk>/", TaskTemplateDetailView.as_view(), name="task-template-detail"),
+    path(f"{_farm}/tasks/completions/", TaskCompletionListCreateView.as_view(), name="task-completion-list"),
+    path(f"{_farm}/tasks/completions/bulk-sync/", TaskCompletionBulkSyncView.as_view(), name="task-completion-bulk-sync"),
+    path(f"{_farm}/tasks/completions/<uuid:pk>/", TaskCompletionDetailView.as_view(), name="task-completion-detail"),
 ]
