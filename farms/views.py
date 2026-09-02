@@ -61,9 +61,40 @@ class FarmMemberListView(generics.ListAPIView):
     permission_classes = [IsFarmMember]
 
     def get_queryset(self):
-        return FarmMembership.objects.filter(
-            farm=self.request.farm
-        ).select_related("user", "invited_by")
+        return (
+            FarmMembership.objects.filter(farm=self.request.farm)
+            .select_related("user", "invited_by")
+            .prefetch_related("houses")
+        )
+
+
+class FarmMemberHouseAssignmentView(APIView):
+    """
+    PATCH /api/farms/<farm_pk>/members/<pk>/houses/
+
+    Set which houses a member may record against. Owner/manager only — a
+    worker must not be able to assign themselves houses, which is why this
+    is a dedicated endpoint rather than general membership editing.
+
+    Body: {"houses": [<house id>, ...]}. An empty list clears the
+    restriction (the member may then record against any house).
+    """
+
+    permission_classes = [IsFarmManagerOrOwner]
+
+    def patch(self, request, farm_pk, pk):
+        membership = get_object_or_404(
+            FarmMembership, pk=pk, farm=request.farm
+        )
+        serializer = FarmMembershipSerializer(
+            membership,
+            data={"houses": request.data.get("houses", [])},
+            partial=True,
+            context={"request": request, "farm": request.farm},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class FarmOwnershipHistoryView(generics.ListAPIView):

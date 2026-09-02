@@ -364,6 +364,10 @@ class DailyRecordBulkSyncView(BatchScopedMixin, APIView):
     """
 
     permission_classes = [CanRecordDaily]
+    # The house-scoping check is done per record inside the serializer, so a
+    # worker who lost a house assignment gets that day back in failed[]
+    # rather than a 403 on the whole backlog.
+    enforce_house_write_scope = False
 
     def post(self, request, farm_pk, batch_pk):
         serializer = DailyRecordBulkSyncSerializer(

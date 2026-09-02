@@ -83,6 +83,13 @@ class FarmMembership(models.Model):
     )
     role = models.CharField(max_length=20, choices=Role.choices)
 
+    houses = models.ManyToManyField(
+        "production.House",
+        blank=True,
+        related_name="assigned_memberships",
+        help_text="Houses this member may record against. Empty means all.",
+    )
+
     is_active = models.BooleanField(default=True)
     joined_at = models.DateTimeField(default=timezone.now)
     deactivated_at = models.DateTimeField(null=True, blank=True)
@@ -118,10 +125,36 @@ class FarmMembership(models.Model):
             raise ValidationError(
                 {"user": "External partners cannot hold farm memberships."}
             )
+        # M2M rows are not populated on an unsaved instance, and save() never
+        # calls clean(), so this only bites for an already-saved membership
+        # (Django admin, a manual full_clean()). The serializer's
+        # validate_houses is the authoritative guard.
+        if self.pk and self._assigned_houses_mismatch():
+            raise ValidationError(
+                {"houses": "A house assigned here must belong to the same farm."}
+            )
 
     @property
     def can_manage_staff(self):
         return self.is_active and self.role in {self.Role.OWNER, self.Role.MANAGER}
+
+    def may_write_to_house(self, house):
+        """
+        Owners and managers write anywhere on their farm. A worker with no
+        house assignments is unrestricted; one with assignments is limited
+        to those houses.
+        """
+        if self.role in {self.Role.OWNER, self.Role.MANAGER}:
+            return True
+        if not self.houses.exists():
+            return True
+        return self.houses.filter(pk=house.pk).exists()
+
+    def _assigned_houses_mismatch(self):
+        """House pks assigned to this membership that belong to another farm."""
+        return list(
+            self.houses.exclude(farm_id=self.farm_id).values_list("pk", flat=True)
+        )
 
     def deactivate(self):
         """Soft-revoke access while preserving the audit trail."""

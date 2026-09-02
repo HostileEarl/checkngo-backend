@@ -73,6 +73,7 @@ class Command(BaseCommand):
             farm = self._create_farm(owner, manager, worker)
             supplier, buyer = self._create_partners(farm, owner)
             houses = self._create_houses(farm)
+            self._scope_worker_to_house(farm, worker, houses[0])
             # Order matters: the batches and their daily records must exist
             # before deliveries can be sized to match what they consume.
             self._create_batches(farm, houses, owner, worker, buyer)
@@ -202,6 +203,18 @@ class Command(BaseCommand):
             houses.append(house)
         self.stdout.write(self.style.SUCCESS(f"- {len(houses)} houses"))
         return houses
+
+    def _scope_worker_to_house(self, farm, worker, house):
+        """
+        Restrict Ana Reyes to one house, leaving the others unassigned, so
+        house-level write scoping is visible in a demo without extra setup.
+        Her manager and the owner stay unrestricted.
+        """
+        membership = FarmMembership.objects.get(farm=farm, user=worker)
+        membership.houses.set([house])
+        self.stdout.write(
+            self.style.SUCCESS(f"- {worker.full_name} scoped to {house.name} only")
+        )
 
     # -- feed ------------------------------------------------
 

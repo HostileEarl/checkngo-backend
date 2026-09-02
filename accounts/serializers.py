@@ -34,6 +34,14 @@ class MembershipSummarySerializer(serializers.Serializer):
     farm_id = serializers.IntegerField(source="farm.id")
     farm_name = serializers.CharField(source="farm.name")
     role = serializers.CharField()
+    assigned_house_ids = serializers.SerializerMethodField()
+    assigned_house_names = serializers.SerializerMethodField()
+
+    def get_assigned_house_ids(self, obj) -> list[int]:
+        return list(obj.houses.values_list("id", flat=True))
+
+    def get_assigned_house_names(self, obj) -> list[str]:
+        return [h.name for h in obj.houses.all()]
 
 
 class PhonePinTokenSerializer(TokenObtainPairSerializer):
@@ -74,7 +82,11 @@ class PhonePinTokenSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
 
         user = self.user
-        memberships = user.farm_memberships.filter(is_active=True).select_related("farm")
+        memberships = (
+            user.farm_memberships.filter(is_active=True)
+            .select_related("farm")
+            .prefetch_related("houses")
+        )
 
         data["user"] = UserSerializer(user).data
         data["must_change_credential"] = user.must_change_credential

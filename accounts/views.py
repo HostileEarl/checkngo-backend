@@ -54,9 +54,11 @@ class MeView(APIView):
     def get(self, request):
         from accounts.serializers import MembershipSummarySerializer
 
-        memberships = request.user.farm_memberships.filter(
-            is_active=True
-        ).select_related("farm")
+        memberships = (
+            request.user.farm_memberships.filter(is_active=True)
+            .select_related("farm")
+            .prefetch_related("houses")
+        )
 
         data = UserSerializer(request.user).data
         data["memberships"] = MembershipSummarySerializer(memberships, many=True).data

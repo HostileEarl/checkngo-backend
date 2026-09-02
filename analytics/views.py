@@ -217,7 +217,7 @@ class AlertsView(APIView):
         role = request.membership.role
         visible = [
             alert
-            for alert in compute_alerts(request.farm)
+            for alert in compute_alerts(request.farm, request.membership)
             if role in alert["audience"]
         ]
 

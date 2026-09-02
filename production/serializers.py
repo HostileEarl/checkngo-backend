@@ -340,13 +340,32 @@ class DailyRecordBulkSyncSerializer(serializers.Serializer):
 
     def save(self, **kwargs):
         batch = self.context["batch"]
-        user = self.context["request"].user
+        request = self.context["request"]
+        user = request.user
+        membership = getattr(request, "membership", None)
 
         created, updated, failed = [], [], []
 
         for payload in self.validated_data["records"]:
             record_date = payload["record_date"]
             supplied_id = payload.get("id")
+
+            # House-level write scoping. Every record in one payload is for
+            # the same batch, so this rejects the whole backlog per record
+            # rather than 403-ing the request.
+            if membership is not None and not membership.may_write_to_house(
+                batch.house
+            ):
+                failed.append(
+                    {
+                        "record_date": str(record_date),
+                        "error": (
+                            f"You are not assigned to {batch.house.name}. "
+                            "Ask your manager to assign you."
+                        ),
+                    }
+                )
+                continue
 
             try:
                 with transaction.atomic():

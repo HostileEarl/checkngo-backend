@@ -37,6 +37,7 @@ class FarmMembershipSerializer(serializers.ModelSerializer):
     invited_by_name = serializers.CharField(
         source="invited_by.full_name", read_only=True, default=None
     )
+    house_names = serializers.SerializerMethodField()
 
     class Meta:
         model = FarmMembership
@@ -50,8 +51,24 @@ class FarmMembershipSerializer(serializers.ModelSerializer):
             "joined_at",
             "deactivated_at",
             "invited_by_name",
+            "houses",
+            "house_names",
         ]
         read_only_fields = ["id", "user", "joined_at", "deactivated_at"]
+
+    def get_house_names(self, obj) -> list[str]:
+        return [h.name for h in obj.houses.all()]
+
+    def validate_houses(self, value):
+        """A house assigned to a membership must belong to that membership's farm."""
+        farm = self.instance.farm if self.instance else self.context.get("farm")
+        if farm is not None:
+            stray = [h.name for h in value if h.farm_id != farm.pk]
+            if stray:
+                raise serializers.ValidationError(
+                    f"These houses belong to another farm: {', '.join(stray)}."
+                )
+        return value
 
 
 class FarmOwnershipHistorySerializer(serializers.ModelSerializer):

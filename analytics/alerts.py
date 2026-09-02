@@ -38,10 +38,13 @@ _OWNER_MANAGER = ["OWNER", "MANAGER"]
 _EVERYONE = ["OWNER", "MANAGER", "WORKER"]
 
 
-def compute_alerts(farm):
+def compute_alerts(farm, membership=None):
     """
     Every alert currently true for this farm, in a fixed order. The view
-    filters by the requesting user's role; this function does not.
+    filters by the requesting user's role; this function does not — the one
+    exception is `membership`, which house-scopes the "today not recorded"
+    alert for a worker restricted to specific houses (owners, managers, and
+    unassigned workers are unaffected).
     """
     today = timezone.localdate()
     now = timezone.now()
@@ -56,7 +59,7 @@ def compute_alerts(farm):
     alerts += _high_mortality(active)
     alerts += _negative_feed_balance(farm)
     alerts += _low_stock(farm)
-    alerts += _today_not_recorded(active, today)
+    alerts += _today_not_recorded(active, today, membership)
     alerts += _harvest_approaching(active, today)
     alerts += _invitation_expiring(farm, now)
     alerts += _record_corrected_recently(farm, now)
@@ -210,9 +213,22 @@ def _low_stock(farm):
 # ─────────────────────────────────────────────────────────────
 
 
-def _today_not_recorded(active_batches, today):
+def _today_not_recorded(active_batches, today, membership=None):
     if not active_batches:
         return []
+
+    # A worker restricted to specific houses is only nagged about batches in
+    # those houses — a shed-A worker should not see "no record yet" for shed
+    # B every day. Owners, managers, and unassigned workers see all of them.
+    if (
+        membership is not None
+        and membership.role == "WORKER"
+        and membership.houses.exists()
+    ):
+        assigned = set(membership.houses.values_list("id", flat=True))
+        active_batches = [b for b in active_batches if b.house_id in assigned]
+        if not active_batches:
+            return []
 
     recorded = set(
         DailyRecord.objects.filter(
