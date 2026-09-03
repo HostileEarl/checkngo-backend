@@ -46,6 +46,7 @@ from .models import (
     InventoryStockIn,
     InventoryUsageLog,
     RecordCorrection,
+    SaleEvent,
     TaskCompletion,
     TaskTemplate,
     WeightSample,
@@ -61,6 +62,7 @@ from .permissions import (
     CanViewProduction,
 )
 from .serializers import (
+    BatchCloseSerializer,
     BatchCreateSerializer,
     BatchSerializer,
     DailyRecordBulkSyncSerializer,
@@ -74,6 +76,8 @@ from .serializers import (
     InventoryUsageBulkSyncSerializer,
     InventoryUsageLogSerializer,
     RecordCorrectionSerializer,
+    SaleEventBulkSyncSerializer,
+    SaleEventSerializer,
     TaskCompletionBulkSyncSerializer,
     TaskCompletionSerializer,
     TaskTemplateSerializer,
@@ -424,28 +428,148 @@ class WeightSampleDetailView(BatchScopedMixin, generics.RetrieveUpdateAPIView):
 
 
 # ─────────────────────────────────────────────────────────────
-# Harvest
+# Sale events
 # ─────────────────────────────────────────────────────────────
 
 
-class HarvestCreateView(BatchScopedMixin, generics.CreateAPIView):
+class SaleEventListCreateView(BatchScopedMixin, generics.ListCreateAPIView):
     """
-    POST /api/farms/<farm_pk>/batches/<batch_pk>/harvest/
+    GET  /api/farms/<farm_pk>/batches/<batch_pk>/sales/
+    POST /api/farms/<farm_pk>/batches/<batch_pk>/sales/
 
-    Closes the batch, frees the house, and unlocks FCR for this cohort.
+    Owner and manager write; every member reads. A worker records mortality
+    and feed, not sales. Idempotent: a POST whose client-generated `id`
+    already exists is a retry, routed through the serializer's update()
+    (which enforces the 24-hour lock) and returns 200 — mirroring
+    DailyRecordListCreateView. No same-date conflict branch: a sale is an
+    event, and several sales in one day are legitimate.
     """
 
-    serializer_class = HarvestSerializer
+    serializer_class = SaleEventSerializer
     permission_classes = [CanManageBatches]
 
+    def get_queryset(self):
+        return SaleEvent.objects.filter(batch=self.batch).select_related(
+            "recorded_by"
+        )
+
     def create(self, request, *args, **kwargs):
+        supplied_id = request.data.get("id")
+        existing = None
+        if supplied_id:
+            try:
+                uuid.UUID(str(supplied_id))
+            except (ValueError, AttributeError, TypeError):
+                pass
+            else:
+                existing = self.get_queryset().filter(pk=supplied_id).first()
+
+        if existing is not None:
+            serializer = self.get_serializer(existing, data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        return super().create(request, *args, **kwargs)
+
+
+class SaleEventDetailView(BatchScopedMixin, generics.RetrieveUpdateAPIView):
+    """
+    GET / PATCH /api/farms/<farm_pk>/batches/<batch_pk>/sales/<pk>/
+
+    PATCH is refused by the serializer once the 24-hour window closes.
+    No DELETE — a recorded sale is not removable.
+    """
+
+    serializer_class = SaleEventSerializer
+    permission_classes = [CanManageBatches]
+
+    def get_queryset(self):
+        return SaleEvent.objects.filter(batch=self.batch).select_related(
+            "recorded_by"
+        )
+
+
+@extend_schema(
+    tags=["Production"],
+    summary="Offline bulk sync — sale events",
+    request=SaleEventBulkSyncSerializer,
+    description=(
+        "Upload a backlog of sale events in one request, for a phone "
+        "returning from the yard.\n\n"
+        "**Idempotent.** Supply the client-generated UUID as `id`. "
+        "Re-syncing a sale that already exists overwrites it, provided it "
+        "is still inside the 24-hour window.\n\n"
+        "**An event, not a daily record.** Several sales on one date are "
+        "fine — each row is keyed only by `id`.\n\n"
+        "**Partial success is normal.** `207 Multi-Status` means some rows "
+        "failed — read `failed[]` (each carries its `id`) and retry only "
+        "those. Maximum 60 records per request."
+    ),
+)
+class SaleEventBulkSyncView(BatchScopedMixin, APIView):
+    """POST /api/farms/<farm_pk>/batches/<batch_pk>/sales/bulk-sync/"""
+
+    permission_classes = [CanManageBatches]
+
+    def post(self, request, farm_pk, batch_pk):
+        serializer = SaleEventBulkSyncSerializer(
+            data=request.data,
+            context={"request": request, "batch": self.batch, "farm": request.farm},
+        )
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
+
+        http_status = (
+            status.HTTP_207_MULTI_STATUS
+            if result["failed"]
+            else status.HTTP_200_OK
+        )
+        return Response(result, status=http_status)
+
+
+# ─────────────────────────────────────────────────────────────
+# Harvest — closing a batch
+# ─────────────────────────────────────────────────────────────
+
+
+class BatchCloseView(BatchScopedMixin, APIView):
+    """
+    POST /api/farms/<farm_pk>/batches/<batch_pk>/close/
+
+    Marks the batch HARVESTED, frees the house, and writes the Harvest
+    record with totals summed from every sale event. Takes only
+    closing_notes and an optional principal buyer_link. Refuses a batch
+    with no sale events.
+    """
+
+    permission_classes = [CanManageBatches]
+
+    def post(self, request, farm_pk, batch_pk):
         if hasattr(self.batch, "harvest"):
             return Response(
-                {"detail": "This batch has already been harvested."},
+                {"detail": "This batch has already been closed."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        return super().create(request, *args, **kwargs)
-    
+
+        serializer = BatchCloseSerializer(
+            data=request.data,
+            context={"request": request, "batch": self.batch, "farm": request.farm},
+        )
+        serializer.is_valid(raise_exception=True)
+        harvest = serializer.save()
+
+        self.batch.refresh_from_db()
+        return Response(
+            {
+                "detail": f"{self.batch.batch_code} closed.",
+                "harvest": HarvestSerializer(harvest).data,
+                "batch": BatchSerializer(self.batch).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class HarvestDetailView(BatchScopedMixin, generics.RetrieveAPIView):
     """GET /api/farms/<farm_pk>/batches/<batch_pk>/harvest/detail/"""
 

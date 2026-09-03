@@ -30,6 +30,7 @@ from production.models import (
     House,
     InventoryItem,
     InventoryStockIn,
+    SaleEvent,
     TaskCompletion,
     TaskTemplate,
     WeightSample,
@@ -418,7 +419,7 @@ class Command(BaseCommand):
             cycle = random.randint(40, 45)
             self._fill_daily_records(batch, cycle, quality, worker)
             self._fill_weight_samples(batch, cycle, quality, worker)
-            self._harvest(batch, cycle, quality, buyer, owner)
+            self._sell_and_close(batch, cycle, quality, buyer, owner)
 
         # Two active batches, mid-cycle, in the remaining free houses.
         occupied = {b.house_id for b in Batch.objects.filter(status=Batch.Status.ACTIVE)}
@@ -438,6 +439,7 @@ class Command(BaseCommand):
             )
             self._fill_daily_records(batch, age, "average", worker)
             self._fill_weight_samples(batch, age, "average", worker)
+            self._early_sales(batch, age, owner)
 
         self.stdout.write(self.style.SUCCESS("- 5 harvested + 2 active batches"))
 
@@ -565,33 +567,146 @@ class Command(BaseCommand):
                 recorded_at=timezone.now(),
             )
 
-    def _harvest(self, batch, cycle_days, quality, buyer, owner):
+    def _sell_and_close(self, batch, cycle_days, quality, buyer, owner):
+        """
+        Empty the batch across 6-12 sale events over the last two weeks of
+        the cycle, then close it.
+
+        The birds and weights of the events sum EXACTLY to what the old
+        single-harvest model would have recorded, so FCR and total weight
+        are unchanged. Events mix DRESSED (40-120 birds) and LIVE (1-5),
+        and live birds fetch a lower price per kilo — the per-event revenue
+        is then reconciled so the batch total still equals the old figure
+        and the profitability demo does not move.
+        """
         batch.refresh_from_db()
         alive = batch.current_bird_count
 
         final = batch.weight_samples.order_by("-sample_date").first()
         avg_kg = Decimal(final.average_grams) / 1000 if final else Decimal("2.3")
 
-        # A small residual loss during catching and transport.
-        harvested = int(alive * random.uniform(0.985, 0.998))
-        total_kg = (Decimal(harvested) * avg_kg).quantize(Decimal("0.01"))
-
-        # Live-weight farmgate price, PHP/kg, with market variation.
+        # Same figures the old model produced.
+        birds_total = int(alive * random.uniform(0.985, 0.998))
+        weight_total = (Decimal(birds_total) * avg_kg).quantize(Decimal("0.01"))
         price = Decimal(random.uniform(115, 138)).quantize(Decimal("0.01"))
-        revenue = (total_kg * price).quantize(Decimal("0.01"))
+        revenue_target = (weight_total * price).quantize(Decimal("0.01"))
+        per_bird = weight_total / Decimal(birds_total)
+
+        close_day = batch.start_date + timedelta(days=cycle_days)
+        window_start = close_day - timedelta(days=14)
+
+        n = random.randint(6, 12)
+        rows = []  # (sale_date, sale_type, birds, kg)
+        birds_left, kg_left = birds_total, weight_total
+
+        for i in range(n):
+            last = i == n - 1
+            slots_left = n - i - 1
+            if last:
+                birds = birds_left
+                kg = kg_left
+                stype = SaleEvent.SaleType.DRESSED if birds > 5 else SaleEvent.SaleType.LIVE
+            else:
+                if random.random() < 0.3 and birds_left - slots_left > 5:
+                    stype = SaleEvent.SaleType.LIVE
+                    birds = random.randint(1, 5)
+                else:
+                    stype = SaleEvent.SaleType.DRESSED
+                    birds = random.randint(40, 120)
+                birds = min(birds, birds_left - slots_left)  # leave >=1 per remaining slot
+                kg = (Decimal(birds) * per_bird).quantize(Decimal("0.01"))
+                kg = min(kg, kg_left - Decimal("0.01") * slots_left)
+
+            day_offset = 0 if last else random.randint(0, 14)
+            sale_date = max(window_start + timedelta(days=day_offset), batch.start_date)
+            sale_date = min(sale_date, close_day)
+
+            rows.append((sale_date, stype, birds, kg))
+            birds_left -= birds
+            kg_left -= kg
+
+        # Price each event: dressed at `price`, live at a 12% discount.
+        live_discount = Decimal("0.88")
+        revenues = [
+            (kg * (price if st == SaleEvent.SaleType.DRESSED else price * live_discount)).quantize(
+                Decimal("0.01")
+            )
+            for (_, st, _, kg) in rows
+        ]
+        # Reconcile to the old batch total so profitability is unchanged:
+        # the shortfall from the live discount lands on the largest dressed
+        # event.
+        shortfall = revenue_target - sum(revenues)
+        dressed_idx = [
+            i for i, (_, st, _, _) in enumerate(rows) if st == SaleEvent.SaleType.DRESSED
+        ]
+        biggest = max(dressed_idx or range(len(rows)), key=lambda i: rows[i][3])
+        revenues[biggest] += shortfall
+
+        for (sale_date, stype, birds, kg), rev in zip(rows, revenues):
+            SaleEvent.objects.create(
+                batch=batch,
+                sale_date=sale_date,
+                sale_type=stype,
+                bird_count=birds,
+                total_weight_kg=kg,
+                revenue=rev,
+                notes=f"{DEMO_PREFIX}{quality} profile",
+                recorded_by=owner,
+                recorded_at=timezone.now(),
+            )
+
+        remaining = batch.current_bird_count
+        closing = f"Synthetic demo close ({quality} performance profile)."
+        if remaining > 0:
+            closing = f"{closing} {remaining} birds unaccounted for at closing."
 
         Harvest.objects.create(
             batch=batch,
-            harvest_date=batch.start_date + timedelta(days=cycle_days),
-            birds_harvested=harvested,
-            total_weight_kg=total_kg,
-            revenue=revenue,
+            harvest_date=close_day,
+            birds_harvested=birds_total,
+            total_weight_kg=weight_total,
+            revenue=revenue_target,
             buyer_link=buyer,
             notes=f"Synthetic demo harvest ({quality} performance profile).",
+            closing_notes=closing,
             recorded_by=owner,
         )
         batch.status = Batch.Status.HARVESTED
         batch.save(update_fields=["status"])
+
+    def _early_sales(self, batch, age, owner):
+        """
+        A handful of early sales on an active batch, so the incremental
+        pattern is visible mid-cycle rather than only after closing.
+        """
+        batch.refresh_from_db()
+        final = batch.weight_samples.order_by("-sample_date").first()
+        avg_kg = Decimal(final.average_grams) / 1000 if final else Decimal("1.6")
+        today = timezone.localdate()
+
+        for _ in range(random.randint(2, 4)):
+            stype = random.choice(
+                [SaleEvent.SaleType.DRESSED, SaleEvent.SaleType.LIVE]
+            )
+            birds = random.randint(40, 90) if stype == SaleEvent.SaleType.DRESSED else random.randint(1, 5)
+            birds = min(birds, max(batch.current_bird_count - 10, 1))
+            kg = (Decimal(birds) * avg_kg).quantize(Decimal("0.01"))
+            price = Decimal(random.uniform(115, 135)).quantize(Decimal("0.01"))
+            if stype == SaleEvent.SaleType.LIVE:
+                price = (price * Decimal("0.88")).quantize(Decimal("0.01"))
+            SaleEvent.objects.create(
+                batch=batch,
+                sale_date=today - timedelta(days=random.randint(0, min(age, 5))),
+                sale_type=stype,
+                bird_count=birds,
+                total_weight_kg=kg,
+                revenue=(kg * price).quantize(Decimal("0.01")),
+                notes=f"{DEMO_PREFIX}early sale",
+                recorded_by=owner,
+                recorded_at=timezone.now(),
+            )
+            batch.refresh_from_db()
 
     # -- report ----------------------------------------------
 

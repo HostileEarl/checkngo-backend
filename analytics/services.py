@@ -12,7 +12,35 @@ from decimal import Decimal, InvalidOperation
 from django.db.models import Count, DecimalField, F, Q, Sum, Value
 from django.db.models.functions import Coalesce
 
-from production.models import Batch, DailyRecord, FeedDelivery, Harvest, WeightSample
+from production.models import (
+    Batch,
+    DailyRecord,
+    FeedDelivery,
+    Harvest,
+    SaleEvent,
+    WeightSample,
+)
+
+
+def _batch_sale_totals(batch):
+    """
+    (birds, weight, revenue) a closed batch produced, summed from its sale
+    events. Falls back to the Harvest's own figures for a batch closed
+    before sale events existed, so historical FCR and feed margin are
+    unchanged. `revenue` is None when no sale carried a value.
+    """
+    agg = SaleEvent.objects.filter(batch=batch).aggregate(
+        birds=Sum("bird_count"),
+        weight=Sum("total_weight_kg"),
+        revenue=Sum("revenue"),
+    )
+    if agg["birds"]:
+        return agg["birds"], agg["weight"], agg["revenue"]
+
+    harvest = getattr(batch, "harvest", None)
+    if harvest is None:
+        return None, None, None
+    return harvest.birds_harvested, harvest.total_weight_kg, harvest.revenue
 
 
 def _q(value, places="0.01"):
@@ -174,12 +202,17 @@ def fcr_by_batch(farm):
     rows = []
     for batch in harvested:
         harvest = batch.harvest
-        if not harvest.total_weight_kg:
+        # Live weight produced is now the SUM of the batch's sale events,
+        # carried onto the Harvest at closing time (fallback for history).
+        birds_sold, weight_sold, _ = _batch_sale_totals(batch)
+        if not weight_sold:
             continue
 
-        fcr = _q(batch.total_feed_kg / harvest.total_weight_kg, "0.001")
-        survival = _pct(harvest.birds_harvested, batch.initial_bird_count)
-        avg_weight = _q(harvest.total_weight_kg / harvest.birds_harvested, "0.001") if harvest.birds_harvested else None
+        fcr = _q(batch.total_feed_kg / weight_sold, "0.001")
+        survival = _pct(birds_sold, batch.initial_bird_count)
+        avg_weight = (
+            _q(weight_sold / birds_sold, "0.001") if birds_sold else None
+        )
         cycle_days = (harvest.harvest_date - batch.start_date).days
 
         rows.append(
@@ -190,10 +223,10 @@ def fcr_by_batch(farm):
                 "harvest_date": harvest.harvest_date.isoformat(),
                 "cycle_days": cycle_days,
                 "birds_placed": batch.initial_bird_count,
-                "birds_harvested": harvest.birds_harvested,
+                "birds_harvested": birds_sold,
                 "survival_rate_pct": str(survival),
                 "total_feed_kg": str(batch.total_feed_kg),
-                "total_weight_kg": str(harvest.total_weight_kg),
+                "total_weight_kg": str(weight_sold),
                 "average_bird_weight_kg": str(avg_weight) if avg_weight else None,
                 "fcr": str(fcr),
             }
@@ -296,7 +329,9 @@ def profitability_by_batch(farm):
 
     for batch in harvested:
         harvest = batch.harvest
-        revenue = harvest.revenue
+        # Revenue and live weight are SUMMED from the batch's sale events,
+        # not read from a single harvest figure (fallback for history).
+        _, weight_sold, revenue = _batch_sale_totals(batch)
 
         feed_cost = (
             _q(batch.total_feed_kg * avg_cost_per_kg)
@@ -308,8 +343,8 @@ def profitability_by_batch(farm):
         margin_per_kg = None
         if revenue is not None and feed_cost is not None:
             margin = _q(revenue - feed_cost)
-            if harvest.total_weight_kg:
-                margin_per_kg = _q(margin / harvest.total_weight_kg)
+            if weight_sold:
+                margin_per_kg = _q(margin / weight_sold)
 
         if revenue is not None:
             total_revenue += revenue
@@ -323,10 +358,10 @@ def profitability_by_batch(farm):
                 "batch_code": batch.batch_code,
                 "house_name": batch.house.name,
                 "harvest_date": harvest.harvest_date.isoformat(),
-                "total_weight_kg": str(harvest.total_weight_kg),
+                "total_weight_kg": str(weight_sold) if weight_sold is not None else None,
                 "revenue": str(revenue) if revenue is not None else None,
-                "revenue_per_kg": str(_q(revenue / harvest.total_weight_kg))
-                if revenue is not None and harvest.total_weight_kg
+                "revenue_per_kg": str(_q(revenue / weight_sold))
+                if revenue is not None and weight_sold
                 else None,
                 "allocated_feed_cost": str(feed_cost) if feed_cost is not None else None,
                 "feed_margin": str(margin) if margin is not None else None,

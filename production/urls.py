@@ -11,11 +11,14 @@ from .views import (
     DailyRecordDetailView,
     DailyRecordListCreateView,
     FarmCorrectionListView,
+    BatchCloseView,
     FeedDeliveryListCreateView,
     FeedDeliveryWithStockView,
     FeedStockView,
-    HarvestCreateView,
     HarvestDetailView,
+    SaleEventBulkSyncView,
+    SaleEventDetailView,
+    SaleEventListCreateView,
     HouseDetailView,
     HouseListCreateView,
     InventoryItemDetailView,
@@ -53,7 +56,11 @@ urlpatterns = [
     path(f"{_batch}/weights/", WeightSampleListCreateView.as_view(), name="weight-list"),
     path(f"{_batch}/weights/<uuid:pk>/", WeightSampleDetailView.as_view(), name="weight-detail"),
 
-    path(f"{_batch}/harvest/", HarvestCreateView.as_view(), name="harvest-create"),
+    path(f"{_batch}/sales/", SaleEventListCreateView.as_view(), name="sale-list"),
+    path(f"{_batch}/sales/bulk-sync/", SaleEventBulkSyncView.as_view(), name="sale-bulk-sync"),
+    path(f"{_batch}/sales/<uuid:pk>/", SaleEventDetailView.as_view(), name="sale-detail"),
+
+    path(f"{_batch}/close/", BatchCloseView.as_view(), name="batch-close"),
     path(f"{_batch}/harvest/detail/", HarvestDetailView.as_view(), name="harvest-detail"),
 
     path(f"{_farm}/feed-deliveries/", FeedDeliveryListCreateView.as_view(), name="feed-list"),

@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -18,6 +19,7 @@ from .models import (
     InventoryStockIn,
     InventoryUsageLog,
     RecordCorrection,
+    SaleEvent,
     TaskCompletion,
     TaskTemplate,
     WeightSample,
@@ -101,13 +103,15 @@ class BatchSerializer(serializers.ModelSerializer):
             "terminated_by_name",
             "total_mortality",
             "total_feed_kg",
+            "total_birds_sold",
+            "total_weight_sold_kg",
             "mortality_rate_pct",
             "feed_conversion_ratio",
             "age_days",
             "latest_weight_grams",
             "created_at",
         ]
-        
+
         # ADDED: termination_reason and terminated_at to read_only
         read_only_fields = [
             "id",
@@ -116,6 +120,8 @@ class BatchSerializer(serializers.ModelSerializer):
             "terminated_at",
             "total_mortality",
             "total_feed_kg",
+            "total_birds_sold",
+            "total_weight_sold_kg",
             "created_at",
         ]
 
@@ -653,14 +659,216 @@ class WeightSampleSerializer(serializers.ModelSerializer):
 
 
 # ─────────────────────────────────────────────────────────────
-# Harvest
+# Sale events
+# ─────────────────────────────────────────────────────────────
+
+
+class SaleEventSerializer(serializers.ModelSerializer):
+    """
+    One transaction in which some of a batch's birds left.
+
+    Same offline shape as DailyRecordSerializer: the UUID primary key is
+    client-supplied so a retry is idempotent, and an edit outside the
+    24-hour window is refused. Identity is the UUID alone — there is no
+    per-day uniqueness, several sales happen in a day.
+    """
+
+    id = serializers.UUIDField(required=False)
+    average_weight_kg = serializers.SerializerMethodField()
+    revenue_per_kg = serializers.SerializerMethodField()
+    is_editable = serializers.BooleanField(read_only=True)
+    recorded_by_name = serializers.CharField(
+        source="recorded_by.full_name", read_only=True, default=None
+    )
+    sync_delay_seconds = serializers.FloatField(read_only=True)
+
+    class Meta:
+        model = SaleEvent
+        fields = [
+            "id",
+            "batch",
+            "sale_date",
+            "sale_type",
+            "bird_count",
+            "total_weight_kg",
+            "revenue",
+            "notes",
+            "average_weight_kg",
+            "revenue_per_kg",
+            "recorded_by",
+            "recorded_by_name",
+            "recorded_at",
+            "created_at",
+            "is_editable",
+            "sync_delay_seconds",
+        ]
+        read_only_fields = ["batch", "recorded_by", "created_at"]
+
+    def get_average_weight_kg(self, obj) -> str | None:
+        val = obj.average_weight_kg
+        return str(val) if val is not None else None
+
+    def get_revenue_per_kg(self, obj) -> str | None:
+        val = obj.revenue_per_kg
+        return str(val) if val is not None else None
+
+    def validate_sale_date(self, value):
+        batch = self.context["batch"]
+        if value < batch.start_date:
+            raise serializers.ValidationError(
+                "That date falls before the batch was placed."
+            )
+        if value > timezone.localdate():
+            raise serializers.ValidationError("Cannot record a future date.")
+        return value
+
+    def validate_bird_count(self, value):
+        if value < 1:
+            raise serializers.ValidationError("A sale is at least one bird.")
+        return value
+
+    def validate(self, attrs):
+        batch = self.context["batch"]
+
+        if batch.status != Batch.Status.ACTIVE:
+            raise serializers.ValidationError(
+                "This batch is closed and accepts no further sales."
+            )
+
+        # Birds available to sell today: what is left after mortality and
+        # every earlier sale. When editing, add this row's own current
+        # count back first, or a correction reads as an addition.
+        count = attrs.get(
+            "bird_count", getattr(self.instance, "bird_count", 0)
+        )
+        available = batch.current_bird_count
+        if self.instance:
+            available += self.instance.bird_count
+        if count > available:
+            raise serializers.ValidationError(
+                {
+                    "bird_count": (
+                        f"Only {available} birds remain in this batch "
+                        f"({batch.initial_bird_count} placed, "
+                        f"{batch.total_mortality} lost, "
+                        f"{batch.total_birds_sold} already sold)."
+                    )
+                }
+            )
+
+        return attrs
+
+    def update(self, instance, validated_data):
+        if not instance.is_editable:
+            raise serializers.ValidationError(
+                {
+                    "detail": (
+                        "This sale is older than 24 hours and is locked. "
+                        "Ask a manager to make the change."
+                    )
+                }
+            )
+        validated_data.pop("sale_date", None)  # the day is fixed once recorded
+        return super().update(instance, validated_data)
+
+    def create(self, validated_data):
+        return SaleEvent.objects.create(
+            batch=self.context["batch"],
+            recorded_by=self.context["request"].user,
+            **validated_data,
+        )
+
+
+class SaleEventBulkSyncSerializer(serializers.Serializer):
+    """
+    Offline sync for sale events — a yard's backlog in one round trip.
+
+    Identity is purely the client UUID (a sale is an event, not a
+    one-per-day record), so this is the InventoryUsageLog pattern, not the
+    DailyRecord one: no (batch, date) fallback and no same-date conflict.
+    Each row is written in its own savepoint; one bad row does not reject
+    the rest.
+    """
+
+    records = SaleEventSerializer(many=True)
+
+    def validate_records(self, value):
+        if not value:
+            raise serializers.ValidationError("No records supplied.")
+        if len(value) > 60:
+            raise serializers.ValidationError(
+                "Sync at most 60 records per request."
+            )
+        return value
+
+    def save(self, **kwargs):
+        batch = self.context["batch"]
+        request = self.context["request"]
+        user = request.user
+
+        created, updated, failed = [], [], []
+
+        for payload in self.validated_data["records"]:
+            supplied_id = payload.get("id")
+            try:
+                with transaction.atomic():
+                    existing = None
+                    if supplied_id is not None:
+                        existing = SaleEvent.objects.filter(
+                            pk=supplied_id, batch=batch
+                        ).first()
+
+                    if existing is None:
+                        record = SaleEvent.objects.create(
+                            batch=batch, recorded_by=user, **payload
+                        )
+                        created.append(str(record.id))
+                    elif existing.is_editable:
+                        for field, val in payload.items():
+                            if field in ("id", "sale_date"):
+                                continue
+                            setattr(existing, field, val)
+                        existing.recorded_by = user
+                        existing.save()
+                        updated.append(str(existing.id))
+                    else:
+                        failed.append(
+                            {
+                                "id": str(supplied_id),
+                                "error": "Locked — older than 24 hours.",
+                            }
+                        )
+            except Exception as exc:  # noqa: BLE001
+                failed.append(
+                    {
+                        "id": str(supplied_id) if supplied_id else None,
+                        "error": str(exc),
+                    }
+                )
+
+        batch.recalculate_sales()
+
+        return {
+            "created": created,
+            "updated": updated,
+            "failed": failed,
+            "batch_totals": {
+                "total_birds_sold": batch.total_birds_sold,
+                "total_weight_sold_kg": str(batch.total_weight_sold_kg),
+                "current_bird_count": batch.current_bird_count,
+            },
+        }
+
+
+# ─────────────────────────────────────────────────────────────
+# Harvest — the batch's closing record
 # ─────────────────────────────────────────────────────────────
 
 
 class HarvestSerializer(serializers.ModelSerializer):
     """
-    Closes the batch and unlocks FCR. Enforces the bird-count ceiling the
-    model's clean() declares but the ORM never runs.
+    Read view of a batch's closing record. Its totals were summed from the
+    batch's sale events at closing time, not typed in.
     """
 
     average_weight_kg = serializers.SerializerMethodField()
@@ -680,13 +888,14 @@ class HarvestSerializer(serializers.ModelSerializer):
             "revenue",
             "buyer_link",
             "notes",
+            "closing_notes",
             "average_weight_kg",
             "revenue_per_kg",
             "feed_conversion_ratio",
             "recorded_by",
             "created_at",
         ]
-        read_only_fields = ["id", "batch", "recorded_by", "created_at"]
+        read_only_fields = fields
 
     def get_average_weight_kg(self, obj):
         val = obj.average_weight_kg
@@ -700,6 +909,28 @@ class HarvestSerializer(serializers.ModelSerializer):
         fcr = obj.batch.feed_conversion_ratio
         return str(fcr) if fcr is not None else None
 
+
+class BatchCloseSerializer(serializers.Serializer):
+    """
+    Close a batch: mark it HARVESTED, free the house, and write the
+    Harvest record with totals summed from every sale event.
+
+    Takes only closing_notes and an optional principal buyer_link — the
+    birds already left across the sale events, so there is nothing to type
+    in here. Refuses to close a batch with no sale events. Allows closing
+    with birds still on hand (stragglers that never sold, or late deaths),
+    recording the remainder in closing_notes.
+    """
+
+    buyer_link = serializers.PrimaryKeyRelatedField(
+        queryset=FarmPartnerLink.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    closing_notes = serializers.CharField(
+        required=False, allow_blank=True, max_length=255
+    )
+
     def validate_buyer_link(self, value):
         if value is None:
             return value
@@ -707,49 +938,60 @@ class HarvestSerializer(serializers.ModelSerializer):
         if value.farm_id != farm.pk:
             raise serializers.ValidationError("That buyer is not linked to this farm.")
         if value.link_type != FarmPartnerLink.LinkType.CONSUMER:
-            raise serializers.ValidationError("That partner is not registered as a buyer.")
-        return value
-
-    def validate_harvest_date(self, value):
-        batch = self.context["batch"]
-        if value < batch.start_date:
-            raise serializers.ValidationError("Falls before the batch was placed.")
-        if value > timezone.localdate():
-            raise serializers.ValidationError("Cannot harvest in the future.")
+            raise serializers.ValidationError(
+                "That partner is not registered as a buyer."
+            )
         return value
 
     def validate(self, attrs):
         batch = self.context["batch"]
-
         if batch.status != Batch.Status.ACTIVE:
-            raise serializers.ValidationError("This batch has already been closed.")
-
-        # The gap the model's clean() leaves open, closed here.
-        harvested = attrs["birds_harvested"]
-        if harvested > batch.current_bird_count:
+            raise serializers.ValidationError(
+                {"detail": f"This batch is already {batch.status.lower()}."}
+            )
+        if not batch.sale_events.exists():
             raise serializers.ValidationError(
                 {
-                    "birds_harvested": (
-                        f"Only {batch.current_bird_count} birds remain "
-                        f"({batch.initial_bird_count} placed, "
-                        f"{batch.total_mortality} lost)."
+                    "detail": (
+                        "This batch has no sale events. Record at least one "
+                        "sale before closing it."
                     )
                 }
             )
-
         return attrs
 
     @transaction.atomic
-    def create(self, validated_data):
+    def save(self, **kwargs):
         batch = self.context["batch"]
+        user = self.context["request"].user
+
+        agg = batch.sale_events.aggregate(
+            birds=Sum("bird_count"),
+            weight=Sum("total_weight_kg"),
+            revenue=Sum("revenue"),
+        )
+        birds = agg["birds"] or 0
+        weight = agg["weight"] or Decimal("0")
+        revenue = agg["revenue"]  # None when no sale carried a value
+
+        remaining = batch.current_bird_count
+        closing_notes = self.validated_data.get("closing_notes", "").strip()
+        if remaining > 0:
+            note = f"{remaining} birds unaccounted for at closing."
+            closing_notes = f"{closing_notes} {note}".strip() if closing_notes else note
+
         harvest = Harvest.objects.create(
             batch=batch,
-            recorded_by=self.context["request"].user,
-            **validated_data,
+            harvest_date=timezone.localdate(),
+            birds_harvested=birds,
+            total_weight_kg=weight,
+            revenue=revenue,
+            buyer_link=self.validated_data.get("buyer_link"),
+            closing_notes=closing_notes,
+            recorded_by=user,
         )
         batch.status = Batch.Status.HARVESTED
         batch.save(update_fields=["status"])
-        # The house is now free — the partial unique index permits a new batch.
         return harvest
 
 

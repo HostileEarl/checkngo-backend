@@ -2,17 +2,21 @@
 """
 Closing a batch out.
 
-HarvestCreateView already existed and validated; nothing but the seed
-command called it. These pin the behaviour the new harvest screen depends
-on: it sets the batch to HARVESTED, frees the house for a new placement,
-shuts the door on further daily records, and stays owner/manager only.
+Harvest is no longer a single typed sale — it is the record that CLOSES a
+batch whose birds left across many SaleEvent rows. Creation moved to
+POST /batches/<b>/close/, which takes only closing_notes and an optional
+buyer_link and populates the totals from the summed sale events.
+
+These pin the closing contract the sales screen depends on: it needs at
+least one sale event, it sets the batch to HARVESTED, it shuts the door on
+further daily records, and it stays owner/manager only.
 """
 from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
 
-from production.models import Batch, DailyRecord, Harvest, House
+from production.models import Batch, DailyRecord, Harvest, House, SaleEvent
 
 pytestmark = pytest.mark.django_db
 
@@ -31,7 +35,6 @@ def batch(house, owner):
         start_date=date(2026, 1, 1),
         created_by=owner,
     )
-    # 40 birds lost over 4 days -> 960 remaining.
     for day in range(1, 5):
         DailyRecord.objects.create(
             batch=b,
@@ -44,29 +47,29 @@ def batch(house, owner):
     return b
 
 
-def _url(farm, batch):
-    return f"/api/farms/{farm.id}/batches/{batch.id}/harvest/"
+def _sell(batch, birds=900, weight="1800.00", revenue="120000.00"):
+    return SaleEvent.objects.create(
+        batch=batch,
+        sale_date=date(2026, 1, 10),
+        sale_type=SaleEvent.SaleType.DRESSED,
+        bird_count=birds,
+        total_weight_kg=Decimal(weight),
+        revenue=Decimal(revenue) if revenue is not None else None,
+    )
 
 
-def _payload(**overrides):
-    body = {
-        "harvest_date": date(2026, 2, 15).isoformat(),
-        "birds_harvested": 950,
-        "total_weight_kg": "1800.00",
-    }
-    body.update(overrides)
-    return body
+def _close_url(farm, batch):
+    return f"/api/farms/{farm.id}/batches/{batch.id}/close/"
 
 
-def test_harvest_sets_status_and_frees_the_house(auth, owner, staffed_farm, house, batch):
-    response = auth(owner).post(_url(staffed_farm, batch), _payload(), format="json")
+def test_close_sets_status_and_frees_the_house(auth, owner, staffed_farm, house, batch):
+    _sell(batch)
+    response = auth(owner).post(_close_url(staffed_farm, batch), {}, format="json")
     assert response.status_code == 201, response.data
 
     batch.refresh_from_db()
     assert batch.status == Batch.Status.HARVESTED
 
-    # The house is free: the partial unique index only blocks a second
-    # ACTIVE batch, so a new one can now be placed in the same shed.
     replacement = Batch.objects.create(
         house=house,
         batch_code="H-2",
@@ -77,24 +80,49 @@ def test_harvest_sets_status_and_frees_the_house(auth, owner, staffed_farm, hous
     assert replacement.status == Batch.Status.ACTIVE
 
 
-def test_manager_can_harvest(auth, manager, staffed_farm, batch):
-    response = auth(manager).post(_url(staffed_farm, batch), _payload(), format="json")
+def test_manager_can_close(auth, manager, staffed_farm, batch):
+    _sell(batch)
+    response = auth(manager).post(_close_url(staffed_farm, batch), {}, format="json")
     assert response.status_code == 201, response.data
 
 
-def test_birds_harvested_above_remaining_is_rejected(auth, owner, staffed_farm, batch):
-    # 960 remain (1000 placed, 40 lost).
-    response = auth(owner).post(
-        _url(staffed_farm, batch), _payload(birds_harvested=1200), format="json"
-    )
+def test_close_with_no_sale_events_is_refused(auth, owner, staffed_farm, batch):
+    response = auth(owner).post(_close_url(staffed_farm, batch), {}, format="json")
     assert response.status_code == 400
-    assert "birds_harvested" in response.data
+    assert not Harvest.objects.filter(batch=batch).exists()
 
 
-def test_harvested_batch_rejects_new_daily_records(auth, owner, staffed_farm, batch):
+def test_close_records_a_buyer_link_and_closing_notes(
+    auth, owner, staffed_farm, batch
+):
+    from partners.models import FarmPartnerLink
+
+    buyer = FarmPartnerLink.objects.create(
+        farm=staffed_farm,
+        partner=owner,  # any user; only the link_type/farm matter here
+        link_type=FarmPartnerLink.LinkType.CONSUMER,
+        business_name="Bautista Dealers",
+        linked_by=owner,
+    )
+    _sell(batch, birds=960, weight="1900.00")
+
+    response = auth(owner).post(
+        _close_url(staffed_farm, batch),
+        {"buyer_link": buyer.id, "closing_notes": "Sold to the usual dealer."},
+        format="json",
+    )
+    assert response.status_code == 201, response.data
+
+    harvest = Harvest.objects.get(batch=batch)
+    assert harvest.buyer_link_id == buyer.id
+    assert "Sold to the usual dealer." in harvest.closing_notes
+
+
+def test_closed_batch_rejects_new_daily_records(auth, owner, staffed_farm, batch):
+    _sell(batch)
     assert (
         auth(owner)
-        .post(_url(staffed_farm, batch), _payload(), format="json")
+        .post(_close_url(staffed_farm, batch), {}, format="json")
         .status_code
         == 201
     )
@@ -102,7 +130,7 @@ def test_harvested_batch_rejects_new_daily_records(auth, owner, staffed_farm, ba
     response = auth(owner).post(
         f"/api/farms/{staffed_farm.id}/batches/{batch.id}/daily-records/",
         {
-            "record_date": date(2026, 2, 16).isoformat(),
+            "record_date": date(2026, 1, 6).isoformat(),
             "mortality_disease": 1,
             "feed_kg": "10.00",
         },
@@ -112,15 +140,16 @@ def test_harvested_batch_rejects_new_daily_records(auth, owner, staffed_farm, ba
     assert "closed" in str(response.data).lower()
 
 
-def test_worker_cannot_harvest(auth, worker, staffed_farm, batch):
-    response = auth(worker).post(_url(staffed_farm, batch), _payload(), format="json")
+def test_worker_cannot_close(auth, worker, staffed_farm, batch):
+    _sell(batch)
+    response = auth(worker).post(_close_url(staffed_farm, batch), {}, format="json")
     assert response.status_code == 403
     assert not Harvest.objects.filter(batch=batch).exists()
 
 
-def test_future_harvest_date_is_rejected(auth, owner, staffed_farm, batch):
-    future = (date.today() + timedelta(days=3)).isoformat()
-    response = auth(owner).post(
-        _url(staffed_farm, batch), _payload(harvest_date=future), format="json"
-    )
-    assert response.status_code == 400
+def test_double_close_is_refused(auth, owner, staffed_farm, batch):
+    _sell(batch)
+    auth(owner).post(_close_url(staffed_farm, batch), {}, format="json")
+    again = auth(owner).post(_close_url(staffed_farm, batch), {}, format="json")
+    assert again.status_code == 400
+    assert Harvest.objects.filter(batch=batch).count() == 1

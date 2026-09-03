@@ -161,6 +161,15 @@ class Batch(models.Model):
     total_mortality = models.PositiveIntegerField(default=0)
     total_feed_kg = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0"))
 
+    # Same treatment for sales: a batch leaves over dozens of SaleEvent
+    # rows, and current_bird_count needs the running total without a
+    # per-read aggregate. Maintained by signal on SaleEvent save/delete;
+    # recalculate_sales() rebuilds them from the rows.
+    total_birds_sold = models.PositiveIntegerField(default=0)
+    total_weight_sold_kg = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0")
+    )
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
         related_name="batches_created",
@@ -216,7 +225,15 @@ class Batch(models.Model):
 
     @property
     def current_bird_count(self):
-        return max(self.initial_bird_count - self.total_mortality, 0)
+        # Birds still in the shed: placed, less those that died, less those
+        # already sold. A batch now leaves incrementally, so sales draw the
+        # live count down exactly as mortality does.
+        return max(
+            self.initial_bird_count
+            - self.total_mortality
+            - self.total_birds_sold,
+            0,
+        )
 
     @property
     def mortality_rate(self):
@@ -233,17 +250,34 @@ class Batch(models.Model):
         return (end - self.start_date).days
 
     @property
+    def total_sale_weight_kg(self):
+        """
+        Live weight produced, summed across every sale event.
+
+        This is the FCR denominator now that a batch leaves incrementally.
+        Falls back to the Harvest's own total for a batch closed before
+        sale events existed (migrated history) so historical FCR is stable.
+        """
+        agg = self.sale_events.aggregate(w=models.Sum("total_weight_kg"))
+        if agg["w"]:
+            return agg["w"]
+        harvest = getattr(self, "harvest", None)
+        return harvest.total_weight_kg if harvest else None
+
+    @property
     def feed_conversion_ratio(self):
         """
         FCR = feed consumed / live weight produced. Lower is better.
 
-        Only computable after harvest — without a harvest weight there is
-        no denominator. Returns None for active batches by design.
+        Only meaningful once the batch is closed — an active batch is still
+        selling and has no final weight. Returns None otherwise.
         """
-        harvest = getattr(self, "harvest", None)
-        if harvest is None or not harvest.total_weight_kg:
+        if self.status != self.Status.HARVESTED:
             return None
-        return (self.total_feed_kg / harvest.total_weight_kg).quantize(Decimal("0.001"))
+        weight = self.total_sale_weight_kg
+        if not weight:
+            return None
+        return (self.total_feed_kg / weight).quantize(Decimal("0.001"))
 
     def recalculate_totals(self):
         """
@@ -267,6 +301,22 @@ class Batch(models.Model):
         )
         self.total_feed_kg = agg["feed"] or Decimal("0")
         self.save(update_fields=["total_mortality", "total_feed_kg"])
+
+    def recalculate_sales(self):
+        """
+        Rebuild the denormalized sale totals from the SaleEvent rows.
+
+        Full recalculation, not an increment — the 24-hour edit window
+        means a sale's count or weight can change after the fact, and an
+        incremental update would drift. Mirrors recalculate_totals().
+        """
+        agg = self.sale_events.aggregate(
+            birds=models.Sum("bird_count"),
+            weight=models.Sum("total_weight_kg"),
+        )
+        self.total_birds_sold = agg["birds"] or 0
+        self.total_weight_sold_kg = agg["weight"] or Decimal("0")
+        self.save(update_fields=["total_birds_sold", "total_weight_sold_kg"])
 
 
 class DailyRecord(OfflineSyncModel):
@@ -399,28 +449,39 @@ class WeightSample(OfflineSyncModel):
 
 class Harvest(models.Model):
     """
-    Closes a batch. This is where FCR becomes computable — before harvest
-    there is no weight denominator.
+    The record that CLOSES a batch.
+
+    It no longer records a single sale. A batch's birds leave across many
+    SaleEvent rows; this row marks the point where the last of them has
+    gone (or been written off) and the house is freed. Its totals are
+    populated from the summed sale events at closing time, not typed in —
+    which is why they are nullable: a batch closed before sale events
+    existed keeps the figures the old model captured.
     """
 
     batch = models.OneToOneField(Batch, on_delete=models.CASCADE, related_name="harvest")
     harvest_date = models.DateField()
-    birds_harvested = models.PositiveIntegerField()
+    birds_harvested = models.PositiveIntegerField(null=True, blank=True)
     total_weight_kg = models.DecimalField(
-        max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0"))]
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
     )
     revenue = models.DecimalField(
         max_digits=12, decimal_places=2, null=True, blank=True,
-        help_text="Gross sale value. Recorded after the fact, not transacted here.",
+        help_text="Summed from the batch's sale events at closing time.",
     )
     buyer_link = models.ForeignKey(
         "partners.FarmPartnerLink",
         on_delete=models.SET_NULL,
         null=True, blank=True,
         related_name="harvests_purchased",
-        help_text="Optional: the consumer this batch went to.",
+        help_text=(
+            "Optional principal buyer for the batch overall. Individual "
+            "sales carry no buyer."
+        ),
     )
     notes = models.CharField(max_length=255, blank=True)
+    closing_notes = models.CharField(max_length=255, blank=True)
 
     recorded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
@@ -433,11 +494,11 @@ class Harvest(models.Model):
         ordering = ["-harvest_date"]
 
     def __str__(self):
-        return f"{self.batch.batch_code} harvested {self.harvest_date}"
+        return f"{self.batch.batch_code} closed {self.harvest_date}"
 
     @property
     def average_weight_kg(self):
-        if not self.birds_harvested:
+        if not self.birds_harvested or not self.total_weight_kg:
             return None
         return (self.total_weight_kg / self.birds_harvested).quantize(Decimal("0.001"))
 
@@ -447,12 +508,79 @@ class Harvest(models.Model):
             return None
         return (self.revenue / self.total_weight_kg).quantize(Decimal("0.01"))
 
+
+class SaleEvent(OfflineSyncModel):
+    """
+    One transaction in which some of a batch's birds left the farm.
+
+    A batch of thousands does not leave in one harvest — a buyer orders 60
+    to 100 dressed birds culled overnight, individuals buy single live
+    birds at the gate, and a cohort empties over weeks in dozens of these.
+    Each carries only a count, a weight, and (optionally) a revenue figure.
+
+    It is NOT a sales record: no customer, no order, no status, no
+    delivery, no payment, and deliberately no per-sale buyer link. The
+    batch's overall buyer, if any, sits on the closing Harvest.
+
+    Extends OfflineSyncModel: recorded the morning after a night cull,
+    sometimes from a phone in the yard, so it gets the client UUID primary
+    key, recorded_by, recorded_at, and the 24-hour edit window like any
+    other field record. There is deliberately no (batch, sale_date)
+    uniqueness — several sales happen in one day.
+    """
+
+    class SaleType(models.TextChoices):
+        DRESSED = "DRESSED", "Dressed"
+        LIVE = "LIVE", "Live"
+
+    batch = models.ForeignKey(
+        Batch, on_delete=models.CASCADE, related_name="sale_events"
+    )
+    sale_date = models.DateField(db_index=True)
+    sale_type = models.CharField(max_length=20, choices=SaleType.choices)
+    bird_count = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    total_weight_kg = models.DecimalField(
+        max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0"))]
+    )
+    revenue = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Sale value. Optional — a weight-only record is valid.",
+    )
+    notes = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        db_table = "production_sale_event"
+        ordering = ["-sale_date", "-created_at"]
+        indexes = [
+            models.Index(fields=["batch", "sale_date"], name="sale_batch_date_idx"),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.batch.batch_code} — {self.bird_count} "
+            f"{self.get_sale_type_display().lower()} on {self.sale_date}"
+        )
+
+    @property
+    def average_weight_kg(self):
+        if not self.bird_count:
+            return None
+        return (self.total_weight_kg / self.bird_count).quantize(Decimal("0.001"))
+
+    @property
+    def revenue_per_kg(self):
+        if self.revenue is None or not self.total_weight_kg:
+            return None
+        return (self.revenue / self.total_weight_kg).quantize(Decimal("0.01"))
+
     def clean(self):
-        if self.batch_id and self.birds_harvested:
-            if self.birds_harvested > self.batch.current_bird_count:
+        if self.sale_date and self.batch_id:
+            if self.sale_date < self.batch.start_date:
                 raise ValidationError(
-                    {"birds_harvested": "More birds harvested than the batch contains."}
+                    {"sale_date": "Cannot record a sale before the batch started."}
                 )
+            if self.sale_date > timezone.localdate():
+                raise ValidationError({"sale_date": "Cannot record a future date."})
 
 
 class FeedDelivery(OfflineSyncModel):

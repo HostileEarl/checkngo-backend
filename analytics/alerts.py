@@ -66,6 +66,7 @@ def compute_alerts(farm, membership=None):
     alerts += _today_not_recorded(active, today, membership)
     alerts += _routine_incomplete(farm, now, today)
     alerts += _harvest_approaching(active, today)
+    alerts += _batch_nearly_empty(active)
     alerts += _invitation_expiring(farm, now)
     alerts += _record_corrected_recently(farm, now)
     return alerts
@@ -343,6 +344,44 @@ def _harvest_approaching(active_batches, today):
                 "title": f"{b.batch_code} is near harvest",
                 "detail": (
                     f"Expected on {d.isoformat()}, day {b.age_days} of the cycle."
+                ),
+                "link": "/batches",
+                "audience": list(_OWNER_MANAGER),
+            }
+        )
+    return out
+
+
+# ─────────────────────────────────────────────────────────────
+# 4b. Batch nearly empty
+# ─────────────────────────────────────────────────────────────
+
+BATCH_NEARLY_EMPTY_PCT = Decimal("5")
+
+
+def _batch_nearly_empty(active_batches):
+    """
+    An active batch that has almost fully sold — under 5% of the placed
+    flock still in the shed. In the incremental model this is the signal
+    that the cycle is basically done and the batch is ready to close.
+    Suppressed once the batch is closed (it is not in `active_batches`).
+    """
+    out = []
+    for b in active_batches:
+        placed = b.initial_bird_count
+        if not placed:
+            continue
+        remaining = b.current_bird_count
+        if _pct(remaining, placed) >= BATCH_NEARLY_EMPTY_PCT:
+            continue
+        out.append(
+            {
+                "id": f"batch-nearly-empty:{b.id}",
+                "severity": "info",
+                "title": f"{b.batch_code} is nearly empty",
+                "detail": (
+                    f"{remaining:,} of {placed:,} birds remain. "
+                    "The batch may be ready to close."
                 ),
                 "link": "/batches",
                 "audience": list(_OWNER_MANAGER),
