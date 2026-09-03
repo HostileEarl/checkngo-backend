@@ -206,6 +206,71 @@ class BatchCreateSerializer(serializers.ModelSerializer):
 # ─────────────────────────────────────────────────────────────
 
 
+def sync_feed_usage_log(daily_record, *, user):
+    """
+    Mirror a daily record's feed line into an InventoryUsageLog.
+
+    Feed leaves the store once but is measured in two places: the daily
+    record's feed_kg drives FCR, and an InventoryUsageLog drives the item
+    balance. A worker should record the feeding once, so every path that
+    writes a DailyRecord calls this — single create, PATCH, and bulk-sync —
+    inside that write's own transaction, so the two rows land together or
+    not at all.
+
+    The drawdown is denominated in the item's own unit, so it is
+    feed_sacks that is logged, not feed_kg — that is what makes the balance
+    come out in sacks. The DailyRecordSerializer has already guaranteed, by
+    the time we get here, that feed_item is on the same farm and carries a
+    kg_per_unit whenever feed_sacks is set.
+
+    Keyed off the OneToOne link, so it is idempotent: a re-sync of the same
+    record updates the one linked log rather than drawing the item down
+    twice.
+
+      feed_item + feed_sacks set   → create or update the linked log
+      feed_item changed            → delete the old log, create against the new
+                                     item (a reversal on the old, a draw on
+                                     the new), never reassign
+      feed_item cleared / feed_sacks
+        cleared                    → delete the linked log
+    """
+    existing = InventoryUsageLog.objects.filter(daily_record=daily_record).first()
+
+    wants_log = (
+        daily_record.feed_item_id is not None
+        and daily_record.feed_sacks is not None
+    )
+
+    if not wants_log:
+        if existing is not None:
+            existing.delete()
+        return None
+
+    # A changed feed item is a reversal on the old item and a fresh draw on
+    # the new one — the log's item is fixed once written, so it is replaced,
+    # not moved.
+    if existing is not None and existing.item_id != daily_record.feed_item_id:
+        existing.delete()
+        existing = None
+
+    if existing is None:
+        return InventoryUsageLog.objects.create(
+            daily_record=daily_record,
+            item=daily_record.feed_item,
+            quantity_used=daily_record.feed_sacks,
+            usage_date=daily_record.record_date,
+            recorded_by=user,
+        )
+
+    existing.quantity_used = daily_record.feed_sacks
+    existing.usage_date = daily_record.record_date
+    existing.recorded_by = user
+    existing.save(
+        update_fields=["quantity_used", "usage_date", "recorded_by", "updated_at"]
+    )
+    return existing
+
+
 class DailyRecordSerializer(serializers.ModelSerializer):
     """
     One entry per batch per day.
@@ -368,14 +433,20 @@ class DailyRecordSerializer(serializers.ModelSerializer):
                 }
             )
         validated_data.pop("record_date", None)  # the day itself is fixed
-        return super().update(instance, validated_data)
+        with transaction.atomic():
+            record = super().update(instance, validated_data)
+            sync_feed_usage_log(record, user=self.context["request"].user)
+        return record
 
     def create(self, validated_data):
-        return DailyRecord.objects.create(
-            batch=self.context["batch"],
-            recorded_by=self.context["request"].user,
-            **validated_data,
-        )
+        with transaction.atomic():
+            record = DailyRecord.objects.create(
+                batch=self.context["batch"],
+                recorded_by=self.context["request"].user,
+                **validated_data,
+            )
+            sync_feed_usage_log(record, user=self.context["request"].user)
+        return record
 
 
 class DailyRecordBulkSyncSerializer(serializers.Serializer):
@@ -478,6 +549,9 @@ class DailyRecordBulkSyncSerializer(serializers.Serializer):
                         record = DailyRecord.objects.create(
                             batch=batch, recorded_by=user, **payload
                         )
+                        # Same transaction as the record: the derived
+                        # inventory drawdown lands with it or not at all.
+                        sync_feed_usage_log(record, user=user)
                         created.append(str(record.id))
                     elif existing.is_editable:
                         # Overwrite on re-sync — the device is the source of
@@ -487,6 +561,7 @@ class DailyRecordBulkSyncSerializer(serializers.Serializer):
                                 setattr(existing, field, val)
                         existing.recorded_by = user
                         existing.save()
+                        sync_feed_usage_log(existing, user=user)
                         updated.append(str(existing.id))
                     else:
                         failed.append(

@@ -1,6 +1,8 @@
 # production/views.py
 import uuid
+from decimal import Decimal
 
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, serializers, status
@@ -543,6 +545,89 @@ class FeedStockView(APIView):
                 "total_feed_cost": str(delivered["cost"] or Decimal("0")),
             }
         )
+
+
+class FeedDeliveryWithStockView(APIView):
+    """
+    POST /api/farms/<farm_pk>/feed-deliveries/with-stock/
+
+    One delivery, two records. A feed delivery is a FeedDelivery (per farm,
+    feeds cost analysis and feed margin) and — when it is a tracked
+    inventory item — also an InventoryStockIn (per item, feeds the balance).
+    Recording them in two separate requests guarantees drift the day
+    someone forgets the second one, so this writes both inside one
+    transaction: if the stock-in fails, the delivery rolls back with it and
+    a resubmit cannot double-count the cost.
+
+    The plain POST /feed-deliveries/ is left untouched — not every delivery
+    is an inventory item.
+    """
+
+    permission_classes = [CanManageFeed]
+
+    def post(self, request, farm_pk):
+        farm = request.farm
+
+        item = None
+        raw_item = request.data.get("inventory_item")
+        if raw_item not in (None, ""):
+            try:
+                item_pk = int(raw_item)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError(
+                    {"inventory_item": "Not a valid item id."}
+                )
+            item = InventoryItem.objects.filter(pk=item_pk, farm=farm).first()
+            if item is None:
+                raise serializers.ValidationError(
+                    {"inventory_item": "No such feed item on this farm."}
+                )
+            if not item.kg_per_unit:
+                raise serializers.ValidationError(
+                    {
+                        "inventory_item": (
+                            f"{item.name} has no kilograms-per-unit set, so a "
+                            "delivery in kg cannot be converted to its unit. "
+                            "Set the sack weight on the item first."
+                        )
+                    }
+                )
+
+        delivery_serializer = FeedDeliverySerializer(
+            data=request.data, context={"request": request, "farm": farm}
+        )
+        delivery_serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            delivery = delivery_serializer.save()
+
+            stock_in = None
+            if item is not None:
+                quantity_in_units = (
+                    delivery.quantity_kg / item.kg_per_unit
+                ).quantize(Decimal("0.01"))
+                ref = delivery.invoice_ref.strip()
+                stock_in = InventoryStockIn.objects.create(
+                    item=item,
+                    quantity=quantity_in_units,
+                    stock_in_date=delivery.delivery_date,
+                    note=f"Feed delivery — {ref}" if ref else "Feed delivery",
+                    recorded_by=request.user,
+                )
+
+        return Response(
+            {
+                "feed_delivery": FeedDeliverySerializer(delivery).data,
+                "inventory_stock_in": (
+                    InventoryStockInSerializer(stock_in).data
+                    if stock_in is not None
+                    else None
+                ),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class DailyRecordCorrectView(BatchScopedMixin, APIView):
     """
     POST /api/farms/<farm_pk>/batches/<batch_pk>/daily-records/<pk>/correct/

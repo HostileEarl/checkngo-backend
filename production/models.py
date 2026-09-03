@@ -800,6 +800,23 @@ class InventoryUsageLog(OfflineSyncModel):
     usage_date = models.DateField(db_index=True)
     notes = models.CharField(max_length=255, blank=True)
 
+    # Set when this drawdown was derived from a daily record's feed line
+    # rather than logged directly on the supplies screen. One daily record
+    # has a single (feed_item, feed_sacks) line, so it backs at most one
+    # usage log — OneToOne, which also stops a re-sync from ever creating a
+    # second. SET_NULL, not CASCADE: the feed physically left the store, so
+    # the drawdown stays on the books as an anonymous usage even if its
+    # originating daily record is later removed. Erasing it would silently
+    # inflate the balance and break Σ(stock-in) − Σ(usage).
+    daily_record = models.OneToOneField(
+        "DailyRecord",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="derived_usage_log",
+        help_text="The daily record whose feed line produced this drawdown.",
+    )
+
     class Meta:
         db_table = "production_inventory_usage_log"
         ordering = ["-usage_date", "-created_at"]
