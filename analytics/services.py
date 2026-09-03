@@ -190,7 +190,7 @@ def fcr_by_batch(farm):
                 "harvest_date": harvest.harvest_date.isoformat(),
                 "cycle_days": cycle_days,
                 "birds_placed": batch.initial_bird_count,
-                "birds_harvested": harvest.harvest_date,
+                "birds_harvested": harvest.birds_harvested,
                 "survival_rate_pct": str(survival),
                 "total_feed_kg": str(batch.total_feed_kg),
                 "total_weight_kg": str(harvest.total_weight_kg),

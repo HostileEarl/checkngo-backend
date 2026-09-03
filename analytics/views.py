@@ -1,5 +1,11 @@
 # analytics/views.py
+import csv
+
+from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils.dateparse import parse_date
+from django.utils.text import slugify
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -7,6 +13,7 @@ from farms.models import FarmMembership
 from farms.permissions import FarmScopedPermission
 from production.models import Batch
 
+from . import reports
 from .alerts import compute_alerts
 from .services import (
     farm_dashboard,
@@ -226,3 +233,167 @@ class AlertsView(APIView):
             counts[alert["severity"]] += 1
 
         return Response({"alerts": visible, "counts": counts})
+
+
+# ─────────────────────────────────────────────────────────────
+# CSV report exports — owner and manager only
+# ─────────────────────────────────────────────────────────────
+#
+# A report is an aggregate export, which is not a worker's function, so
+# every one of these is behind OwnerManagerAnalyticsPermission — the
+# non-financial ones included. The rows come from analytics.reports; the
+# views here only parse the query, stream the response, and name the file.
+
+
+class _Echo:
+    """A file-like object that returns what it is handed — csv.writer writes
+    into this, and each written row becomes one chunk of the stream."""
+
+    def write(self, value):
+        return value
+
+
+def _csv_stream(rows, filename):
+    """
+    Wrap a row generator in a StreamingHttpResponse.
+
+    The generator is consumed lazily by Django as it fills the socket, so
+    the whole file is never held in memory — the point of the exercise on a
+    server with a few thousand daily records and not much RAM.
+    """
+    writer = csv.writer(_Echo())
+    response = StreamingHttpResponse(
+        (writer.writerow(row) for row in rows),
+        content_type="text/csv",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+def _date_range(request):
+    """
+    Parse ?from= and ?to=, both optional and both inclusive. A malformed
+    date, or `from` later than `to`, is a 400 — DRF's ValidationError
+    renders it for us.
+    """
+    raw_from = request.query_params.get("from")
+    raw_to = request.query_params.get("to")
+
+    date_from = parse_date(raw_from) if raw_from else None
+    date_to = parse_date(raw_to) if raw_to else None
+
+    if raw_from and date_from is None:
+        raise ValidationError({"from": "Expected a date as YYYY-MM-DD."})
+    if raw_to and date_to is None:
+        raise ValidationError({"to": "Expected a date as YYYY-MM-DD."})
+    if date_from and date_to and date_from > date_to:
+        raise ValidationError({"detail": "`from` must not be after `to`."})
+
+    return date_from, date_to
+
+
+def _report_filename(farm, slug, date_from=None, date_to=None):
+    """e.g. santos-broiler-farm-daily-records-2026-01-01-to-2026-03-31.csv"""
+    base = f"{slugify(farm.name)}-{slug}"
+    if date_from and date_to:
+        return f"{base}-{date_from.isoformat()}-to-{date_to.isoformat()}.csv"
+    if date_from:
+        return f"{base}-from-{date_from.isoformat()}.csv"
+    if date_to:
+        return f"{base}-through-{date_to.isoformat()}.csv"
+    return f"{base}.csv"
+
+
+class _ReportView(APIView):
+    permission_classes = [OwnerManagerAnalyticsPermission]
+
+
+@extend_schema(tags=["Reports"], summary="Daily records — CSV export")
+class DailyRecordsReportView(_ReportView):
+    """GET /api/farms/<farm_pk>/reports/daily-records.csv?from=&to=&batch="""
+
+    def get(self, request, farm_pk):
+        date_from, date_to = _date_range(request)
+        rows = reports.daily_records_rows(
+            request.farm,
+            date_from,
+            date_to,
+            request.query_params.get("batch"),
+        )
+        return _csv_stream(
+            rows,
+            _report_filename(request.farm, "daily-records", date_from, date_to),
+        )
+
+
+@extend_schema(tags=["Reports"], summary="Mortality summary by batch — CSV export")
+class MortalitySummaryReportView(_ReportView):
+    """GET /api/farms/<farm_pk>/reports/mortality-summary.csv?from=&to="""
+
+    def get(self, request, farm_pk):
+        date_from, date_to = _date_range(request)
+        rows = reports.mortality_summary_rows(request.farm, date_from, date_to)
+        return _csv_stream(
+            rows,
+            _report_filename(
+                request.farm, "mortality-summary", date_from, date_to
+            ),
+        )
+
+
+@extend_schema(tags=["Reports"], summary="Feed conversion ratio — CSV export")
+class FCRReportView(_ReportView):
+    """GET /api/farms/<farm_pk>/reports/fcr.csv"""
+
+    def get(self, request, farm_pk):
+        rows = reports.fcr_rows(request.farm)
+        return _csv_stream(rows, _report_filename(request.farm, "fcr"))
+
+
+@extend_schema(tags=["Reports"], summary="Feed margin by batch — CSV export")
+class FeedMarginReportView(_ReportView):
+    """GET /api/farms/<farm_pk>/reports/feed-margin.csv"""
+
+    def get(self, request, farm_pk):
+        rows = reports.feed_margin_rows(request.farm)
+        return _csv_stream(rows, _report_filename(request.farm, "feed-margin"))
+
+
+@extend_schema(tags=["Reports"], summary="Inventory usage — CSV export")
+class InventoryUsageReportView(_ReportView):
+    """GET /api/farms/<farm_pk>/reports/inventory-usage.csv?from=&to=&item="""
+
+    def get(self, request, farm_pk):
+        date_from, date_to = _date_range(request)
+        rows = reports.inventory_usage_rows(
+            request.farm,
+            date_from,
+            date_to,
+            request.query_params.get("item"),
+        )
+        return _csv_stream(
+            rows,
+            _report_filename(
+                request.farm, "inventory-usage", date_from, date_to
+            ),
+        )
+
+
+@extend_schema(tags=["Reports"], summary="Routine completion — CSV export")
+class RoutineCompletionReportView(_ReportView):
+    """GET /api/farms/<farm_pk>/reports/routine-completion.csv?from=&to=&house="""
+
+    def get(self, request, farm_pk):
+        date_from, date_to = _date_range(request)
+        rows = reports.routine_completion_rows(
+            request.farm,
+            date_from,
+            date_to,
+            request.query_params.get("house"),
+        )
+        return _csv_stream(
+            rows,
+            _report_filename(
+                request.farm, "routine-completion", date_from, date_to
+            ),
+        )
