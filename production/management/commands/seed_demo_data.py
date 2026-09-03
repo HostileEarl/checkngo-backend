@@ -28,6 +28,8 @@ from production.models import (
     FeedDelivery,
     Harvest,
     House,
+    InventoryItem,
+    InventoryStockIn,
     TaskCompletion,
     TaskTemplate,
     WeightSample,
@@ -77,6 +79,7 @@ class Command(BaseCommand):
             houses = self._create_houses(farm)
             self._scope_worker_to_house(farm, worker, houses[0])
             self._create_routine(farm, worker, houses[0])
+            self._create_inventory(farm, owner)
             # Order matters: the batches and their daily records must exist
             # before deliveries can be sized to match what they consume.
             self._create_batches(farm, houses, owner, worker, buyer)
@@ -92,6 +95,7 @@ class Command(BaseCommand):
         count = batches.count()
         batches.delete()  # cascades to daily records, weights, harvests
         FeedDelivery.objects.filter(invoice_ref__startswith=DEMO_PREFIX).delete()
+        InventoryStockIn.objects.filter(note__startswith=DEMO_PREFIX).delete()
         self.stdout.write(f"  removed {count} demo batches")
 
     # -- people ----------------------------------------------
@@ -246,6 +250,53 @@ class Command(BaseCommand):
                 f"- daily routine: {len(templates)} tasks, "
                 f"{len(done_today)} ticked off today for {house.name} "
                 f"by {worker.full_name}"
+            )
+        )
+
+    def _create_inventory(self, farm, owner):
+        """
+        A feed item with a sack weight, so the demo farm can record feed in
+        sacks, plus one non-feed item that has no kg conversion. Seeded
+        daily records keep feed_kg only — back-filling invented sack counts
+        would be fabricating provenance.
+        """
+        feed, _ = InventoryItem.objects.get_or_create(
+            farm=farm,
+            name="Broiler feed",
+            defaults={
+                "unit": "sack",
+                "kg_per_unit": Decimal("50"),
+                "low_stock_threshold": Decimal("10"),
+                "created_by": owner,
+            },
+        )
+        if feed.kg_per_unit != Decimal("50"):
+            feed.kg_per_unit = Decimal("50")
+            feed.save(update_fields=["kg_per_unit"])
+
+        InventoryItem.objects.get_or_create(
+            farm=farm,
+            name="Disinfectant",
+            defaults={
+                "unit": "litre",
+                "kg_per_unit": None,
+                "low_stock_threshold": Decimal("20"),
+                "created_by": owner,
+            },
+        )
+
+        if not feed.stock_ins.exists():
+            InventoryStockIn.objects.create(
+                item=feed,
+                quantity=Decimal("400"),
+                stock_in_date=timezone.localdate() - timedelta(days=20),
+                note=f"{DEMO_PREFIX}opening stock",
+                recorded_by=owner,
+            )
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                "- inventory: Broiler feed (50 kg/sack) + Disinfectant"
             )
         )
 

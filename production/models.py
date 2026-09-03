@@ -287,6 +287,25 @@ class DailyRecord(OfflineSyncModel):
         max_digits=8, decimal_places=2, default=Decimal("0"),
         validators=[MinValueValidator(Decimal("0"))],
     )
+
+    # Provenance for feed recorded in sacks. feed_kg stays the one
+    # authoritative value everything downstream reads; these two record
+    # where it came from — which feed, how many sacks — so the trail reads
+    # "5 sacks x 50 kg = 250 kg" permanently and editing the item's sack
+    # weight later cannot rewrite it. Nullable: a record entered straight
+    # in kilograms simply has no sack provenance, which is accurate.
+    feed_sacks = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    feed_item = models.ForeignKey(
+        "InventoryItem",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="daily_feed_records",
+        help_text="The feed item the sacks were counted against.",
+    )
     notes = models.CharField(max_length=255, blank=True)
 
     class Meta:
@@ -648,6 +667,17 @@ class InventoryItem(models.Model):
     name = models.CharField(max_length=100)
     unit = models.CharField(
         max_length=20, help_text="How it is counted: kg, litre, sack, dose."
+    )
+    kg_per_unit = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text=(
+            "Kilograms per unit, for feed items. Leave blank for items not "
+            "measured by weight."
+        ),
     )
     low_stock_threshold = models.DecimalField(
         max_digits=10,

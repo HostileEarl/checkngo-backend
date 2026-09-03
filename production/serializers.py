@@ -225,6 +225,9 @@ class DailyRecordSerializer(serializers.ModelSerializer):
     recorded_by_name = serializers.CharField(
         source="recorded_by.full_name", read_only=True, default=None
     )
+    feed_item_name = serializers.CharField(
+        source="feed_item.name", read_only=True, default=None
+    )
     sync_delay_seconds = serializers.FloatField(read_only=True)
 
     class Meta:
@@ -239,6 +242,9 @@ class DailyRecordSerializer(serializers.ModelSerializer):
             "mortality_culled",
             "mortality_unknown",
             "feed_kg",
+            "feed_sacks",
+            "feed_item",
+            "feed_item_name",
             "notes",
             "recorded_by",
             "recorded_by_name",
@@ -289,6 +295,63 @@ class DailyRecordSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"mortality_unknown": f"Only {alive} birds remain in this batch."}
             )
+
+        # ── Feed recorded in sacks ───────────────────────────
+        # feed_kg is authoritative and client-supplied; the server never
+        # recomputes it from sacks x kg_per_unit, because the item's
+        # kg_per_unit may have changed between an offline entry and its
+        # sync. But if a sack count was recorded, the supplied feed_kg must
+        # agree with it within a small tolerance — otherwise a client bug
+        # could write a nonsense weight behind a plausible sack count.
+        feed_sacks = attrs.get(
+            "feed_sacks", getattr(self.instance, "feed_sacks", None)
+        )
+        feed_item = attrs.get(
+            "feed_item", getattr(self.instance, "feed_item", None)
+        )
+        feed_kg = attrs.get("feed_kg", getattr(self.instance, "feed_kg", None))
+
+        if feed_sacks is not None:
+            if feed_item is None:
+                raise serializers.ValidationError(
+                    {"feed_item": "Choose which feed these sacks are."}
+                )
+            if feed_item.farm_id != batch.house.farm_id:
+                raise serializers.ValidationError(
+                    {"feed_item": "That feed item belongs to another farm."}
+                )
+            if feed_item.kg_per_unit is None:
+                raise serializers.ValidationError(
+                    {
+                        "feed_item": (
+                            f"{feed_item.name} has no sack weight set. Ask "
+                            "your manager to set kilograms per sack on it."
+                        )
+                    }
+                )
+
+            expected = (feed_sacks * feed_item.kg_per_unit).quantize(
+                Decimal("0.01")
+            )
+            tolerance = max(
+                Decimal("0.50"),
+                (expected * Decimal("0.01")).quantize(Decimal("0.01")),
+            )
+            if feed_kg is None or abs(Decimal(feed_kg) - expected) > tolerance:
+                raise serializers.ValidationError(
+                    {
+                        "feed_kg": (
+                            f"Sack total does not add up: {feed_sacks} sacks "
+                            f"x {feed_item.kg_per_unit} kg is {expected} kg, "
+                            f"but {feed_kg} kg was recorded. Fix the sacks or "
+                            "the feed item and try again."
+                        )
+                    }
+                )
+        else:
+            # No sack count means no sack provenance — never store a feed
+            # item on its own.
+            attrs["feed_item"] = None
 
         return attrs
 
@@ -853,6 +916,7 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "unit",
+            "kg_per_unit",
             "low_stock_threshold",
             "is_active",
             "current_quantity",
