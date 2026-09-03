@@ -88,8 +88,8 @@ def _high_mortality(active_batches):
                     "severity": "danger",
                     "title": f"High mortality in {b.batch_code}",
                     "detail": (
-                        f"{rate}% of the flock has been lost. "
-                        "Typical is under 5%."
+                        f"{rate}% of the flock lost. "
+                        "Above 8% usually means something is wrong."
                     ),
                     "link": "/analytics",
                     "audience": list(_EVERYONE),
@@ -126,8 +126,8 @@ def _negative_feed_balance(farm):
             "severity": "danger",
             "title": "Feed records do not balance",
             "detail": (
-                f"Consumption exceeds recorded deliveries by {short} kg. "
-                "A delivery may not have been recorded."
+                f"Feed used is {short} kg more than what was delivered. "
+                "A delivery may be missing."
             ),
             "link": "/records",
             "audience": list(_OWNER_MANAGER),
@@ -193,9 +193,9 @@ def _low_stock(farm):
                     "severity": "danger",
                     "title": f"Out of stock: {item.name}",
                     "detail": (
-                        f"{item.name} is down to {_fmt_qty(qty)} {item.unit}. "
-                        "Usage is still being recorded against it — record a "
-                        "delivery or correct the logs."
+                        f"{item.name} is down to {_fmt_qty(qty)} {item.unit}, "
+                        "but it is still being used. Record a delivery, or fix "
+                        "the entries."
                     ),
                 }
             )
@@ -206,8 +206,8 @@ def _low_stock(farm):
                     "severity": "warning",
                     "title": f"Low stock: {item.name}",
                     "detail": (
-                        f"{_fmt_qty(qty)} {item.unit} left, at or below the "
-                        f"reorder level of {_fmt_qty(threshold)} {item.unit}."
+                        f"{_fmt_qty(qty)} {item.unit} left. That is at or below "
+                        f"the reorder level of {_fmt_qty(threshold)} {item.unit}."
                     ),
                 }
             )
@@ -251,7 +251,7 @@ def _today_not_recorded(active_batches, today, membership=None):
                 "id": f"today:{b.id}",
                 "severity": "warning",
                 "title": f"No record yet for {b.batch_code}",
-                "detail": "Today's mortality and feed have not been entered.",
+                "detail": "Today's birds lost and feed have not been entered.",
                 "link": "/entry",
                 "audience": list(_EVERYONE),
             }
@@ -316,8 +316,8 @@ def _routine_incomplete(farm, now, today):
             {
                 "id": f"routine-incomplete:{house.id}",
                 "severity": "warning",
-                "title": f"{house.name}: daily routine not finished",
-                "detail": f"{house.name} has not recorded: {', '.join(missing)}.",
+                "title": f"{house.name}: daily jobs not finished",
+                "detail": f"Not done yet at {house.name}: {', '.join(missing)}.",
                 "link": "/tasks",
                 "audience": list(_OWNER_MANAGER),
             }
@@ -343,7 +343,7 @@ def _harvest_approaching(active_batches, today):
                 "severity": "info",
                 "title": f"{b.batch_code} is near harvest",
                 "detail": (
-                    f"Expected on {d.isoformat()}, day {b.age_days} of the cycle."
+                    f"Due to finish on {d.isoformat()}, day {b.age_days}."
                 ),
                 "link": "/batches",
                 "audience": list(_OWNER_MANAGER),
@@ -410,7 +410,7 @@ def _invitation_expiring(farm, now):
                 "title": f"Invitation for {inv.full_name} expires soon",
                 "detail": (
                     f"It expires on {inv.expires_at.date().isoformat()}. "
-                    "After that you will need to issue a new one."
+                    "After that you will need to send a new one."
                 ),
                 "link": "/staff",
                 "audience": list(_OWNER_MANAGER),
@@ -440,7 +440,7 @@ def _record_corrected_recently(farm, now):
                 "severity": "info",
                 "title": "A record was corrected",
                 "detail": (
-                    f"{rc.corrected_by_name} amended {rc.record_date.isoformat()} "
+                    f"{rc.corrected_by_name} changed {rc.record_date.isoformat()} "
                     f"on {rc.batch.batch_code}."
                 ),
                 "link": "/records",
