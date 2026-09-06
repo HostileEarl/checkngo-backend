@@ -11,6 +11,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from accounts.models import User
+from accounts.services import issue_owner_account
 
 
 class Command(BaseCommand):
@@ -52,15 +53,13 @@ class Command(BaseCommand):
             )
             existing.delete()
 
-        user = User.objects.create_user(
-            phone_number=phone,
-            password=pin,
+        # Same code path as the admin's "Create Farm Owner" flow and a real
+        # invitation acceptance. --pin is honoured here only because this is a
+        # DEBUG-gated local helper; production issuance is always random.
+        user, pin = issue_owner_account(
             full_name=name,
-            role=User.Role.OWNER,
-            # Explicit even though it is the model default: the whole point
-            # of this account is to exercise the PIN gate before the setup
-            # wizard, the same path a real invited owner would take.
-            must_change_credential=True,
+            phone_number=phone,
+            pin=pin,
         )
 
         self.stdout.write("")

@@ -1,7 +1,11 @@
 # CheckN Go — Platform Administrator Guide
 
-This is the guide for the **Django admin** at `/admin/`. It is the platform
-operator interface, deliberately separate from the farm-facing application.
+This is the guide for the **Django admin**. It is the platform operator
+interface, deliberately separate from the farm-facing application.
+
+The admin is **not** at `/admin/`. Its path is read from the `ADMIN_URL`
+environment variable and is unguessable in every real environment (see
+*Deployment notes* at the end). `/admin/` itself returns 404.
 
 There is **no in-app administrator role**. Owners, managers, and workers all
 operate inside a farm through `FarmMembership`; none of them can create
@@ -12,53 +16,65 @@ Access requires a Django account with `is_staff=True` (and, in practice,
 `is_superuser=True`). Those accounts are created with
 `manage.py createsuperuser` on the server, never through the app.
 
+The admin login is rate-limited (django-axes): **5 failed attempts** for a
+given username + IP within an hour locks that pair out for **1 hour**. A
+successful login clears the count. See *If you are locked out* below.
+
 ---
 
 ## 1. Creating a new farm owner account
 
 A new customer is onboarded by creating their OWNER account here. They then
-log in to the app, are forced to rotate the PIN you set, and — because they
-belong to no farm yet — are routed automatically into the setup wizard,
-where they register their own farm.
+log in to the app, are forced to rotate the PIN the system issued, and —
+because they belong to no farm yet — are routed automatically into the setup
+wizard, where they register their own farm.
 
 **Steps**
 
-1. Go to **Accounts → Users → Add user**.
+1. Go to **Accounts → Farm owner accounts → Add farm owner account**.
 2. Fill in:
-   - **Phone number** — E.164 format, e.g. `+639171234567`. This is the
-     login identifier; there is no username.
    - **Full name**.
-   - **Role** — set to **Farm Owner (`OWNER`)**. This is the field that
-     later lets the account hold a `FarmMembership` and own a `Farm`; a
-     `SUPPLIER`/`CONSUMER` account cannot.
-   - **Password / password confirmation** — this is the **initial PIN** you
-     will read out to the owner. Use a 6-digit number to match what the app
-     expects. It is transmitted to them out of band (call, SMS); they
-     replace it on first login.
-3. Save. You land on the full change form.
-4. On the change form, confirm:
-   - **Must change credential** is **still ticked**. Leave it. This is the
-     forced-rotation gate — every API endpoint except *view me* and *change
-     credential* returns `403` until the owner rotates the PIN themselves.
-     That rotation is the non-repudiation event: from then on the
-     credential is known only to them. **Do not untick this box by hand**;
-     doing so silently defeats the guarantee.
-   - **Role** is `OWNER`.
-   - **Active** is ticked.
-   - Leave **Staff status** and **Superuser status** unticked. An owner is
-     not a platform operator.
-5. Do **not** create a `Farm` or `FarmMembership` for them here. Leave the
-   account with **no membership**. When the owner logs in, rotates the PIN,
-   and the app finds zero memberships, it sends them to `/setup`, where
-   they register their farm. Registering the farm creates the `Farm`, the
-   owner's `OWNER` `FarmMembership`, and the first `FarmOwnershipHistory`
-   row (the "registration" entry, with no `from_owner`).
+   - **Phone number** — E.164 format, e.g. `+639171234567`. Display spacing
+     (`+63 917 123 4567`) is accepted and stripped. This is the login
+     identifier; there is no username.
+   - **Email** — optional.
+   There is **no password field**. The account role is set to `OWNER`
+   automatically, and the login PIN is generated for you.
+3. Save. A yellow banner shows the **one-time PIN**:
+   > One-time PIN for *Name*: `481920` — give it to the owner now. It is not
+   > stored and cannot be shown again; they must change it on first login.
+   Copy it out immediately and pass it to the owner out of band (spoken, or
+   SMS). It is only the password hash from here on — there is no way to read
+   it back, and no "resend".
+4. That is the whole flow. The account is created with `role=OWNER`,
+   `must_change_credential=True` (the forced-rotation gate), `is_staff=False`,
+   and **no farm or membership**. When the owner logs in, rotates the PIN,
+   and the app finds zero memberships, it sends them to `/setup`, where they
+   register their farm — which creates the `Farm`, their `OWNER`
+   `FarmMembership`, and the first `FarmOwnershipHistory` row (the
+   "registration" entry, with no `from_owner`).
 
-**How to tell it worked** — find the user again (next section). While they
-are still in the wizard: `Credential` column shows *Not yet rotated* or,
-after rotation, *Rotated*; `Active farms` column shows `0` and `Member of`
-shows *— none —*. Once they finish setup, `Active farms` becomes `1` and
-`Member of` names their farm.
+This is the same issuance path as an invitee accepting an invitation and as
+the `make_test_owner` management command — one code path
+(`accounts.services.issue_owner_account`), so a hand-created owner is
+identical to an invited one.
+
+**Why there is no password field.** `AUTH_PASSWORD_VALIDATORS` (which also
+guards every superuser and staff password) rejects a 6-digit numeric PIN on
+both length and "all numeric". Rather than weaken those globally, this flow
+generates the PIN in code and stores only its hash — exactly what the
+invitation flow already does. Typing a PIN into the stock **Users → Add
+user** form will fail validation, by design.
+
+**Lost PIN.** There is no reveal and no resend. Deactivate the account under
+**Accounts → Users** (§3) and create a fresh one here — same rule as
+"revoke and re-invite" for invitations.
+
+**How to tell it worked** — the owner now appears under **Accounts → Farm
+owner accounts** with **Credential** = *Not yet rotated* and **In setup
+wizard** = ✓. After they rotate their PIN it flips to *Rotated*; once they
+finish `/setup` the wizard flag clears. The same account under **Accounts →
+Users** shows `Active farms` = `0` and `Member of` = *— none —* until then.
 
 ---
 
@@ -173,11 +189,80 @@ The limits are the feature.
 
 ---
 
+## 6. If you are locked out of the admin login
+
+After **5 failed login attempts** for one username + IP address within an
+hour, django-axes locks that combination out and every further attempt —
+**including one with the correct password** — returns **HTTP 429 Too Many
+Requests** with a "too many login attempts" message.
+
+The lock is on the pair, not the account: the same superuser logging in
+from a different network is unaffected, and other users on your network are
+unaffected unless they were also failing against the same username.
+
+Your options, in order of preference:
+
+1. **Wait one hour.** The lock clears itself — no cooloff to configure, no
+   record to clean up. This is the intended path.
+2. **Log in successfully from another network** (phone hotspot, home).
+   A successful login anywhere resets the counter for that username, which
+   also clears the locked pair.
+3. **Clear it from the server**, if you cannot wait and have shell access:
+
+   ```
+   python manage.py axes_reset                # clears every lockout
+   python manage.py axes_reset_username "+639171234567"
+   python manage.py axes_reset_ip 203.0.113.7
+   ```
+
+4. **Clear it from the admin**, if another operator still has a session:
+   django-axes registers its own models. Open **Axes → Access attempts**,
+   find the row for the username/IP, and delete it.
+
+There is deliberately **no self-service unlock** and no way to raise the
+limit for your own account from inside the app. If lockouts are a recurring
+problem for a legitimate operator, the fix is a second superuser account
+they can fall back to, not a looser limit.
+
+Do not respond to a lockout by widening `AXES_FAILURE_LIMIT` or adding an
+IP allowlist. The tight limit is the point, and an operator who travels
+would be locked to a stale allowlist within a week.
+
+---
+
+## 7. Deployment notes
+
+**`ADMIN_URL` must be set to a non-default value in production.** It is read
+from the environment in `checkngo/urls.py`:
+
+```
+ADMIN_URL = config("ADMIN_URL", default="admin/")
+```
+
+- Set it in the deployment environment (Render dashboard / `.env`) to an
+  unguessable path **with a trailing slash**, e.g. `farm-admin-8f3k/`.
+  Unguessable, not clever — it is not a secret and not security on its own,
+  it just keeps automated `/admin/` scanners from finding the login form.
+- The value never appears in the repository. `.env.example` ships only the
+  `admin/` default with a comment.
+- The path differs between local and production; that is the intent.
+- After changing it, the admin is reachable **only** at the new path and
+  `/admin/` returns 404. Update any bookmarks and the operator runbook.
+
+**django-axes** stores its counters in the database (`AccessAttempt` rows),
+not the cache, so it behaves identically whether `REDIS_URL` is set or not.
+`manage.py migrate` creates its tables — already part of `build.sh`. The
+lockout parameters (5 attempts, 1 hour, username + IP combined, reset on
+success) live in `checkngo/settings.py` under the `AXES_*` block.
+
+---
+
 ## Reference — what each admin section is for
 
 | Section | Editable? | Notes |
 |---|---|---|
 | Accounts → Users | Yes | Membership inline is read-only. |
+| Accounts → Farm owner accounts | Add only | Owner onboarding funnel; PIN generated and shown once. No edit/delete. |
 | Accounts → Invitations | Read-only | Add disabled; revoke action available. |
 | Farms → Farms | Yes | Membership + ownership-history inlines. |
 | Farms → Farm memberships | Yes | Grant/revoke farm access here. |
@@ -196,3 +281,5 @@ The limits are the feature.
 | Production → Record corrections | Read-only | The correction ledger. |
 | Production → Task templates | Yes | Configuration — the daily routine. |
 | Production → Task completions | Read-only | Records that a routine item was done. |
+| Axes → Access attempts | Delete only | Failed-login counters; delete a row to lift a lockout. |
+| Axes → Access logs | Read-only | Login history. |

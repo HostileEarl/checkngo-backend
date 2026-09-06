@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "phonenumber_field",
+    "axes",
 
     # Local
     "accounts",
@@ -73,6 +74,21 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # django-axes: must be LAST so it can turn a lockout flagged during
+    # authentication into the HTTP 429 response. Governs the admin login
+    # only (see AXES_* config below).
+    'axes.middleware.AxesMiddleware',
+]
+
+# Authentication backends. AxesStandaloneBackend goes first: on every call
+# to django.contrib.auth.authenticate() it checks the lockout state and,
+# if the user is locked out, raises PermissionDenied to stop the chain.
+# It never authenticates anyone itself — ModelBackend still does that, and
+# the API's JWT bearer-token path does not call authenticate() at all, so
+# it is untouched.
+AUTHENTICATION_BACKENDS = [
+    "axes.backends.AxesStandaloneBackend",
+    "django.contrib.auth.backends.ModelBackend",
 ]
 
 ROOT_URLCONF = 'checkngo.urls'
@@ -253,6 +269,28 @@ else:
             "LOCATION": "checkngo-throttle-cache",
         }
     }
+
+# ── Admin login rate limiting (django-axes) ──────────────────────────────
+# Django's admin login has no brute-force protection of its own. The API's
+# login is throttled in accounts/throttles.py (10 PIN attempts/hour/phone +
+# a per-IP layer); axes gives the admin an equivalent, tighter because a
+# superuser can read every farm's data.
+#
+# Deliberately scoped to the admin only. AXES_ONLY_ADMIN_SITE makes the
+# lockout check a no-op for any path outside reverse("admin:index"), so the
+# API login keeps returning 401 from SimpleJWT and stays governed by its
+# own throttles — axes never blocks it.
+#
+# Uses the default database handler, which stores attempts in AccessAttempt
+# rows and needs no cache. That is what makes it correct in both
+# deployments: LocMemCache locally (per-process, unshared) and Redis in
+# production — the counter lives in Postgres either way.
+AXES_FAILURE_LIMIT = 5                       # API allows 10 against a 6-digit PIN; tighter here
+AXES_COOLOFF_TIME = timedelta(hours=1)       # lock duration, then it clears itself
+AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]  # the COMBINATION, never IP alone
+AXES_RESET_ON_SUCCESS = True                 # a good login wipes the failure count
+AXES_ONLY_ADMIN_SITE = True                  # admin login only; API is untouched
+AXES_USERNAME_FORM_FIELD = "username"        # the admin login form's field name
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG   # tighten this before deployment
 

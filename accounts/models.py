@@ -389,3 +389,20 @@ class Invitation(models.Model):
         self.accepted_user = user
         self.save(update_fields=["status", "accepted_at", "accepted_user"])
         return user
+
+
+class FarmOwnerAccount(User):
+    """
+    Proxy over :class:`User` for the admin's owner-onboarding funnel.
+
+    Same rows as ``User``, shown filtered to ``role=OWNER``. It exists only to
+    give the "Create Farm Owner" flow its own add form — one that issues the
+    PIN in code instead of asking an operator to type a password the global
+    validators would reject anyway (a 6-digit numeric PIN fails both
+    MinimumLength and NumericPassword). See ``accounts.services``.
+    """
+
+    class Meta:
+        proxy = True
+        verbose_name = "farm owner account"
+        verbose_name_plural = "farm owner accounts"

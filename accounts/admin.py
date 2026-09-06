@@ -1,12 +1,14 @@
 # accounts/admin.py
-from django.contrib import admin
+from django import forms
+from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.db.models import Count, Prefetch, Q
 from django.utils.html import format_html
 
 from farms.models import FarmMembership
 
-from .models import Invitation, User
+from .models import FarmOwnerAccount, Invitation, User
+from .services import issue_owner_account
 
 
 class UserFarmMembershipInline(admin.TabularInline):
@@ -152,6 +154,124 @@ class UserAdmin(BaseUserAdmin):
         return ", ".join(
             f"{m.farm.name} ({m.get_role_display()})" for m in memberships
         )
+
+
+class FarmOwnerCreationForm(forms.ModelForm):
+    """
+    The add form for the owner funnel: identity only, no password. The PIN is
+    generated in ``issue_owner_account`` at save time.
+    """
+
+    class Meta:
+        model = FarmOwnerAccount
+        fields = ["full_name", "phone_number", "email"]
+
+    def clean_phone_number(self):
+        # Match the rest of the system, which stores E.164 with display
+        # formatting stripped. Normalising here also means the ModelForm's
+        # uniqueness check runs against the value we will actually save.
+        return User.objects.normalize_phone(self.cleaned_data.get("phone_number", ""))
+
+
+@admin.register(FarmOwnerAccount)
+class FarmOwnerAccountAdmin(admin.ModelAdmin):
+    """
+    "Create Farm Owner" — issues the login PIN automatically.
+
+    Add-only. The changelist is a read-only funnel scoped to OWNER accounts;
+    real edits and deactivation happen under Accounts → Users. Mirrors the
+    invitation flow: system PIN, shown once, forced rotation on first login,
+    and no farm/membership so the owner lands in the setup wizard.
+    """
+
+    form = FarmOwnerCreationForm
+    fields = ["full_name", "phone_number", "email"]
+
+    list_display = [
+        "full_name",
+        "phone_number",
+        "credential_state",
+        "in_setup_wizard",
+        "date_joined",
+    ]
+    search_fields = ["full_name", "phone_number", "email"]
+    ordering = ["full_name"]
+    date_hierarchy = "date_joined"
+
+    # --- scope + annotations -------------------------------------------------
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .filter(role=User.Role.OWNER)
+            .annotate(
+                _active_membership_count=Count(
+                    "farm_memberships",
+                    filter=Q(farm_memberships__is_active=True),
+                    distinct=True,
+                )
+            )
+        )
+
+    @admin.display(description="Credential")
+    def credential_state(self, obj):
+        if obj.must_change_credential:
+            return format_html(
+                '<span style="color:{};">{}</span>', "#c0392b", "Not yet rotated"
+            )
+        return format_html('<span style="color:{};">{}</span>', "#27ae60", "Rotated")
+
+    @admin.display(description="In setup wizard", boolean=True)
+    def in_setup_wizard(self, obj):
+        return getattr(obj, "_active_membership_count", 0) == 0
+
+    # --- creation ----------------------------------------------------------
+
+    def save_model(self, request, obj, form, change):
+        if change:
+            return super().save_model(request, obj, form, change)
+
+        user, raw_pin = issue_owner_account(
+            full_name=form.cleaned_data["full_name"],
+            phone_number=form.cleaned_data["phone_number"],
+            email=form.cleaned_data.get("email") or None,
+        )
+        # Point the admin's in-memory object at the row we just created so the
+        # post-save redirect, log entry, and success message resolve. Nothing
+        # else writes this instance.
+        obj.pk = user.pk
+        request._issued_owner_pin = raw_pin
+
+    def response_add(self, request, obj, post_url_continue=None):
+        pin = getattr(request, "_issued_owner_pin", None)
+        if pin:
+            self.message_user(
+                request,
+                f"One-time PIN for {obj.full_name}: {pin}  —  give it to the "
+                f"owner now. It is not stored and cannot be shown again; they "
+                f"must change it on first login.",
+                level=messages.WARNING,
+            )
+        return super().response_add(request, obj, post_url_continue)
+
+    # --- permissions -----------------------------------------------------
+
+    def has_add_permission(self, request):
+        # Track the same permission that governs adding a User.
+        return request.user.has_perm("accounts.add_user")
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.has_perm("accounts.add_user")
+
+    def has_module_permission(self, request):
+        return request.user.has_perm("accounts.add_user")
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Invitation)
