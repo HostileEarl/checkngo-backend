@@ -11,10 +11,13 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 from pathlib import Path
+#from readline import backend
 from decouple import config
 from datetime import timedelta
 
 import dj_database_url
+
+#from analytics.tests.test_alerts import url
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -27,7 +30,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config("SECRET_KEY")
 DEBUG = config("DEBUG", default=False, cast=bool)
+#ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="127.0.0.1,localhost").split(",")
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="127.0.0.1,localhost").split(",")
+
 
 # Application definition
 
@@ -117,6 +122,7 @@ else:
 CORS_ALLOWED_ORIGINS = config(
     "CORS_ALLOWED_ORIGINS",
     default=(
+        "http://localhost:4173,https://your-frontend-url.trycloudflare.com"
         "http://localhost:5173,"
         "http://127.0.0.1:5173,"
         "http://localhost:4173,"
@@ -129,6 +135,12 @@ CORS_ALLOWED_ORIGINS = config(
 # needed for the admin login form once it is served over HTTPS on a real
 # domain. Comma-separated, scheme included (e.g. https://checkngo-api.onrender.com);
 # empty locally, where admin is same-origin over http.
+#CSRF_TRUSTED_ORIGINS = [
+#    origin.strip()
+#    for origin in config("CSRF_TRUSTED_ORIGINS", default="").split(",")
+#    if origin.strip()
+#]
+
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in config("CSRF_TRUSTED_ORIGINS", default="").split(",")
@@ -137,7 +149,7 @@ CSRF_TRUSTED_ORIGINS = [
 
 # Base URL of the frontend app. Used to build links that leave the API
 # entirely — e.g. the invite-accept deep link mailed/texted to an invitee.
-FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:5173")
+FRONTEND_URL = config("FRONTEND_URL", default="https://your-frontend-url.trycloudflare.com") #http://localhost:5173"
 
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators

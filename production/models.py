@@ -178,6 +178,8 @@ class Batch(models.Model):
 
     class Meta:
         db_table = "production_batch"
+        verbose_name = "Batch"
+        verbose_name_plural = "Batches"
         ordering = ["-start_date"]
         constraints = [
             models.UniqueConstraint(

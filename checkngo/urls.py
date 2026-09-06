@@ -9,7 +9,11 @@ from drf_spectacular.views import (
 
 admin.site.site_header = "CheckN Go Administration"
 admin.site.site_title = "CheckN Go"
-admin.site.index_title = "Farm operations backend"
+admin.site.index_title = (
+    "Platform administration — manage users and farms. This is the operator "
+    "interface, separate from the farm-facing application; there is no in-app "
+    "admin role."
+)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
