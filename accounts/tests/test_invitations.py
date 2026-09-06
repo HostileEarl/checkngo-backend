@@ -63,6 +63,62 @@ class TestInvitationIssue:
         assert "pin" not in response.data
         assert response.data["existing_user"] == "Ana Reyes"
 
+    def test_existing_user_message_names_farm_and_role(
+        self, auth, owner, rival_farm, worker
+    ):
+        """
+        The message a manager sees must say WHICH farm and WHAT role, so a
+        real colleague is distinguishable from a stranger. No name mismatch
+        when the typed name matches the account.
+        """
+        rival_farm.owner = owner
+        rival_farm.save()
+
+        response = auth(owner).post(
+            reverse("farms:farm-invitations", kwargs={"farm_pk": rival_farm.pk}),
+            {
+                "phone_number": worker.phone_number,
+                "full_name": worker.full_name,
+                "account_role": "MANAGER",
+                "membership_role": "MANAGER",
+            },
+            format="json",
+        )
+        assert response.status_code == 201
+        assert response.data["name_mismatch"] is False
+        detail = response.data["detail"]
+        assert "Ana Reyes" in detail
+        assert rival_farm.name in detail
+        assert "Manager" in detail
+
+    def test_existing_user_message_flags_name_mismatch(
+        self, auth, owner, rival_farm, worker
+    ):
+        """
+        A typed name that differs from the account the number belongs to is
+        the tell-tale of a mistyped digit. Surface it — do not block.
+        """
+        rival_farm.owner = owner
+        rival_farm.save()
+
+        response = auth(owner).post(
+            reverse("farms:farm-invitations", kwargs={"farm_pk": rival_farm.pk}),
+            {
+                "phone_number": worker.phone_number,
+                "full_name": "Sheree",
+                "account_role": "WORKER",
+                "membership_role": "WORKER",
+            },
+            format="json",
+        )
+        assert response.status_code == 201
+        # Not blocked — the invitation is still issued, exactly as before.
+        assert response.data["name_mismatch"] is True
+        detail = response.data["detail"]
+        assert "Sheree" in detail
+        assert "Ana Reyes" in detail
+        assert worker.phone_number in detail
+
     def test_duplicate_member_rejected(self, auth, owner, staffed_farm, worker):
         client = auth(owner)
         response = client.post(

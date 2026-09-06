@@ -146,6 +146,48 @@ class LogoutSerializer(serializers.Serializer):
 # ─────────────────────────────────────────────────────────────
 
 
+def existing_user_invite_message(invitation, existing_user):
+    """
+    Response text for an invitation that attached an EXISTING account to a
+    farm instead of issuing a new PIN.
+
+    A phone number is the login identifier, so one number is one account:
+    the person really was added to this farm with the role given, keeping
+    the credential they already use elsewhere. That behaviour is correct and
+    deliberate — this only makes the message say *which* farm and *what*
+    role, so a manager who mistyped a digit can tell a real colleague from a
+    stranger.
+
+    Returns ``(detail, name_mismatch)``. ``name_mismatch`` is True when the
+    name the inviter typed differs from the name on the account the number
+    actually belongs to — the tell-tale of a wrong digit. The caller
+    surfaces that; it does not block the action.
+    """
+    typed_name = (invitation.full_name or "").strip()
+    real_name = existing_user.full_name
+
+    # `membership_role` carries no choices (so no display helper); both it
+    # and `account_role` are single upper-case tokens like "WORKER".
+    role_value = invitation.membership_role or invitation.account_role
+    role_label = role_value.replace("_", " ").title()
+
+    detail = (
+        f"{real_name} already has an account. They have been added to "
+        f"{invitation.farm.name} as a {role_label} using their existing PIN."
+    )
+
+    name_mismatch = bool(
+        typed_name and typed_name.casefold() != real_name.casefold()
+    )
+    if name_mismatch:
+        detail += (
+            f' Heads up: you entered "{typed_name}", but '
+            f"{invitation.phone_number} belongs to {real_name}."
+        )
+
+    return detail, name_mismatch
+
+
 class InvitationCreateSerializer(serializers.ModelSerializer):
     """
     Issue an invitation. For a brand-new person a PIN is generated here and

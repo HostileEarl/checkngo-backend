@@ -19,6 +19,7 @@ from .serializers import (
     LogoutSerializer,
     PhonePinTokenSerializer,
     UserSerializer,
+    existing_user_invite_message,
 )
 from .throttles import (
     CredentialChangeThrottle,
@@ -150,11 +151,13 @@ class FarmInvitationListCreateView(generics.ListCreateAPIView):
                 f"Invitation created. Give this PIN to {invitation.full_name}."
             )
         else:
-            name = serializer.existing_user.full_name
-            payload["existing_user"] = name
-            payload["detail"] = (
-                f"{name} already has an account and will use their existing PIN."
+            existing = serializer.existing_user
+            detail, name_mismatch = existing_user_invite_message(
+                invitation, existing
             )
+            payload["existing_user"] = existing.full_name
+            payload["name_mismatch"] = name_mismatch
+            payload["detail"] = detail
 
         return Response(payload, status=status.HTTP_201_CREATED)
 
