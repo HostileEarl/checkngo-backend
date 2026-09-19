@@ -5,6 +5,9 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from farms.models import FarmMembership
+from notifications.messages import render_invitation_message
+from notifications.models import SmsLog
+from notifications.sms import send_sms
 
 from .models import Invitation, User, UserManager
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -186,6 +189,30 @@ def existing_user_invite_message(invitation, existing_user):
         )
 
     return detail, name_mismatch
+
+
+def send_invitation_pin_sms(invitation, raw_pin):
+    """
+    Text a freshly issued invitation PIN to the invitee.
+
+    Only called for a NEW user (an existing user keeps their own PIN, so
+    there is nothing to send). The accept link is deliberately left out of
+    the text — the owner already has it via "Copy invite" on screen, and
+    including it would push the message past one 160-character segment.
+
+    Returns True if the SMS was actually sent (not skipped, not failed) so
+    the caller can surface `sms_sent` in the API response.
+    """
+    farm_name = invitation.farm.name if invitation.farm else "CheckN Go"
+    message = render_invitation_message(farm_name, raw_pin)
+    result = send_sms(
+        invitation.phone_number,
+        message,
+        purpose=SmsLog.Purpose.INVITATION,
+        log_message="Invitation PIN sent",
+        related_farm=invitation.farm,
+    )
+    return result.status == SmsLog.Status.SENT
 
 
 class InvitationCreateSerializer(serializers.ModelSerializer):

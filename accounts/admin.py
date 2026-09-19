@@ -135,8 +135,8 @@ class UserAdmin(BaseUserAdmin):
     @admin.display(description="Credential")
     def credential_status(self, obj):
         if obj.must_change_credential:
-            return format_html('<span style="color:{};">{}</span>', "#c0392b", "Not yet rotated")
-        return format_html('<span style="color:{};">{}</span>', "#27ae60", "Rotated")
+            return format_html('<span class="{}">{}</span>', "status-danger", "Not yet rotated")
+        return format_html('<span class="{}">{}</span>', "status-success", "Rotated")
 
     @admin.display(description="Active farms", ordering="_active_membership_count")
     def membership_count(self, obj):
@@ -150,7 +150,7 @@ class UserAdmin(BaseUserAdmin):
                 obj.farm_memberships.filter(is_active=True).select_related("farm")
             )
         if not memberships:
-            return format_html('<span style="color:{};">{}</span>', "#7f8c8d", "— none —")
+            return format_html('<span class="{}">{}</span>', "status-muted", "— none —")
         return ", ".join(
             f"{m.farm.name} ({m.get_role_display()})" for m in memberships
         )
@@ -218,9 +218,9 @@ class FarmOwnerAccountAdmin(admin.ModelAdmin):
     def credential_state(self, obj):
         if obj.must_change_credential:
             return format_html(
-                '<span style="color:{};">{}</span>', "#c0392b", "Not yet rotated"
+                '<span class="{}">{}</span>', "status-danger", "Not yet rotated"
             )
-        return format_html('<span style="color:{};">{}</span>', "#27ae60", "Rotated")
+        return format_html('<span class="{}">{}</span>', "status-success", "Rotated")
 
     @admin.display(description="In setup wizard", boolean=True)
     def in_setup_wizard(self, obj):

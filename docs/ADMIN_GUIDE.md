@@ -255,6 +255,23 @@ not the cache, so it behaves identically whether `REDIS_URL` is set or not.
 lockout parameters (5 attempts, 1 hour, username + IP combined, reset on
 success) live in `checkngo/settings.py` under the `AXES_*` block.
 
+**SMS (Semaphore)** sends invitation PINs and low-stock alerts. Three
+environment variables, all optional locally:
+
+- `SEMAPHORE_API_KEY` — from the Semaphore dashboard. Unset means every SMS
+  is skipped (logged, not sent) regardless of `SMS_ENABLED`.
+- `SEMAPHORE_SENDER_NAME` — optional; blank uses the account's registered
+  default sender name.
+- `SMS_ENABLED` — must be explicitly `True` in production. Kept separate
+  from the key so SMS can be switched off (e.g. for a demo) without
+  removing credentials.
+
+Low-stock alerts are **not** sent automatically — `analytics/alerts.py`
+only computes the condition on read. Schedule
+`python manage.py send_stock_alerts` to run periodically (a Render Cron Job
+is the natural fit); it dedupes itself so running it more often than needed
+just means an idle no-op most of the time, not extra texts.
+
 ---
 
 ## Reference — what each admin section is for

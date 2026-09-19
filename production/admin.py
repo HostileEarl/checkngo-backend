@@ -17,14 +17,16 @@ from .models import (
     TaskCompletion,
     TaskTemplate,
     WeightSample,
+    _feed_stock_in_for_delivery,
+    _feed_units_and_kg,
 )
 
 
 def _editable_badge(obj):
     """Shared 24-hour-lock indicator for the offline-sync record admins."""
     if obj.is_editable:
-        return format_html('<span style="color:{};">{}</span>', "#e67e22", "Open")
-    return format_html('<span style="color:{};">{}</span>', "#7f8c8d", "Locked")
+        return format_html('<span class="{}">{}</span>', "status-warning", "Open")
+    return format_html('<span class="{}">{}</span>', "status-muted", "Locked")
 
 
 @admin.register(House)
@@ -55,8 +57,8 @@ class HouseAdmin(admin.ModelAdmin):
         active = getattr(obj, "_active_batches", None)
         batch = active[0] if active else None
         if batch:
-            return format_html('<span style="color:{};">{}</span>', "#c0392b", batch.batch_code)
-        return format_html('<span style="color:{};">{}</span>', "#27ae60", "Empty")
+            return format_html('<span class="{}">{}</span>', "status-danger", batch.batch_code)
+        return format_html('<span class="{}">{}</span>', "status-success", "Empty")
 
 
 class DailyRecordInline(admin.TabularInline):
@@ -171,8 +173,10 @@ class BatchAdmin(admin.ModelAdmin):
     @admin.display(description="Mortality")
     def mortality_pct(self, obj):
         rate = obj.mortality_rate
-        colour = "#27ae60" if rate < 5 else "#e67e22" if rate < 8 else "#c0392b"
-        return format_html('<span style="color:{};">{}%</span>', colour, f"{rate:.2f}")
+        colour = (
+            "status-success" if rate < 5 else "status-warning" if rate < 8 else "status-danger"
+        )
+        return format_html('<span class="{}">{}%</span>', colour, f"{rate:.2f}")
 
     @admin.display(description="FCR")
     def fcr_display(self, obj):
@@ -207,7 +211,13 @@ class DailyRecordAdmin(admin.ModelAdmin):
     list_filter = ["batch__house__farm", "batch", "record_date"]
     date_hierarchy = "record_date"
     list_select_related = ["batch", "batch__house", "recorded_by"]
-    readonly_fields = ["id", "created_at", "updated_at", "sync_delay_seconds"]
+    # Feed changes go through the app (daily record entry or a manager
+    # correction), which is what keeps the derived InventoryUsageLog in
+    # step via sync_feed_usage_log(). The admin bypasses that entirely.
+    readonly_fields = [
+        "id", "created_at", "updated_at", "sync_delay_seconds",
+        "feed_kg", "feed_sacks", "feed_item",
+    ]
     ordering = ["-record_date"]
 
     @admin.display(description="Deaths")
@@ -318,6 +328,13 @@ class SaleEventAdmin(admin.ModelAdmin):
 
 @admin.register(FeedDelivery)
 class FeedDeliveryAdmin(admin.ModelAdmin):
+    """
+    FeedDelivery.clean() (run by the form on save) rejects a delivery with
+    no inventory_item on a farm that has feed items — same rule the API
+    enforces. On a fresh delivery that does name one, save_model dual-
+    writes the matching InventoryStockIn, same as FeedDeliveryWithStockView.
+    """
+
     list_display = [
         "delivery_date",
         "farm",
@@ -326,12 +343,32 @@ class FeedDeliveryAdmin(admin.ModelAdmin):
         "unit_cost",
         "total_cost",
         "supplier_link",
+        "inventory_item",
     ]
     list_filter = ["feed_type", "farm", "delivery_date"]
     search_fields = ["invoice_ref"]
     readonly_fields = ["id", "created_at", "updated_at"]
     date_hierarchy = "delivery_date"
-    list_select_related = ["farm", "supplier_link"]
+    list_select_related = ["farm", "supplier_link", "inventory_item"]
+
+    def save_model(self, request, obj, form, change):
+        if not obj.recorded_by_id:
+            obj.recorded_by = request.user
+        # Feed is converted once (see _feed_units_and_kg): when a fresh
+        # delivery names a feed item, the sack count derived from the
+        # typed kg becomes the source of truth, and quantity_kg is
+        # rewritten from that same sack count before saving — otherwise
+        # the admin path would independently round quantity_kg and the
+        # dual-written stock-in from the same raw figure, same as the bug
+        # this whole mechanism exists to close.
+        quantity_in_units = None
+        if not change and obj.inventory_item_id and obj.inventory_item.kg_per_unit:
+            quantity_in_units, obj.quantity_kg = _feed_units_and_kg(
+                obj.quantity_kg, obj.inventory_item
+            )
+        super().save_model(request, obj, form, change)
+        if quantity_in_units is not None:
+            _feed_stock_in_for_delivery(obj, request.user, quantity_in_units)
 
 
 class InventoryStockInInline(admin.TabularInline):
@@ -351,11 +388,12 @@ class InventoryItemAdmin(admin.ModelAdmin):
         "farm",
         "unit",
         "kg_per_unit",
+        "is_feed",
         "low_stock_threshold",
         "level",
         "is_active",
     ]
-    list_filter = ["farm", "is_active"]
+    list_filter = ["farm", "is_feed", "is_active"]
     search_fields = ["name", "farm__name"]
     readonly_fields = ["created_by", "created_at"]
     inlines = [InventoryStockInInline]
@@ -372,13 +410,13 @@ class InventoryItemAdmin(admin.ModelAdmin):
         if qty is None:
             qty = obj.current_quantity
         colour = (
-            "#c0392b"
+            "status-danger"
             if qty <= 0
-            else "#e67e22"
+            else "status-warning"
             if qty <= obj.low_stock_threshold
-            else "#27ae60"
+            else "status-success"
         )
-        return format_html('<span style="color:{};">{} {}</span>', colour, qty, obj.unit)
+        return format_html('<span class="{}">{} {}</span>', colour, qty, obj.unit)
 
 
 @admin.register(InventoryStockIn)

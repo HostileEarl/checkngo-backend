@@ -30,13 +30,17 @@ from production.models import (
     House,
     InventoryItem,
     InventoryStockIn,
+    InventoryUsageLog,
     SaleEvent,
     TaskCompletion,
     TaskTemplate,
     WeightSample,
+    record_feed_delivery,
 )
+from production.serializers import sync_feed_usage_log
 
 DEMO_PREFIX = "DEMO-"
+FARM_NAME = "Santos Broiler Farm"
 
 
 class Command(BaseCommand):
@@ -92,11 +96,30 @@ class Command(BaseCommand):
 
     def _reset(self):
         self.stdout.write("Removing existing DEMO- data...")
+
+        # InventoryUsageLog.daily_record is SET_NULL, not CASCADE (by
+        # design — see the model docstring: a real drawdown must survive
+        # its originating record being removed). Deleting the seeded
+        # batches below therefore does not delete their linked usage logs,
+        # it only clears the link, leaving the log's quantity permanently
+        # counted against the item. Delete every usage log on this farm's
+        # items outright, orphaned or not, so a reseed starts from zero —
+        # scoped to this farm's own InventoryItems, so it can never reach
+        # another farm's usage history.
+        farm = Farm.objects.filter(name=FARM_NAME).first()
+        if farm is not None:
+            usage_logs = InventoryUsageLog.objects.filter(item__farm=farm)
+            usage_log_count = usage_logs.count()
+            usage_logs.delete()
+            self.stdout.write(f"  removed {usage_log_count} inventory usage logs")
+
         batches = Batch.objects.filter(batch_code__startswith=DEMO_PREFIX)
         count = batches.count()
         batches.delete()  # cascades to daily records, weights, harvests
         FeedDelivery.objects.filter(invoice_ref__startswith=DEMO_PREFIX).delete()
-        InventoryStockIn.objects.filter(note__startswith=DEMO_PREFIX).delete()
+        # Dual-written stock-ins carry the delivery's invoice ref inside
+        # their own note ("Feed delivery — DEMO-..."), not as a prefix.
+        InventoryStockIn.objects.filter(note__contains=DEMO_PREFIX).delete()
         self.stdout.write(f"  removed {count} demo batches")
 
     # -- people ----------------------------------------------
@@ -144,7 +167,7 @@ class Command(BaseCommand):
     def _create_farm(self, owner, manager, worker):
         farm, _ = Farm.objects.get_or_create(
             owner=owner,
-            name="Santos Broiler Farm",
+            name=FARM_NAME,
             defaults={
                 "municipality": "San Pablo",
                 "province": "Laguna",
@@ -260,6 +283,11 @@ class Command(BaseCommand):
         sacks, plus one non-feed item that has no kg conversion. Seeded
         daily records keep feed_kg only — back-filling invented sack counts
         would be fabricating provenance.
+
+        Opening stock goes through record_feed_delivery(), the same path a
+        real farm's first stock-in takes — a feed delivery, not a manual
+        InventoryStockIn — so it counts in both the feed ledger and the
+        inventory ledger from the start.
         """
         feed, _ = InventoryItem.objects.get_or_create(
             farm=farm,
@@ -267,13 +295,15 @@ class Command(BaseCommand):
             defaults={
                 "unit": "sack",
                 "kg_per_unit": Decimal("50"),
+                "is_feed": True,
                 "low_stock_threshold": Decimal("10"),
                 "created_by": owner,
             },
         )
-        if feed.kg_per_unit != Decimal("50"):
+        if feed.kg_per_unit != Decimal("50") or not feed.is_feed:
             feed.kg_per_unit = Decimal("50")
-            feed.save(update_fields=["kg_per_unit"])
+            feed.is_feed = True
+            feed.save(update_fields=["kg_per_unit", "is_feed"])
 
         InventoryItem.objects.get_or_create(
             farm=farm,
@@ -287,12 +317,16 @@ class Command(BaseCommand):
         )
 
         if not feed.stock_ins.exists():
-            InventoryStockIn.objects.create(
-                item=feed,
-                quantity=Decimal("400"),
-                stock_in_date=timezone.localdate() - timedelta(days=20),
-                note=f"{DEMO_PREFIX}opening stock",
+            record_feed_delivery(
+                farm=farm,
                 recorded_by=owner,
+                inventory_item=feed,
+                delivery_date=timezone.localdate() - timedelta(days=20),
+                feed_type=FeedDelivery.FeedType.OTHER,
+                quantity_kg=Decimal("400") * feed.kg_per_unit,
+                notes="Opening stock",
+                invoice_ref=f"{DEMO_PREFIX}OPENING",
+                recorded_at=timezone.now(),
             )
 
         self.stdout.write(
@@ -332,12 +366,21 @@ class Command(BaseCommand):
             (FeedDelivery.FeedType.FINISHER, Decimal("28.75")),
         ]
 
+        feed_item = InventoryItem.objects.get(farm=farm, name="Broiler feed")
+
         total_consumed = DailyRecord.objects.filter(
             batch__house__farm=farm
         ).aggregate(kg=Sum("feed_kg"))["kg"] or Decimal("0")
 
+        # Opening stock (recorded separately, in _create_inventory) already
+        # covers some of what the batches consumed — top up only the rest,
+        # plus a buffer, so the item's level doesn't balloon.
+        already_delivered = feed_item.stocked_in * feed_item.kg_per_unit if feed_item else Decimal("0")
         buffer = Decimal(str(round(random.uniform(1.10, 1.20), 4)))
-        total_to_deliver = (total_consumed * buffer).quantize(Decimal("0.01"))
+        total_to_deliver = max(
+            (total_consumed * buffer - already_delivered).quantize(Decimal("0.01")),
+            Decimal("0"),
+        )
 
         slots = [
             (month_back, feed_type, base_price)
@@ -364,15 +407,16 @@ class Command(BaseCommand):
                 qty = (Decimal(str(spread[idx])) * scale).quantize(Decimal("0.01"))
                 running += qty
 
-            FeedDelivery.objects.create(
+            record_feed_delivery(
                 farm=farm,
+                recorded_by=owner,
+                inventory_item=feed_item,
                 supplier_link=supplier,
                 delivery_date=delivery_date,
                 feed_type=feed_type,
                 quantity_kg=qty,
                 unit_cost=unit,
                 invoice_ref=f"{DEMO_PREFIX}INV-{delivery_date:%Y%m}-{feed_type[:3]}",
-                recorded_by=owner,
                 recorded_at=timezone.now(),
             )
             created += 1
@@ -394,6 +438,7 @@ class Command(BaseCommand):
         identical demonstrates nothing.
         """
         today = timezone.localdate()
+        feed_item = InventoryItem.objects.get(farm=farm, name="Broiler feed")
 
         # (label, days_ago_started, birds, quality) - quality drives the curves
         completed = [
@@ -417,7 +462,7 @@ class Command(BaseCommand):
                 created_by=owner,
             )
             cycle = random.randint(40, 45)
-            self._fill_daily_records(batch, cycle, quality, worker)
+            self._fill_daily_records(batch, cycle, quality, worker, feed_item)
             self._fill_weight_samples(batch, cycle, quality, worker)
             self._sell_and_close(batch, cycle, quality, buyer, owner)
 
@@ -437,7 +482,7 @@ class Command(BaseCommand):
                 expected_harvest_date=start + timedelta(days=42),
                 created_by=owner,
             )
-            self._fill_daily_records(batch, age, "average", worker)
+            self._fill_daily_records(batch, age, "average", worker, feed_item)
             self._fill_weight_samples(batch, age, "average", worker)
             self._early_sales(batch, age, owner)
 
@@ -445,11 +490,17 @@ class Command(BaseCommand):
 
     # -- curve generation ------------------------------------
 
-    def _fill_daily_records(self, batch, days, quality, worker):
+    def _fill_daily_records(self, batch, days, quality, worker, feed_item=None):
         """
         Mortality follows the real broiler shape: a spike in week 1 (chick
         mortality), a low plateau, then a slight rise near harvest as birds
         get heavy. Feed intake climbs steadily with age.
+
+        When feed_item is given, every record's feed_kg is also expressed
+        as feed_sacks against it, and sync_feed_usage_log() is called after
+        the bulk insert — the same derived InventoryUsageLog a real worker
+        entering feed in sacks would produce, so the item's level and
+        feed_balance(farm) stay equal.
         """
         profiles = {
             "excellent": {"target_pct": 3.2, "heat_event": False},
@@ -517,6 +568,20 @@ class Command(BaseCommand):
                 )
             ) + timedelta(hours=random.randint(6, 8))
 
+            feed_sacks = None
+            record_feed_item = None
+            if feed_item is not None and feed_kg > 0:
+                # Feed is converted once: sacks is derived from the target
+                # kg above, then feed_kg is re-derived FROM that sack
+                # count — not kept as the independently-rounded figure the
+                # curve produced — so this record's contribution to the
+                # feed ledger and to the item's usage log always agree
+                # exactly. A plain-kg record (no feed_item) keeps the
+                # curve's feed_kg untouched, same as the API.
+                feed_sacks = (feed_kg / feed_item.kg_per_unit).quantize(Decimal("0.01"))
+                feed_kg = (feed_sacks * feed_item.kg_per_unit).quantize(Decimal("0.01"))
+                record_feed_item = feed_item
+
             records.append(
                 DailyRecord(
                     batch=batch,
@@ -526,14 +591,21 @@ class Command(BaseCommand):
                     mortality_culled=culled,
                     mortality_unknown=unknown,
                     feed_kg=feed_kg,
+                    feed_sacks=feed_sacks,
+                    feed_item=record_feed_item,
                     recorded_by=worker,
                     recorded_at=recorded_at,
                 )
             )
 
         DailyRecord.objects.bulk_create(records)
-        # bulk_create skips signals, so refresh the denormalized totals.
+        # bulk_create skips signals, so refresh the denormalized totals and
+        # — same as the API's create()/bulk-sync — mirror each feed line
+        # into its linked InventoryUsageLog.
         batch.recalculate_totals()
+        for record in records:
+            if record.feed_item_id is not None:
+                sync_feed_usage_log(record, user=worker)
 
     def _fill_weight_samples(self, batch, days, quality, worker):
         """Weekly weighing. Ross 308 reaches ~2.4kg at day 42 when well managed."""
@@ -717,7 +789,7 @@ class Command(BaseCommand):
             profitability_by_batch,
         )
 
-        farm = Farm.objects.get(name="Santos Broiler Farm")
+        farm = Farm.objects.get(name=FARM_NAME)
         fcr = fcr_by_batch(farm)
         profit = profitability_by_batch(farm)
         dash = farm_dashboard(farm)

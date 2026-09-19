@@ -394,6 +394,45 @@ def profitability_by_batch(farm):
 
 
 # ─────────────────────────────────────────────────────────────
+# Feed balance
+# ─────────────────────────────────────────────────────────────
+
+
+def feed_balance(farm):
+    """
+    Farm-wide feed balance: everything delivered minus everything consumed
+    across all batches. Per the earlier ruling we do not trace individual
+    sacks to individual houses, so this is a running total, not a ledger —
+    no batch-status filter, no date range, on either side.
+
+    Shared by the dashboard rollup (`farm_dashboard`), `FeedStockView`, and
+    the negative-feed-balance alert, so none of the three can drift apart:
+    same querysets, same rounding, one place to fix any of them.
+
+    Every value quantized to 2 places — including on an empty farm, where
+    the aggregates coalesce to Decimal("0") but still get quantized to
+    Decimal("0.00") for the same "0.00" a farm with real records would show.
+    """
+    delivered = FeedDelivery.objects.filter(farm=farm).aggregate(
+        kg=Coalesce(Sum("quantity_kg"), Value(Decimal("0")), output_field=DecimalField()),
+        cost=Coalesce(Sum("total_cost"), Value(Decimal("0")), output_field=DecimalField()),
+    )
+    consumed = DailyRecord.objects.filter(batch__house__farm=farm).aggregate(
+        kg=Coalesce(Sum("feed_kg"), Value(Decimal("0")), output_field=DecimalField()),
+    )
+
+    delivered_kg = delivered["kg"]
+    consumed_kg = consumed["kg"]
+
+    return {
+        "delivered_kg": _q(delivered_kg),
+        "consumed_kg": _q(consumed_kg),
+        "balance_kg": _q(delivered_kg - consumed_kg),
+        "total_feed_cost": _q(delivered["cost"]),
+    }
+
+
+# ─────────────────────────────────────────────────────────────
 # Dashboard rollup
 # ─────────────────────────────────────────────────────────────
 
@@ -406,12 +445,7 @@ def farm_dashboard(farm):
 
     birds_alive = sum(b.current_bird_count for b in active)
 
-    feed = FeedDelivery.objects.filter(farm=farm).aggregate(
-        delivered=Coalesce(Sum("quantity_kg"), Value(Decimal("0")), output_field=DecimalField())
-    )
-    consumed = DailyRecord.objects.filter(batch__house__farm=farm).aggregate(
-        used=Coalesce(Sum("feed_kg"), Value(Decimal("0")), output_field=DecimalField())
-    )
+    feed = feed_balance(farm)
 
     fcr = fcr_by_batch(farm)
 
@@ -436,9 +470,9 @@ def farm_dashboard(farm):
         ],
         "totals": {
             "birds_alive": birds_alive,
-            "feed_delivered_kg": str(feed["delivered"]),
-            "feed_consumed_kg": str(consumed["used"]),
-            "feed_balance_kg": str(feed["delivered"] - consumed["used"]),
+            "feed_delivered_kg": str(feed["delivered_kg"]),
+            "feed_consumed_kg": str(feed["consumed_kg"]),
+            "feed_balance_kg": str(feed["balance_kg"]),
         },
         "lifetime": {
             "batches_completed": fcr["summary"].get("batches_analysed", 0),

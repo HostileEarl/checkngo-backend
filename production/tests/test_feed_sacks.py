@@ -7,10 +7,12 @@ The design stores BOTH — the sack count and the computed weight — so the
 trail reads "5 sacks x 50 kg = 250 kg" permanently and editing an item's
 sack weight cannot rewrite history.
 
-The server never recomputes feed_kg from sacks (the item's kg_per_unit may
-have changed between an offline entry and its sync). It only checks the
-supplied feed_kg agrees with sacks x kg_per_unit within a small tolerance,
-so a client bug cannot write a nonsense weight.
+Feed is converted once, not twice: sacks is the value actually entered,
+and feed_kg is DERIVED from it (feed_sacks x kg_per_unit) at the moment
+each record is written, using whatever kg_per_unit the item carries then.
+The server ignores whatever feed_kg the client also sent alongside sacks —
+there is nothing to "agree" with, because feed_kg is no longer an
+independent figure that could disagree.
 
 The last test is the point of the whole design: FCR must be identical
 whether a batch's records were entered in kg or via sacks.
@@ -157,10 +159,10 @@ class TestSackEntry:
         assert response.status_code == 400
         assert "another farm" in str(response.data["feed_item"]).lower()
 
-    def test_feed_kg_not_matching_sacks_is_rejected(
+    def test_feed_kg_is_derived_ignoring_whatever_the_client_sent(
         self, auth, owner, farm, batch, feed_item
     ):
-        # 5 x 50 = 250, not 300.
+        # 5 x 50 = 250, whatever feed_kg the client posted alongside it.
         response = auth(owner).post(
             _url(farm, batch),
             _payload(
@@ -171,24 +173,9 @@ class TestSackEntry:
             ),
             format="json",
         )
-        assert response.status_code == 400
-        assert "does not add up" in str(response.data["feed_kg"]).lower()
-
-    def test_feed_kg_within_tolerance_is_accepted(
-        self, auth, owner, farm, batch, feed_item
-    ):
-        # 5 x 50 = 250; 250.40 is inside the tolerance (max of 0.5 kg / 1%).
-        response = auth(owner).post(
-            _url(farm, batch),
-            _payload(
-                "2026-01-06",
-                feed_sacks="5",
-                feed_item=feed_item.id,
-                feed_kg="250.40",
-            ),
-            format="json",
-        )
         assert response.status_code == 201, response.data
+        record = DailyRecord.objects.get(pk=response.data["id"])
+        assert str(record.feed_kg) == "250.00"
 
     def test_feed_kg_alone_with_no_sacks_still_works(
         self, auth, owner, farm, batch
@@ -205,8 +192,12 @@ class TestSackEntry:
         assert record.feed_item_id is None
 
     def test_bulk_sync_reports_a_mismatch_and_keeps_good_rows(
-        self, auth, owner, farm, batch, feed_item
+        self, auth, owner, farm, batch, feed_item, weightless_item
     ):
+        # A mismatched feed_kg is no longer a validation error (it's just
+        # ignored and re-derived), so the still-invalid row here is one
+        # naming an item with no sack weight set — genuinely rejected
+        # regardless of what feed_kg it carries.
         good_id, bad_id = str(uuid.uuid4()), str(uuid.uuid4())
         response = auth(owner).post(
             _bulk_url(farm, batch),
@@ -226,8 +217,8 @@ class TestSackEntry:
                         **_payload(
                             "2026-01-06",
                             feed_sacks="5",
-                            feed_item=feed_item.id,
-                            feed_kg="999.00",
+                            feed_item=weightless_item.id,
+                            feed_kg="250.00",
                         ),
                     },
                 ]
@@ -238,7 +229,7 @@ class TestSackEntry:
         # row, and neither row is written.
         assert response.status_code == 400, response.data
         body = str(response.data)
-        assert "does not add up" in body.lower()
+        assert "sack weight" in body.lower()
         assert not DailyRecord.objects.filter(pk__in=[good_id, bad_id]).exists()
 
 

@@ -14,15 +14,12 @@ client can remember dismissals across polls.
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import DecimalField, Sum, Value
-from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from accounts.models import Invitation
 from production.models import (
     Batch,
     DailyRecord,
-    FeedDelivery,
     House,
     InventoryItem,
     RecordCorrection,
@@ -30,7 +27,7 @@ from production.models import (
     TaskTemplate,
 )
 
-from .services import _pct
+from .services import _pct, feed_balance
 
 MORTALITY_ALERT_PCT = Decimal("8")
 HARVEST_HORIZON_DAYS = 5
@@ -104,22 +101,11 @@ def _high_mortality(active_batches):
 
 
 def _negative_feed_balance(farm):
-    delivered = FeedDelivery.objects.filter(farm=farm).aggregate(
-        total=Coalesce(
-            Sum("quantity_kg"), Value(Decimal("0")), output_field=DecimalField()
-        )
-    )["total"]
-    consumed = DailyRecord.objects.filter(batch__house__farm=farm).aggregate(
-        total=Coalesce(
-            Sum("feed_kg"), Value(Decimal("0")), output_field=DecimalField()
-        )
-    )["total"]
-
-    balance = delivered - consumed
+    balance = feed_balance(farm)["balance_kg"]
     if balance >= 0:
         return []
 
-    short = (consumed - delivered).quantize(Decimal("0.01"))
+    short = -balance
     return [
         {
             "id": "feed-balance",

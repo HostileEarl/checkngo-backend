@@ -1,9 +1,13 @@
 # accounts/tests/test_invitations.py
+from unittest.mock import patch
+
 import pytest
+import requests
 from django.urls import reverse
 
 from accounts.models import Invitation, User
 from farms.models import FarmMembership
+from notifications.models import SmsLog
 
 pytestmark = pytest.mark.django_db
 
@@ -421,3 +425,78 @@ class TestInvitationRevoke:
         )
         assert response.status_code == 404
         assert Invitation.objects.get(pk=foreign_id).status == Invitation.Status.PENDING
+
+
+class TestInvitationSms:
+    def test_invitation_survives_sms_failure(self, auth, owner, staffed_farm, settings):
+        """
+        An SMS provider outage must never take down invitation creation —
+        the invitation is the record of authority; the text is a courtesy.
+        """
+        settings.SMS_ENABLED = True
+        settings.SEMAPHORE_API_KEY = "test-key"
+
+        with patch(
+            "notifications.sms.requests.post",
+            side_effect=requests.ConnectionError("provider down"),
+        ):
+            response = auth(owner).post(
+                reverse("farms:farm-invitations", kwargs={"farm_pk": staffed_farm.pk}),
+                {
+                    "phone_number": "+639170000050",
+                    "full_name": "Sms Failure",
+                    "account_role": "WORKER",
+                    "membership_role": "WORKER",
+                },
+                format="json",
+            )
+
+        assert response.status_code == 201
+        assert response.data["pin"]
+        assert response.data["sms_sent"] is False
+        assert Invitation.objects.filter(phone_number="+639170000050").exists()
+        assert SmsLog.objects.filter(status=SmsLog.Status.FAILED).exists()
+
+    def test_sms_log_never_contains_the_pin(self, auth, owner, staffed_farm, settings):
+        settings.SMS_ENABLED = True
+        settings.SEMAPHORE_API_KEY = "test-key"
+
+        with patch(
+            "notifications.sms.requests.post",
+            side_effect=requests.ConnectionError("provider down"),
+        ):
+            response = auth(owner).post(
+                reverse("farms:farm-invitations", kwargs={"farm_pk": staffed_farm.pk}),
+                {
+                    "phone_number": "+639170000051",
+                    "full_name": "Redaction Check",
+                    "account_role": "WORKER",
+                    "membership_role": "WORKER",
+                },
+                format="json",
+            )
+
+        pin = response.data["pin"]
+        log = SmsLog.objects.get(purpose=SmsLog.Purpose.INVITATION)
+        assert pin not in log.message
+
+    def test_existing_user_invite_sends_no_sms(self, auth, owner, rival_farm, worker):
+        """No new PIN is issued for an existing account, so nothing is sent."""
+        rival_farm.owner = owner
+        rival_farm.save()
+
+        with patch("notifications.sms.requests.post") as mock_post:
+            response = auth(owner).post(
+                reverse("farms:farm-invitations", kwargs={"farm_pk": rival_farm.pk}),
+                {
+                    "phone_number": worker.phone_number,
+                    "full_name": worker.full_name,
+                    "account_role": "WORKER",
+                    "membership_role": "WORKER",
+                },
+                format="json",
+            )
+
+        assert response.status_code == 201
+        assert "sms_sent" not in response.data
+        mock_post.assert_not_called()

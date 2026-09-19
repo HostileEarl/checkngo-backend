@@ -29,17 +29,22 @@ def feed_item(staffed_farm, owner):
         name="Broiler feed",
         unit="sack",
         kg_per_unit=Decimal("50"),
+        is_feed=True,
         created_by=owner,
     )
 
 
 @pytest.fixture
 def weightless_item(staffed_farm, owner):
+    # Constructed directly via the ORM (bypassing InventoryItem.clean(),
+    # which would otherwise refuse is_feed=True with no kg_per_unit) so
+    # this test can isolate FeedDelivery's own "no kg_per_unit" guard.
     return InventoryItem.objects.create(
         farm=staffed_farm,
         name="Disinfectant",
         unit="litre",
         kg_per_unit=None,
+        is_feed=True,
         created_by=owner,
     )
 
@@ -113,13 +118,14 @@ def test_item_from_another_farm_is_rejected(
         name="Their feed",
         unit="sack",
         kg_per_unit=Decimal("50"),
+        is_feed=True,
         created_by=rival_owner,
     )
     response = auth(owner).post(
         _url(staffed_farm), _payload(inventory_item=other.id), format="json"
     )
     assert response.status_code == 400
-    assert "no such feed item" in str(response.data["inventory_item"]).lower()
+    assert "another farm" in str(response.data["inventory_item"]).lower()
     assert FeedDelivery.objects.count() == 0
 
 

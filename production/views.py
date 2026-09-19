@@ -10,6 +10,8 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from analytics.services import feed_balance
+
 from .mixins import BatchScopedMixin
 from .models import (
     Batch,
@@ -647,26 +649,14 @@ class FeedStockView(APIView):
     permission_classes = [CanViewProduction]
 
     def get(self, request, farm_pk):
-        from decimal import Decimal
-
-        from django.db.models import Sum
-
-        delivered = FeedDelivery.objects.filter(farm=request.farm).aggregate(
-            kg=Sum("quantity_kg"), cost=Sum("total_cost")
-        )
-        consumed = DailyRecord.objects.filter(
-            batch__house__farm=request.farm
-        ).aggregate(kg=Sum("feed_kg"))
-
-        delivered_kg = delivered["kg"] or Decimal("0")
-        consumed_kg = consumed["kg"] or Decimal("0")
+        feed = feed_balance(request.farm)
 
         return Response(
             {
-                "delivered_kg": str(delivered_kg),
-                "consumed_kg": str(consumed_kg),
-                "balance_kg": str(delivered_kg - consumed_kg),
-                "total_feed_cost": str(delivered["cost"] or Decimal("0")),
+                "delivered_kg": str(feed["delivered_kg"]),
+                "consumed_kg": str(feed["consumed_kg"]),
+                "balance_kg": str(feed["balance_kg"]),
+                "total_feed_cost": str(feed["total_feed_cost"]),
             }
         )
 
@@ -676,15 +666,15 @@ class FeedDeliveryWithStockView(APIView):
     POST /api/farms/<farm_pk>/feed-deliveries/with-stock/
 
     One delivery, two records. A feed delivery is a FeedDelivery (per farm,
-    feeds cost analysis and feed margin) and — when it is a tracked
-    inventory item — also an InventoryStockIn (per item, feeds the balance).
-    Recording them in two separate requests guarantees drift the day
-    someone forgets the second one, so this writes both inside one
-    transaction: if the stock-in fails, the delivery rolls back with it and
-    a resubmit cannot double-count the cost.
+    feeds cost analysis and feed margin) and — when it names a tracked feed
+    item — also an InventoryStockIn (per item, feeds the balance).
+    FeedDeliverySerializer.create() (via record_feed_delivery) does both
+    writes in one transaction: if the stock-in fails, the delivery rolls
+    back with it and a resubmit cannot double-count the cost.
 
-    The plain POST /feed-deliveries/ is left untouched — not every delivery
-    is an inventory item.
+    Equivalent to a plain POST /feed-deliveries/ with an inventory_item —
+    kept as its own endpoint so the response can echo back the stock-in
+    that was created alongside it.
     """
 
     permission_classes = [CanManageFeed]
@@ -692,52 +682,12 @@ class FeedDeliveryWithStockView(APIView):
     def post(self, request, farm_pk):
         farm = request.farm
 
-        item = None
-        raw_item = request.data.get("inventory_item")
-        if raw_item not in (None, ""):
-            try:
-                item_pk = int(raw_item)
-            except (TypeError, ValueError):
-                raise serializers.ValidationError(
-                    {"inventory_item": "Not a valid item id."}
-                )
-            item = InventoryItem.objects.filter(pk=item_pk, farm=farm).first()
-            if item is None:
-                raise serializers.ValidationError(
-                    {"inventory_item": "No such feed item on this farm."}
-                )
-            if not item.kg_per_unit:
-                raise serializers.ValidationError(
-                    {
-                        "inventory_item": (
-                            f"{item.name} has no kilograms-per-unit set, so a "
-                            "delivery in kg cannot be converted to its unit. "
-                            "Set the sack weight on the item first."
-                        )
-                    }
-                )
-
         delivery_serializer = FeedDeliverySerializer(
             data=request.data, context={"request": request, "farm": farm}
         )
         delivery_serializer.is_valid(raise_exception=True)
-
-        with transaction.atomic():
-            delivery = delivery_serializer.save()
-
-            stock_in = None
-            if item is not None:
-                quantity_in_units = (
-                    delivery.quantity_kg / item.kg_per_unit
-                ).quantize(Decimal("0.01"))
-                ref = delivery.invoice_ref.strip()
-                stock_in = InventoryStockIn.objects.create(
-                    item=item,
-                    quantity=quantity_in_units,
-                    stock_in_date=delivery.delivery_date,
-                    note=f"Feed delivery — {ref}" if ref else "Feed delivery",
-                    recorded_by=request.user,
-                )
+        delivery = delivery_serializer.save()
+        stock_in = getattr(delivery, "_created_stock_in", None)
 
         return Response(
             {

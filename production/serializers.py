@@ -2,6 +2,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -19,6 +20,7 @@ from .models import (
     InventoryStockIn,
     InventoryUsageLog,
     RecordCorrection,
+    record_feed_delivery,
     SaleEvent,
     TaskCompletion,
     TaskTemplate,
@@ -368,12 +370,15 @@ class DailyRecordSerializer(serializers.ModelSerializer):
             )
 
         # ── Feed recorded in sacks ───────────────────────────
-        # feed_kg is authoritative and client-supplied; the server never
-        # recomputes it from sacks x kg_per_unit, because the item's
-        # kg_per_unit may have changed between an offline entry and its
-        # sync. But if a sack count was recorded, the supplied feed_kg must
-        # agree with it within a small tolerance — otherwise a client bug
-        # could write a nonsense weight behind a plausible sack count.
+        # Feed is converted once, not twice. Sacks is the value actually
+        # entered; feed_kg is derived from it here, not separately rounded
+        # from a client-supplied figure that could drift from what
+        # "sacks x kg_per_unit" says — that drift (up to half a sack's
+        # worth of kg either way) is exactly what used to make the item's
+        # inventory-ledger level disagree with feed_balance() by a few kg
+        # over a season of records. Whatever feed_kg the client sends
+        # alongside feed_sacks is therefore ignored, not validated against
+        # a tolerance.
         feed_sacks = attrs.get(
             "feed_sacks", getattr(self.instance, "feed_sacks", None)
         )
@@ -401,28 +406,36 @@ class DailyRecordSerializer(serializers.ModelSerializer):
                     }
                 )
 
-            expected = (feed_sacks * feed_item.kg_per_unit).quantize(
+            attrs["feed_kg"] = (feed_sacks * feed_item.kg_per_unit).quantize(
                 Decimal("0.01")
             )
-            tolerance = max(
-                Decimal("0.50"),
-                (expected * Decimal("0.01")).quantize(Decimal("0.01")),
-            )
-            if feed_kg is None or abs(Decimal(feed_kg) - expected) > tolerance:
-                raise serializers.ValidationError(
-                    {
-                        "feed_kg": (
-                            f"Sack total does not add up: {feed_sacks} sacks "
-                            f"x {feed_item.kg_per_unit} kg is {expected} kg, "
-                            f"but {feed_kg} kg was recorded. Fix the sacks or "
-                            "the feed item and try again."
-                        )
-                    }
-                )
         else:
             # No sack count means no sack provenance — never store a feed
             # item on its own.
             attrs["feed_item"] = None
+
+            effective_feed_kg = feed_kg if feed_kg is not None else Decimal("0")
+            previous_feed_kg = (
+                self.instance.feed_kg if self.instance else Decimal("0")
+            )
+            feed_is_changing = (
+                self.instance is None
+                or Decimal(effective_feed_kg) != Decimal(previous_feed_kg)
+            )
+            if Decimal(effective_feed_kg) > 0 and feed_is_changing:
+                farm = batch.house.farm
+                has_feed_items = InventoryItem.objects.filter(
+                    farm=farm, is_feed=True, is_active=True
+                ).exists()
+                if has_feed_items:
+                    raise serializers.ValidationError(
+                        {
+                            "feed_item": (
+                                "This farm tracks feed items — choose which "
+                                "feed this is."
+                            )
+                        }
+                    )
 
         return attrs
 
@@ -1020,13 +1033,14 @@ class FeedDeliverySerializer(serializers.ModelSerializer):
             "total_cost",
             "invoice_ref",
             "notes",
+            "inventory_item",
             "recorded_by",
             "recorded_by_name",
             "recorded_at",
             "created_at",
         ]
         read_only_fields = ["farm", "recorded_by", "created_at"]
-        extra_kwargs = {"id": {"required": False}}
+        extra_kwargs = {"id": {"required": False}, "inventory_item": {"required": False}}
 
     def get_supplier_name(self, obj):
         if not obj.supplier_link:
@@ -1045,6 +1059,16 @@ class FeedDeliverySerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("That supplier link is inactive.")
         return value
 
+    def validate_inventory_item(self, value):
+        if value is None:
+            return value
+        farm = self.context["farm"]
+        if value.farm_id != farm.pk:
+            raise serializers.ValidationError("That item belongs to another farm.")
+        if not value.is_feed:
+            raise serializers.ValidationError("That item is not marked as feed.")
+        return value
+
     def validate_delivery_date(self, value):
         if value > timezone.localdate():
             raise serializers.ValidationError("Cannot record a future delivery.")
@@ -1058,11 +1082,22 @@ class FeedDeliverySerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        return FeedDelivery.objects.create(
-            farm=self.context["farm"],
-            recorded_by=self.context["request"].user,
-            **validated_data,
-        )
+        item = validated_data.pop("inventory_item", None)
+        try:
+            delivery, stock_in = record_feed_delivery(
+                farm=self.context["farm"],
+                recorded_by=self.context["request"].user,
+                inventory_item=item,
+                **validated_data,
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(
+                exc.message_dict if hasattr(exc, "message_dict") else exc.messages
+            )
+        # Stashed for FeedDeliveryWithStockView, which reports the created
+        # stock-in back to the caller — not a model field, just a carrier.
+        delivery._created_stock_in = stock_in
+        return delivery
         
 class RecordCorrectionSerializer(serializers.ModelSerializer):
     """Read view of the correction log."""
@@ -1107,6 +1142,12 @@ class DailyRecordCorrectionSerializer(serializers.Serializer):
     feed_kg = serializers.DecimalField(
         max_digits=8, decimal_places=2, required=False, min_value=Decimal("0")
     )
+    feed_sacks = serializers.DecimalField(
+        max_digits=8, decimal_places=2, required=False, min_value=Decimal("0")
+    )
+    feed_item = serializers.PrimaryKeyRelatedField(
+        queryset=InventoryItem.objects.all(), required=False
+    )
     notes = serializers.CharField(required=False, allow_blank=True, max_length=255)
     reason = serializers.CharField()
 
@@ -1116,6 +1157,8 @@ class DailyRecordCorrectionSerializer(serializers.Serializer):
         "mortality_culled",
         "mortality_unknown",
         "feed_kg",
+        "feed_sacks",
+        "feed_item",
         "notes",
     ]
 
@@ -1141,6 +1184,50 @@ class DailyRecordCorrectionSerializer(serializers.Serializer):
                         "Its figures are final and cannot be corrected."
                     )
                 }
+            )
+
+        # ── Feed: sacks and item move together, feed_kg is derived ──
+        # A correction to a feed-item record changes feed_sacks and/or
+        # feed_item; feed_kg is never set independently of them, so it
+        # cannot go out of step with "sacks x kg_per_unit" the way a
+        # freehand correction could.
+        if "feed_sacks" in attrs or "feed_item" in attrs:
+            if "feed_kg" in attrs:
+                raise serializers.ValidationError(
+                    {
+                        "feed_kg": (
+                            "feed_kg is derived from feed_sacks x kg_per_unit "
+                            "here — correct feed_sacks or feed_item instead."
+                        )
+                    }
+                )
+            new_feed_item = attrs.get("feed_item", record.feed_item)
+            new_feed_sacks = attrs.get("feed_sacks", record.feed_sacks)
+            if new_feed_item is None or new_feed_sacks is None:
+                raise serializers.ValidationError(
+                    {
+                        "feed_item": (
+                            "feed_sacks and feed_item are corrected together — "
+                            "both are needed."
+                        )
+                    }
+                )
+            if new_feed_item.farm_id != batch.house.farm_id:
+                raise serializers.ValidationError(
+                    {"feed_item": "That feed item belongs to another farm."}
+                )
+            if new_feed_item.kg_per_unit is None:
+                raise serializers.ValidationError(
+                    {
+                        "feed_item": (
+                            f"{new_feed_item.name} has no sack weight set."
+                        )
+                    }
+                )
+            attrs["feed_item"] = new_feed_item
+            attrs["feed_sacks"] = new_feed_sacks
+            attrs["feed_kg"] = (new_feed_sacks * new_feed_item.kg_per_unit).quantize(
+                Decimal("0.01")
             )
 
         supplied = {k: v for k, v in attrs.items() if k in self.CORRECTABLE_FIELDS}
@@ -1190,6 +1277,7 @@ class DailyRecordCorrectionSerializer(serializers.Serializer):
             )
 
         record.save()
+        sync_feed_usage_log(record, user=user)
         record.refresh_from_db()
 
         new_values = {f: str(getattr(record, f)) for f in self.CORRECTABLE_FIELDS}
@@ -1234,6 +1322,7 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             "name",
             "unit",
             "kg_per_unit",
+            "is_feed",
             "low_stock_threshold",
             "is_active",
             "current_quantity",
@@ -1286,6 +1375,17 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             )
         return value.strip()
 
+    def validate(self, attrs):
+        is_feed = attrs.get("is_feed", getattr(self.instance, "is_feed", False))
+        kg_per_unit = attrs.get(
+            "kg_per_unit", getattr(self.instance, "kg_per_unit", None)
+        )
+        if is_feed and not kg_per_unit:
+            raise serializers.ValidationError(
+                {"kg_per_unit": "Feed items must have kilograms per unit set."}
+            )
+        return attrs
+
     def create(self, validated_data):
         return InventoryItem.objects.create(
             farm=self.context["farm"],
@@ -1322,6 +1422,13 @@ class InventoryStockInSerializer(serializers.ModelSerializer):
         if value > timezone.localdate():
             raise serializers.ValidationError("Cannot record a future delivery.")
         return value
+
+    def validate(self, attrs):
+        if self.context["item"].is_feed:
+            raise serializers.ValidationError(
+                "Feed stock is added by recording a feed delivery."
+            )
+        return attrs
 
     def create(self, validated_data):
         return InventoryStockIn.objects.create(
@@ -1377,6 +1484,10 @@ class InventoryUsageLogSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("That item belongs to another farm.")
         if not value.is_active:
             raise serializers.ValidationError("That item is no longer in use.")
+        if value.is_feed:
+            raise serializers.ValidationError(
+                "Feed use is recorded in the daily record."
+            )
         return value
 
     def validate_quantity_used(self, value):

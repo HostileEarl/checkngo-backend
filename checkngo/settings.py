@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "partners",
     "production.apps.ProductionConfig",
     "analytics",
+    "notifications",
     "drf_spectacular",
 ]
 
@@ -96,7 +97,10 @@ ROOT_URLCONF = 'checkngo.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        # Project-level template overrides. Listed before APP_DIRS so
+        # templates/admin/base_site.html shadows the one shipped by
+        # django.contrib.admin — the single hook the admin restyle needs.
+        'DIRS': [BASE_DIR / "templates"],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -167,6 +171,20 @@ CSRF_TRUSTED_ORIGINS = [
 # entirely — e.g. the invite-accept deep link mailed/texted to an invitee.
 FRONTEND_URL = config("FRONTEND_URL", default="https://your-frontend-url.trycloudflare.com") #http://localhost:5173"
 
+# ── SMS (Semaphore) ──────────────────────────────────────────────────────
+# Used for two one-way notifications: texting an invitee their invitation
+# PIN, and texting a farm owner a low-stock summary. Never used for login —
+# see accounts/models.py User.set_credential for why PIN auth stays static.
+#
+# SMS_ENABLED is a separate switch from the key so it can be turned off
+# without removing credentials — useful when rehearsing a demo repeatedly
+# without spending SMS credits. With no key (or disabled), notifications.sms
+# skips the network call entirely, so local dev and the test suite need
+# neither.
+SEMAPHORE_API_KEY = config("SEMAPHORE_API_KEY", default="")
+SEMAPHORE_SENDER_NAME = config("SEMAPHORE_SENDER_NAME", default="")
+SMS_ENABLED = config("SMS_ENABLED", default=False, cast=bool)
+
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
 
@@ -202,6 +220,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Project-level static sources (not tied to any app). Holds the admin
+# restyle sheet at admin/css/checkngo-admin.css; collectstatic copies it
+# into STATIC_ROOT alongside django.contrib.admin's own assets.
+STATICFILES_DIRS = [BASE_DIR / "static"]
 
 # `collectstatic` target. WhiteNoise serves from here when DEBUG is False;
 # without it the admin renders unstyled in production.

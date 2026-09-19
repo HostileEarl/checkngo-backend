@@ -20,6 +20,7 @@ from .serializers import (
     PhonePinTokenSerializer,
     UserSerializer,
     existing_user_invite_message,
+    send_invitation_pin_sms,
 )
 from .throttles import (
     CredentialChangeThrottle,
@@ -149,6 +150,9 @@ class FarmInvitationListCreateView(generics.ListCreateAPIView):
             )
             payload["detail"] = (
                 f"Invitation created. Give this PIN to {invitation.full_name}."
+            )
+            payload["sms_sent"] = send_invitation_pin_sms(
+                invitation, serializer.issued_pin
             )
         else:
             existing = serializer.existing_user

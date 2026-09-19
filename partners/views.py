@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from accounts.serializers import (
     InvitationReadSerializer,
     existing_user_invite_message,
+    send_invitation_pin_sms,
 )
 from farms.permissions import HasRotatedCredential, IsFarmManagerOrOwner
 from production.models import FeedDelivery, Harvest
@@ -71,6 +72,9 @@ class FarmPartnerListCreateView(generics.ListCreateAPIView):
             )
             payload["detail"] = (
                 f"Invitation created. Give this PIN to {invitation.full_name}."
+            )
+            payload["sms_sent"] = send_invitation_pin_sms(
+                invitation, serializer.issued_pin
             )
         else:
             existing = serializer.existing_user

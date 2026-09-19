@@ -6,7 +6,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.contrib.contenttypes.fields import GenericForeignKey
@@ -623,6 +623,20 @@ class FeedDelivery(OfflineSyncModel):
     invoice_ref = models.CharField(max_length=100, blank=True)
     notes = models.CharField(max_length=255, blank=True)
 
+    # Which feed item this delivery restocks. Null on rows written before
+    # this field existed — those are left alone, not backfilled. Once set,
+    # it is what lets a delivery mirror itself into an InventoryStockIn
+    # (see record_feed_delivery below) so the feed ledger and the
+    # inventory ledger stay in step.
+    inventory_item = models.ForeignKey(
+        "InventoryItem",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="feed_deliveries",
+        limit_choices_to={"is_feed": True},
+    )
+
     class Meta:
         db_table = "production_feed_delivery"
         ordering = ["-delivery_date"]
@@ -633,6 +647,37 @@ class FeedDelivery(OfflineSyncModel):
     def __str__(self):
         return f"{self.quantity_kg}kg {self.get_feed_type_display()} — {self.delivery_date}"
 
+    def clean(self):
+        if self.farm_id is None:
+            return
+        if self.inventory_item_id is None:
+            has_feed_items = InventoryItem.objects.filter(
+                farm_id=self.farm_id, is_feed=True, is_active=True
+            ).exists()
+            if has_feed_items:
+                raise ValidationError(
+                    {"inventory_item": "Select which feed item this delivery restocks."}
+                )
+            return
+        if self.inventory_item.farm_id != self.farm_id:
+            raise ValidationError(
+                {"inventory_item": "That item belongs to another farm."}
+            )
+        if not self.inventory_item.is_feed:
+            raise ValidationError(
+                {"inventory_item": "That item is not marked as feed."}
+            )
+        if not self.inventory_item.kg_per_unit:
+            raise ValidationError(
+                {
+                    "inventory_item": (
+                        f"{self.inventory_item.name} has no kilograms-per-unit "
+                        "set, so a delivery in kg cannot be converted to its "
+                        "unit. Set the sack weight on the item first."
+                    )
+                }
+            )
+
     def save(self, *args, **kwargs):
         # Derive whichever cost field is missing, so either entry style works.
         if self.total_cost is None and self.unit_cost is not None:
@@ -640,7 +685,73 @@ class FeedDelivery(OfflineSyncModel):
         elif self.unit_cost is None and self.total_cost is not None and self.quantity_kg:
             self.unit_cost = (self.total_cost / self.quantity_kg).quantize(Decimal("0.01"))
         super().save(*args, **kwargs)
-        
+
+
+def _feed_units_and_kg(quantity_kg, item):
+    """
+    Feed is converted once, not twice: divide the raw kg into the item's
+    own unit and round THAT, then derive kg back from the rounded unit
+    count. A delivery's stored quantity_kg and its dual-written
+    InventoryStockIn therefore always agree exactly — quantity_kg is never
+    independently rounded from the same raw figure the stock-in also
+    rounds, which is what used to let the two differ by up to half a
+    sack's worth of kg on every delivery.
+    """
+    quantity_in_units = (quantity_kg / item.kg_per_unit).quantize(Decimal("0.01"))
+    derived_kg = (quantity_in_units * item.kg_per_unit).quantize(Decimal("0.01"))
+    return quantity_in_units, derived_kg
+
+
+def _feed_stock_in_for_delivery(delivery, recorded_by, quantity_in_units):
+    """
+    The InventoryStockIn a feed delivery mirrors into, in the item's own
+    unit. quantity_in_units is passed in rather than recomputed from
+    delivery.quantity_kg — that kg figure is itself already derived from
+    this exact unit count (see _feed_units_and_kg), so recomputing it here
+    would just convert the same number back and forth for no reason.
+    """
+    ref = delivery.invoice_ref.strip()
+    return InventoryStockIn.objects.create(
+        item=delivery.inventory_item,
+        quantity=quantity_in_units,
+        stock_in_date=delivery.delivery_date,
+        note=f"Feed delivery — {ref}" if ref else "Feed delivery",
+        recorded_by=recorded_by,
+    )
+
+
+def record_feed_delivery(*, farm, recorded_by, inventory_item=None, **delivery_fields):
+    """
+    The one path that creates a FeedDelivery.
+
+    Validates via FeedDelivery.clean() — same rule whether this is called
+    from the API, the admin, or the demo seed — then, when the farm tracks
+    feed as inventory, dual-writes the matching InventoryStockIn in the
+    same transaction. A delivery and its stock-in either both land or
+    neither does, so the feed ledger and the inventory ledger for that item
+    can never drift apart on a delivery that goes through here.
+    """
+    quantity_in_units = None
+    if inventory_item is not None and inventory_item.kg_per_unit:
+        quantity_in_units, delivery_fields["quantity_kg"] = _feed_units_and_kg(
+            delivery_fields["quantity_kg"], inventory_item
+        )
+
+    with transaction.atomic():
+        delivery = FeedDelivery(
+            farm=farm,
+            recorded_by=recorded_by,
+            inventory_item=inventory_item,
+            **delivery_fields,
+        )
+        delivery.clean()
+        delivery.save()
+        stock_in = None
+        if inventory_item is not None and quantity_in_units is not None:
+            stock_in = _feed_stock_in_for_delivery(delivery, recorded_by, quantity_in_units)
+    return delivery, stock_in
+
+
 class RecordCorrection(models.Model):
     """
     Permanent log of a manager overriding the 24-hour lock.
@@ -817,6 +928,15 @@ class InventoryItem(models.Model):
         help_text="Warn once the balance falls to or below this.",
     )
 
+    # Explicit rather than inferred from kg_per_unit: an item is feed
+    # because someone said so, and that flag is what routes it onto the
+    # feed-delivery/daily-record path (and off the manual stock-in/usage
+    # ones) everywhere else in the app.
+    is_feed = models.BooleanField(
+        default=False,
+        help_text="Feed stock arrives via deliveries and leaves via daily records, not manual entries.",
+    )
+
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -839,6 +959,12 @@ class InventoryItem(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.farm.name})"
+
+    def clean(self):
+        if self.is_feed and not self.kg_per_unit:
+            raise ValidationError(
+                {"kg_per_unit": "Feed items must have kilograms per unit set."}
+            )
 
     # --- Derived, never stored. Same treatment as the feed balance. ---
 
@@ -905,6 +1031,17 @@ class InventoryStockIn(models.Model):
     def __str__(self):
         return f"{self.quantity} {self.item.unit} of {self.item.name} on {self.stock_in_date}"
 
+    def clean(self):
+        # Only reached from a path that calls full_clean() (the admin form,
+        # notably) — the automatic dual-write in record_feed_delivery()
+        # creates rows directly via .objects.create() and never touches
+        # this, which is exactly the point: one is the ledger's own
+        # bookkeeping, the other is a human double-entering it.
+        if self.item_id and self.item.is_feed:
+            raise ValidationError(
+                "Feed stock is added by recording a feed delivery."
+            )
+
 
 class InventoryUsageLog(OfflineSyncModel):
     """
@@ -965,6 +1102,14 @@ class InventoryUsageLog(OfflineSyncModel):
     def clean(self):
         if self.usage_date and self.usage_date > timezone.localdate():
             raise ValidationError({"usage_date": "Cannot record a future date."})
+        # As with InventoryStockIn.clean(): only reached via full_clean().
+        # sync_feed_usage_log() writes the linked log directly and never
+        # calls it, so the derived drawdown from a daily record's feed line
+        # is unaffected by this guard.
+        if self.item_id and self.item.is_feed:
+            raise ValidationError(
+                "Feed use is recorded in the daily record."
+            )
 
 
 # ─────────────────────────────────────────────────────────────

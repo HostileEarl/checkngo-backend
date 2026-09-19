@@ -1,0 +1,40 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{#
+  CheckN Go admin restyle — theming only.
+
+  This override shadows django.contrib.admin's own base_site.html (the
+  project templates dir is listed before APP_DIRS in settings.TEMPLATES).
+  It reproduces Django's branding/title/nav-global blocks verbatim and
+  adds one stylesheet in `extrahead` that repaints the admin with the
+  CheckN Go design tokens and self-hosted fonts (Public Sans + JetBrains
+  Mono, the same files the frontend serves from its own /fonts — see
+  checkngo-admin.css's @font-face block). No CDN font link: the admin is
+  reviewed on the same rural connections as the app.
+
+  `extrahead` — not `extrastyle` — is deliberate: change_form.html,
+  change_list.html and login.html each append their page CSS
+  (forms.css, changelists.css, login.css) inside `extrastyle`, so a sheet
+  placed there would load *before* them and lose on source order. The
+  head renders `extrahead` after every `extrastyle` contribution, so
+  checkngo-admin.css reliably wins without an !important arms race.
+
+  No template logic, blocks, or context are changed. Every admin view
+  keeps the exact markup Django generates.
+#}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block extrahead %}{{ block.super }}
+  <link rel="stylesheet" href="{% static 'admin/css/checkngo-admin.css' %}">
+{% endblock %}
+
+{% block branding %}
+<div id="site-name"><a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a></div>
+{% if user.is_anonymous %}
+  {% include "admin/color_theme_toggle.html" %}
+{% endif %}
+{% endblock %}
+
+{% block nav-global %}{% endblock %}
