@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: checkngo-backend
+    runtime: python
+    plan: starter
+    buildCommand: ./build.sh
+    startCommand: gunicorn checkngo.wsgi:application
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.14.3
