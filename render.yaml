@@ -8,3 +8,29 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.14.3
+
+  - type: cron
+    name: checkngo-low-stock-alerts
+    runtime: python
+    plan: starter
+    # 05:30 Asia/Manila (Render cron runs in UTC) — before the morning
+    # feed round, so a low-stock SMS reaches the owner while there is
+    # still time to act that day. send_stock_alerts dedupes within 24h
+    # (notifications/management/commands/send_stock_alerts.py), so once
+    # a day is the natural cadence.
+    schedule: "30 21 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python manage.py send_stock_alerts
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.14.3
+      - key: SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: SMS_ENABLED
+        sync: false
+      - key: SEMAPHORE_API_KEY
+        sync: false
+      - key: SEMAPHORE_SENDER_NAME
+        sync: false

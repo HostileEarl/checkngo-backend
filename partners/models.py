@@ -11,8 +11,9 @@ class FarmPartnerLink(models.Model):
 
     Distinct from FarmMembership in kind, not degree: a membership grants
     authority INSIDE a farm, this grants a transactional relationship WITH
-    one. A supplier linked here can see the orders addressed to them; they
-    cannot see flock records, staff, or production data.
+    one. A supplier linked here can see the deliveries recorded against
+    them, and a consumer the sales recorded against them; neither can see
+    flock records, staff, or other production data.
     """
 
     class LinkType(models.TextChoices):

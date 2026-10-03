@@ -205,12 +205,11 @@ class Batch(models.Model):
     def farm(self):
         return self.house.farm
 
-    def clean(self):
-        if self.initial_bird_count and self.house_id:
-            if self.initial_bird_count > self.house.capacity:
-                raise ValidationError(
-                    {"initial_bird_count": "Exceeds the house's stated capacity."}
-                )
+    # No clean() rejecting initial_bird_count > house.capacity: capacity is
+    # guidance, not a hard ceiling — a supplier can deliver more than
+    # ordered, and the delivered count is what every downstream figure
+    # (mortality rate, FCR, birds alive) must be based on.
+
     @property
     def was_corrected(self):
         return self.corrections_for_this().exists()
@@ -761,9 +760,9 @@ class RecordCorrection(models.Model):
     the author, and a written reason are all captured here, and this row
     can never be edited or deleted.
 
-    Corrections stop when a batch is harvested. At that point the FCR and
-    feed margin have been calculated and may already have been reported —
-    the books are closed.
+    Corrections stop once a batch leaves ACTIVE — harvested or terminated.
+    At that point the FCR and feed margin (if any) have been calculated
+    and may already have been reported — the books are closed.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

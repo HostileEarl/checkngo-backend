@@ -36,6 +36,11 @@ from .models import (
 class HouseSerializer(serializers.ModelSerializer):
     is_occupied = serializers.BooleanField(read_only=True)
     current_batch_code = serializers.SerializerMethodField()
+    # Chicks actually placed for the current batch, alongside `capacity` —
+    # the two are different things (one is a ceiling, the other what was
+    # delivered) and the house list is the natural place to show them
+    # side by side. None when the house is unoccupied.
+    current_batch_placed = serializers.SerializerMethodField()
 
     class Meta:
         model = House
@@ -47,6 +52,7 @@ class HouseSerializer(serializers.ModelSerializer):
             "is_active",
             "is_occupied",
             "current_batch_code",
+            "current_batch_placed",
             "created_at",
         ]
         read_only_fields = ["id", "created_at"]
@@ -54,6 +60,10 @@ class HouseSerializer(serializers.ModelSerializer):
     def get_current_batch_code(self, obj):
         batch = obj.current_batch
         return batch.batch_code if batch else None
+
+    def get_current_batch_placed(self, obj):
+        batch = obj.current_batch
+        return batch.initial_bird_count if batch else None
 
     def validate_name(self, value):
         farm = self.context["farm"]
@@ -173,16 +183,13 @@ class BatchCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         house = attrs["house"]
-        count = attrs["initial_bird_count"]
 
-        if count > house.capacity:
-            raise serializers.ValidationError(
-                {
-                    "initial_bird_count": (
-                        f"{house.name} holds at most {house.capacity} birds."
-                    )
-                }
-            )
+        # Capacity is guidance, not a hard ceiling: a supplier sometimes
+        # delivers more than ordered, and that delivered count is what
+        # mortality rate, FCR, and every other figure for this batch must
+        # be based on. Rejecting it would force the owner to enter a
+        # number that isn't true. The frontend shows a non-blocking notice
+        # when the count exceeds capacity; nothing here blocks it.
 
         # The database enforces this too via a partial unique index; checking
         # here turns an IntegrityError into a readable 400.
