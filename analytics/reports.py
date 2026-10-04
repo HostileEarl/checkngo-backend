@@ -24,9 +24,11 @@ from django.utils import timezone
 from production.models import (
     Batch,
     DailyRecord,
+    Harvest,
     House,
     InventoryUsageLog,
     RecordCorrection,
+    SaleEvent,
     TaskCompletion,
     TaskTemplate,
 )
@@ -406,3 +408,88 @@ def routine_completion_rows(farm, date_from=None, date_to=None, house=None):
                     _name(c.recorded_by) if c else "",
                 ]
         day += step
+
+
+# ─────────────────────────────────────────────────────────────
+# 7. Sales history
+# ─────────────────────────────────────────────────────────────
+
+
+def sales_history_rows(farm, date_from=None, date_to=None):
+    """
+    One row per SaleEvent: every incremental sale, as recorded, for every
+    batch on the farm.
+
+    `revenue` here is the sale value actually entered for that transaction
+    — not a margin, and the feed-margin methodology (allocated feed cost,
+    feed margin per kg) does not apply to this export at all. Said plainly
+    in the NOTE block below, inside the file, not just on screen.
+
+    `buyer` is the batch's overall buyer, recorded once at closing on
+    Harvest — SaleEvent itself deliberately carries no per-sale buyer (see
+    the model docstring). Blank for any sale on a batch not yet harvested,
+    and the same value repeats across every sale row for one batch; it is
+    not specific to the individual transaction on that row.
+    """
+    yield [
+        "sale_date",
+        "batch_code",
+        "house",
+        "sale_type",
+        "bird_count",
+        "total_weight_kg",
+        "revenue",
+        "buyer",
+    ]
+
+    sales = (
+        SaleEvent.objects.filter(batch__house__farm=farm)
+        .select_related("batch", "batch__house")
+        .order_by("sale_date", "batch__batch_code")
+    )
+    if date_from:
+        sales = sales.filter(sale_date__gte=date_from)
+    if date_to:
+        sales = sales.filter(sale_date__lte=date_to)
+
+    # One query for every batch's buyer, same source feed_margin_rows uses
+    # (Harvest.buyer_link) — not a per-sale field, so looked up once per
+    # batch rather than re-derived per row.
+    buyers = {
+        h.batch_id: (
+            h.buyer_link.business_name or h.buyer_link.partner.full_name
+        )
+        for h in Harvest.objects.filter(
+            batch__house__farm=farm, buyer_link__isnull=False
+        ).select_related("buyer_link__partner")
+    }
+
+    for s in sales.iterator():
+        yield [
+            s.sale_date.isoformat(),
+            s.batch.batch_code,
+            s.batch.house.name,
+            s.get_sale_type_display(),
+            s.bird_count,
+            _s(s.total_weight_kg),
+            _s(s.revenue),
+            buyers.get(s.batch_id, ""),
+        ]
+
+    yield []
+    yield [
+        "NOTE",
+        (
+            "revenue is the sale value recorded for that transaction, not "
+            "a margin — the feed-margin report's methodology (allocated "
+            "feed cost, feed margin per kg) does not apply here."
+        ),
+    ]
+    yield [
+        "NOTE",
+        (
+            "buyer is the batch's overall buyer, recorded once when the "
+            "batch was closed — not specific to the individual sale on "
+            "each row. Blank for a batch not yet harvested."
+        ),
+    ]

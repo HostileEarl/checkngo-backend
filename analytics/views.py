@@ -397,3 +397,16 @@ class RoutineCompletionReportView(_ReportView):
                 request.farm, "routine-completion", date_from, date_to
             ),
         )
+
+
+@extend_schema(tags=["Reports"], summary="Sales history — CSV export")
+class SalesHistoryReportView(_ReportView):
+    """GET /api/farms/<farm_pk>/reports/sales-history.csv?from=&to="""
+
+    def get(self, request, farm_pk):
+        date_from, date_to = _date_range(request)
+        rows = reports.sales_history_rows(request.farm, date_from, date_to)
+        return _csv_stream(
+            rows,
+            _report_filename(request.farm, "sales-history", date_from, date_to),
+        )

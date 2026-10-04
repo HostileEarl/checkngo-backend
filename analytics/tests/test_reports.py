@@ -16,6 +16,7 @@ from decimal import Decimal
 import pytest
 from django.urls import reverse
 
+from partners.models import FarmPartnerLink
 from production.models import (
     Batch,
     DailyRecord,
@@ -24,6 +25,7 @@ from production.models import (
     House,
     InventoryItem,
     InventoryUsageLog,
+    SaleEvent,
     TaskCompletion,
     TaskTemplate,
 )
@@ -37,6 +39,7 @@ REPORT_NAMES = [
     "report-feed-margin",
     "report-inventory-usage",
     "report-routine-completion",
+    "report-sales-history",
 ]
 
 HEADER_FIRST_COL = {
@@ -46,11 +49,13 @@ HEADER_FIRST_COL = {
     "report-feed-margin": "batch_code",
     "report-inventory-usage": "usage_date",
     "report-routine-completion": "date",
+    "report-sales-history": "sale_date",
 }
 
-# fcr and feed-margin always append a disclosure block after the data
-# section, so "no data" for them means: header, then the blank separator.
-HAS_DISCLOSURE_BLOCK = {"report-fcr", "report-feed-margin"}
+# fcr, feed-margin and sales-history always append a disclosure block
+# after the data section, so "no data" for them means: header, then the
+# blank separator.
+HAS_DISCLOSURE_BLOCK = {"report-fcr", "report-feed-margin", "report-sales-history"}
 
 
 def _url(name, farm):
@@ -63,6 +68,17 @@ def _text(response):
 
 def _rows(response):
     return list(csv.reader(io.StringIO(_text(response))))
+
+
+def _data_rows(rows):
+    """Rows after the header, stopping at the blank line before any
+    NOTE/METHODOLOGY/SUMMARY disclosure block."""
+    body = []
+    for r in rows[1:]:
+        if not r:
+            break
+        body.append(r)
+    return body
 
 
 @pytest.fixture
@@ -92,16 +108,33 @@ def populated_farm(staffed_farm, owner, worker):
             feed_kg=Decimal("120.00"),
             recorded_by=worker,
         )
+    buyer_link = FarmPartnerLink.objects.create(
+        farm=farm,
+        partner=owner,  # any user; only the link_type/farm matter here
+        link_type=FarmPartnerLink.LinkType.CONSUMER,
+        business_name="Bautista Dealers",
+        linked_by=owner,
+    )
     Harvest.objects.create(
         batch=harvested,
         harvest_date=date(2026, 2, 20),
         birds_harvested=985,
         total_weight_kg=Decimal("1800.00"),
         revenue=Decimal("250000.00"),
+        buyer_link=buyer_link,
         recorded_by=owner,
     )
     harvested.status = Batch.Status.HARVESTED
     harvested.save(update_fields=["status"])
+
+    SaleEvent.objects.create(
+        batch=harvested,
+        sale_date=date(2026, 2, 18),
+        sale_type=SaleEvent.SaleType.DRESSED,
+        bird_count=985,
+        total_weight_kg=Decimal("1800.00"),
+        revenue=Decimal("250000.00"),
+    )
 
     active = Batch.objects.create(
         house=house2,
@@ -116,6 +149,15 @@ def populated_farm(staffed_farm, owner, worker):
         mortality_unknown=3,
         feed_kg=Decimal("60.00"),
         recorded_by=worker,
+    )
+    # No buyer here — the batch is still active, has no Harvest yet.
+    SaleEvent.objects.create(
+        batch=active,
+        sale_date=date(2026, 3, 5),
+        sale_type=SaleEvent.SaleType.LIVE,
+        bird_count=50,
+        total_weight_kg=Decimal("90.00"),
+        revenue=None,
     )
 
     FeedDelivery.objects.create(
@@ -322,6 +364,52 @@ class TestReportContent:
         assert len(filtered) == 1
         assert filtered[0][0] == "2026-02-10"
 
+    def test_sales_history_columns_and_body(self, auth, owner, populated_farm):
+        rows = _rows(auth(owner).get(_url("report-sales-history", populated_farm)))
+        header = rows[0]
+        assert header == [
+            "sale_date",
+            "batch_code",
+            "house",
+            "sale_type",
+            "bird_count",
+            "total_weight_kg",
+            "revenue",
+            "buyer",
+        ]
+
+        body = _data_rows(rows)
+        assert len(body) == 2
+
+        harvested = next(r for r in body if r[1] == "B-2026-01")
+        assert harvested[header.index("sale_type")] == "Dressed"
+        assert harvested[header.index("bird_count")] == "985"
+        assert harvested[header.index("revenue")] == "250000.00"
+        assert harvested[header.index("buyer")] == "Bautista Dealers"
+
+        active = next(r for r in body if r[1] == "B-2026-02")
+        assert active[header.index("sale_type")] == "Live"
+        assert active[header.index("revenue")] == ""  # no value entered
+        assert active[header.index("buyer")] == ""  # not yet harvested
+
+    def test_sales_history_date_filter_narrows_rows(
+        self, auth, owner, populated_farm
+    ):
+        response = auth(owner).get(
+            _url("report-sales-history", populated_farm), {"from": "2026-03-01"}
+        )
+        body = _data_rows(_rows(response))
+        assert len(body) == 1
+        assert body[0][1] == "B-2026-02"
+
+    def test_sales_history_notes_revenue_is_not_a_margin(
+        self, auth, owner, populated_farm
+    ):
+        text = _text(auth(owner).get(_url("report-sales-history", populated_farm)))
+        assert "not a margin" in text
+        assert "feed-margin report's methodology" in text
+        assert "batch's overall buyer" in text
+
     def test_routine_completion_is_a_completed_or_not_grid(
         self, auth, owner, populated_farm
     ):
@@ -377,6 +465,7 @@ class TestRowWidthMatchesHeader:
         "report-feed-margin": {},
         "report-inventory-usage": {},
         "report-routine-completion": {"from": "2026-01-01", "to": "2026-01-05"},
+        "report-sales-history": {},
     }
 
     @pytest.mark.parametrize("name", REPORT_NAMES)
@@ -416,6 +505,7 @@ class TestReportValidation:
         "report-mortality-summary",
         "report-inventory-usage",
         "report-routine-completion",
+        "report-sales-history",
     ]
 
     @pytest.mark.parametrize("name", DATE_REPORTS)

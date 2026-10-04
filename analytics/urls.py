@@ -15,6 +15,7 @@ from .views import (
     InventoryUsageReportView,
     MortalitySummaryReportView,
     RoutineCompletionReportView,
+    SalesHistoryReportView,
 )
 
 app_name = "analytics"
@@ -39,4 +40,5 @@ urlpatterns = [
     path(f"{_reports}/feed-margin.csv", FeedMarginReportView.as_view(), name="report-feed-margin"),
     path(f"{_reports}/inventory-usage.csv", InventoryUsageReportView.as_view(), name="report-inventory-usage"),
     path(f"{_reports}/routine-completion.csv", RoutineCompletionReportView.as_view(), name="report-routine-completion"),
+    path(f"{_reports}/sales-history.csv", SalesHistoryReportView.as_view(), name="report-sales-history"),
 ]
