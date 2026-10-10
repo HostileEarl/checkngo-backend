@@ -8,10 +8,10 @@
   project templates dir is listed before APP_DIRS in settings.TEMPLATES).
   It reproduces Django's branding/title/nav-global blocks verbatim and
   adds one stylesheet in `extrahead` that repaints the admin with the
-  CheckN Go design tokens and self-hosted fonts (Public Sans + JetBrains
-  Mono, the same files the frontend serves from its own /fonts — see
-  checkngo-admin.css's @font-face block). No CDN font link: the admin is
-  reviewed on the same rural connections as the app.
+  CheckN Go design tokens and self-hosted fonts (Nunito + JetBrains
+  Mono — Nunito is the same file the frontend serves from its own
+  /fonts; see checkngo-admin.css's @font-face block). No CDN font link:
+  the admin is reviewed on the same rural connections as the app.
 
   `extrahead` — not `extrastyle` — is deliberate: change_form.html,
   change_list.html and login.html each append their page CSS

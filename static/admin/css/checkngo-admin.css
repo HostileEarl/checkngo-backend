@@ -8,19 +8,25 @@
    — repaints the whole admin in the CheckN Go palette without touching a
    single Django template rule or ModelAdmin.
 
-   Tokens are the frontend's Tailwind config (checkngo-frontend/tailwind.config.js):
+   Tokens are the frontend's Tailwind config (checkngo-frontend/tailwind.config.js),
+   migrated 2026-10-10 — see checkngo-frontend/DESIGN.md for the full spec
+   and contrast derivations:
 
-     brand-50  #EBF3F2   brand-300 #4D9A8B   brand-600 #006E59  (primary)
-     brand-100 #D1E5E1   brand-400 #268472   brand-700 #005847
-     brand-200 #A3CBC3   brand-500 #0D7561   brand-800 #334155
-                                             brand-900 #1E293B
+     brand-50  #FBF5F4   brand-300 #D5A394   brand-600 #A83F20  (primary)
+     brand-100 #F5E8E4   brand-400 #C47C67   brand-700 #8A341A
+     brand-200 #E5C5BC   brand-500 #B45A3F   brand-800 #656D76  (secondary text)
+                                             brand-900 #1A1A1A  (primary text)
 
-     success-500 #22C55E  warning-500 #E8720C  danger-500 #EF4444
-     success-700 #15803D  warning-700 #9C4B08  danger-600 #DC2626
-     line rgba(0, 110, 89, 0.15)
+     success-500 #1ABF86  warning-500 #F59E0B  danger-500 #EF4444
+     success-600 #16A878  warning-600 #D97706  danger-600 #DC2626
+     success-700 #0D7A54  warning-700 #B45309  danger-700 #B91C1C
 
-   Font: Public Sans (UI text) + JetBrains Mono (numeric columns) — the
-   same two self-hosted faces as the frontend, same files, no CDN. See the
+     line        #E0E0E0  (decorative dividers/card outlines)
+     line-strong #8C8C8C  (input borders, focus-adjacent control outlines)
+
+   Font: Nunito (UI text) + JetBrains Mono (numeric columns) — Nunito is
+   the exact same self-hosted file the frontend serves from its own
+   /fonts (one variable-weight woff2 covering 400/500/600/700). See the
    @font-face block below.
    Radius: 0.625rem for cards/inputs, 9999px (pill) for buttons.
    ========================================================================== */
@@ -29,32 +35,40 @@
    0. Fonts — self-hosted, same files as checkngo-frontend/public/fonts.
       The admin has no offline requirement of its own, but reviewers open
       it on the same connections as the app, and two typefaces side by
-      side (a CDN Inter here, self-hosted Public Sans there) would be the
-      first thing that reads as "two different systems".
+      side (a CDN font here, self-hosted Nunito there) would be the first
+      thing that reads as "two different systems".
    -------------------------------------------------------------------------- */
 
 @font-face {
-    font-family: "Public Sans";
+    font-family: "Nunito";
     font-style: normal;
     font-weight: 400;
     font-display: swap;
-    src: url("../fonts/public-sans-latin-400-normal.woff2") format("woff2");
+    src: url("../fonts/nunito-latin.woff2") format("woff2");
 }
 
 @font-face {
-    font-family: "Public Sans";
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("../fonts/nunito-latin.woff2") format("woff2");
+}
+
+@font-face {
+    font-family: "Nunito";
     font-style: normal;
     font-weight: 600;
     font-display: swap;
-    src: url("../fonts/public-sans-latin-600-normal.woff2") format("woff2");
+    src: url("../fonts/nunito-latin.woff2") format("woff2");
 }
 
 @font-face {
-    font-family: "Public Sans";
+    font-family: "Nunito";
     font-style: normal;
     font-weight: 700;
     font-display: swap;
-    src: url("../fonts/public-sans-latin-700-normal.woff2") format("woff2");
+    src: url("../fonts/nunito-latin.woff2") format("woff2");
 }
 
 @font-face {
@@ -73,78 +87,79 @@ html[data-theme="light"],
 html[data-theme="auto"],
 :root {
     /* Accents */
-    --primary: #006E59;                       /* brand-600 */
-    --secondary: #006E59;                     /* brand-600 — drives the header */
-    --accent: #A3CBC3;                        /* brand-200 */
+    --primary: #A83F20;                       /* brand-600 */
+    --secondary: #A83F20;                     /* brand-600 — drives the header */
+    --accent: #E5C5BC;                        /* brand-200 */
     --primary-fg: #ffffff;
 
-    /* Body text — all AA+ on white (brand-900 ≈ 14.3:1, brand-800 ≈ 7.6:1) */
-    --body-fg: #1E293B;                       /* brand-900 */
+    /* Body text — all AA+ on white (brand-900 ≈ 17.4:1, brand-800 ≈ 5.25:1) */
+    --body-fg: #1A1A1A;                       /* brand-900 */
     --body-bg: #ffffff;
-    --body-quiet-color: #334155;              /* brand-800 */
-    --body-medium-color: #334155;             /* brand-800 */
-    --body-loud-color: #1E293B;               /* brand-900 */
+    --body-quiet-color: #656D76;              /* brand-800 */
+    --body-medium-color: #656D76;             /* brand-800 */
+    --body-loud-color: #1A1A1A;               /* brand-900 */
 
     /* Header — pure white text so "Welcome, …" clears WCAG AA on brand-600 */
     --header-color: #ffffff;
     --header-branding-color: #ffffff;
-    --header-bg: #006E59;                     /* brand-600 */
+    --header-bg: #A83F20;                     /* brand-600 */
     --header-link-color: #ffffff;
 
     /* Breadcrumbs */
-    --breadcrumbs-fg: #A3CBC3;                /* brand-200 */
+    --breadcrumbs-fg: #E5C5BC;                /* brand-200 */
     --breadcrumbs-link-fg: #ffffff;
-    --breadcrumbs-bg: #005847;               /* brand-700 */
+    --breadcrumbs-bg: #8A341A;               /* brand-700 */
 
     /* Links */
-    --link-fg: #006E59;                       /* brand-600 */
-    --link-hover-color: #005847;              /* brand-700 */
-    --link-selected-fg: #005847;              /* brand-700 */
+    --link-fg: #A83F20;                       /* brand-600 */
+    --link-hover-color: #8A341A;              /* brand-700 */
+    --link-selected-fg: #8A341A;              /* brand-700 */
 
-    /* Rules & borders */
-    --hairline-color: rgba(0, 110, 89, 0.15); /* the frontend's `line` token */
-    /* 0.24 alpha measured ~1.4:1 against white — well under the 3:1
-       border floor for an interactive control. 0.7 alpha holds ~3.3:1
-       while staying the same hue as every other border on the page. */
-    --border-color: rgba(0, 110, 89, 0.7);
+    /* Rules & borders — the frontend's `line` and `line-strong` tokens.
+       line (#E0E0E0) is 1.32:1 against white, by design — decorative
+       dividers only. border-color uses line-strong (#8C8C8C, 3.37:1 on
+       white, 3.19:1 on Canvas) for anything that has to distinguish an
+       interactive control from its background. */
+    --hairline-color: #E0E0E0;
+    --border-color: #8C8C8C;
 
     --error-fg: #B91C1C;                      /* danger-700 */
-    --success-fg: #15803D;                    /* success-700 */
-    --warning-fg: #9C4B08;                    /* warning-700 */
-    --muted-fg: #475569;                      /* muted-600 */
+    --success-fg: #0D7A54;                    /* success-700 */
+    --warning-fg: #B45309;                    /* warning-700 */
+    --muted-fg: #656D76;                      /* secondary text (brand-800) */
 
     /* Messages — meaning-named, matching the frontend's success/warning/danger */
     --message-debug-bg: #F3F3F3;
-    --message-info-bg: #D1E5E1;               /* brand-100 */
-    --message-success-bg: #DCFCE7;            /* success-100 */
-    --message-warning-bg: #FFE1B8;            /* warning-100 */
+    --message-info-bg: #F5E8E4;               /* brand-100 */
+    --message-success-bg: #D7F5E9;            /* success-100 */
+    --message-warning-bg: #FEF3C7;            /* warning-100 */
     --message-error-bg: #FEE2E2;              /* danger-100 */
 
     /* Surfaces */
-    --darkened-bg: #EBF3F2;                   /* brand-50 — striped rows, panels, th */
-    --selected-bg: #D1E5E1;                   /* brand-100 — selected cells */
-    --selected-row: #EBF3F2;                  /* brand-50 */
+    --darkened-bg: #FBF5F4;                   /* brand-50 — striped rows, panels, th */
+    --selected-bg: #F5E8E4;                   /* brand-100 — selected cells */
+    --selected-row: #FBF5F4;                  /* brand-50 */
 
     /* Buttons */
     --button-fg: #ffffff;
-    --button-bg: #006E59;                     /* brand-600 */
-    --button-hover-bg: #005847;               /* brand-700 */
-    --default-button-bg: #006E59;             /* brand-600 */
-    --default-button-hover-bg: #005847;       /* brand-700 */
-    --close-button-bg: #334155;               /* brand-800 */
-    --close-button-hover-bg: #1E293B;         /* brand-900 */
+    --button-bg: #A83F20;                     /* brand-600 */
+    --button-hover-bg: #8A341A;               /* brand-700 */
+    --default-button-bg: #A83F20;             /* brand-600 */
+    --default-button-hover-bg: #8A341A;       /* brand-700 */
+    --close-button-bg: #656D76;               /* brand-800 */
+    --close-button-hover-bg: #1A1A1A;         /* brand-900 */
     --delete-button-bg: #DC2626;              /* danger-600 */
     --delete-button-hover-bg: #B91C1C;        /* danger-700 */
 
     /* Changelist "Add" / object tools — filled brand, not the pale default */
     --object-tools-fg: #ffffff;
-    --object-tools-bg: #006E59;               /* brand-600 */
-    --object-tools-hover-bg: #005847;         /* brand-700 */
+    --object-tools-bg: #A83F20;               /* brand-600 */
+    --object-tools-hover-bg: #8A341A;         /* brand-700 */
 
-    /* Typography — Public Sans first (self-hosted above), Django's own
-       stack as fallback while a page's first paint waits on the font. */
+    /* Typography — Nunito first (self-hosted above), Django's own stack
+       as fallback while a page's first paint waits on the font. */
     --font-family-primary:
-        "Public Sans", "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial,
+        "Nunito", "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial,
         sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
         "Noto Color Emoji";
 
@@ -169,100 +184,100 @@ html[data-theme="auto"],
 
 @media (prefers-color-scheme: dark) {
     :root {
-        --primary: #006E59;
-        --secondary: #006E59;
-        --accent: #A3CBC3;
+        --primary: #A83F20;
+        --secondary: #A83F20;
+        --accent: #E5C5BC;
         --primary-fg: #ffffff;
 
-        --body-fg: #1E293B;
+        --body-fg: #1A1A1A;
         --body-bg: #ffffff;
-        --body-quiet-color: #334155;
-        --body-medium-color: #334155;
-        --body-loud-color: #1E293B;
+        --body-quiet-color: #656D76;
+        --body-medium-color: #656D76;
+        --body-loud-color: #1A1A1A;
 
         --header-color: #ffffff;
         --header-branding-color: #ffffff;
-        --header-bg: #006E59;
+        --header-bg: #A83F20;
         --header-link-color: #ffffff;
 
-        --breadcrumbs-fg: #A3CBC3;
+        --breadcrumbs-fg: #E5C5BC;
         --breadcrumbs-link-fg: #ffffff;
-        --breadcrumbs-bg: #005847;
+        --breadcrumbs-bg: #8A341A;
 
-        --link-fg: #006E59;
-        --link-hover-color: #005847;
-        --link-selected-fg: #005847;
+        --link-fg: #A83F20;
+        --link-hover-color: #8A341A;
+        --link-selected-fg: #8A341A;
 
-        --hairline-color: rgba(0, 110, 89, 0.15);
-        --border-color: rgba(0, 110, 89, 0.7);
+        --hairline-color: #E0E0E0;
+        --border-color: #8C8C8C;
 
         --error-fg: #B91C1C;
-        --success-fg: #15803D;
-        --warning-fg: #9C4B08;
-        --muted-fg: #475569;
+        --success-fg: #0D7A54;
+        --warning-fg: #B45309;
+        --muted-fg: #656D76;
 
         --message-debug-bg: #F3F3F3;
-        --message-info-bg: #D1E5E1;
-        --message-success-bg: #DCFCE7;
-        --message-warning-bg: #FFE1B8;
+        --message-info-bg: #F5E8E4;
+        --message-success-bg: #D7F5E9;
+        --message-warning-bg: #FEF3C7;
         --message-error-bg: #FEE2E2;
 
-        --darkened-bg: #EBF3F2;
-        --selected-bg: #D1E5E1;
-        --selected-row: #EBF3F2;
+        --darkened-bg: #FBF5F4;
+        --selected-bg: #F5E8E4;
+        --selected-row: #FBF5F4;
 
-        --close-button-bg: #334155;
-        --close-button-hover-bg: #1E293B;
+        --close-button-bg: #656D76;
+        --close-button-hover-bg: #1A1A1A;
 
         color-scheme: light;
     }
 }
 
 html[data-theme="dark"] {
-    --primary: #006E59;
-    --secondary: #006E59;
-    --accent: #A3CBC3;
+    --primary: #A83F20;
+    --secondary: #A83F20;
+    --accent: #E5C5BC;
     --primary-fg: #ffffff;
 
-    --body-fg: #1E293B;
+    --body-fg: #1A1A1A;
     --body-bg: #ffffff;
-    --body-quiet-color: #334155;
-    --body-medium-color: #334155;
-    --body-loud-color: #1E293B;
+    --body-quiet-color: #656D76;
+    --body-medium-color: #656D76;
+    --body-loud-color: #1A1A1A;
 
     --header-color: #ffffff;
     --header-branding-color: #ffffff;
-    --header-bg: #006E59;
+    --header-bg: #A83F20;
     --header-link-color: #ffffff;
 
-    --breadcrumbs-fg: #A3CBC3;
+    --breadcrumbs-fg: #E5C5BC;
     --breadcrumbs-link-fg: #ffffff;
-    --breadcrumbs-bg: #005847;
+    --breadcrumbs-bg: #8A341A;
 
-    --link-fg: #006E59;
-    --link-hover-color: #005847;
-    --link-selected-fg: #005847;
+    --link-fg: #A83F20;
+    --link-hover-color: #8A341A;
+    --link-selected-fg: #8A341A;
 
-    --hairline-color: rgba(0, 110, 89, 0.15);
-    --border-color: rgba(0, 110, 89, 0.7);
+    --hairline-color: #E0E0E0;
+    --border-color: #8C8C8C;
 
     --error-fg: #B91C1C;
-    --success-fg: #15803D;
-    --warning-fg: #9C4B08;
-    --muted-fg: #475569;
+    --success-fg: #0D7A54;
+    --warning-fg: #B45309;
+    --muted-fg: #656D76;
 
     --message-debug-bg: #F3F3F3;
-    --message-info-bg: #D1E5E1;
-    --message-success-bg: #DCFCE7;
-    --message-warning-bg: #FFE1B8;
+    --message-info-bg: #F5E8E4;
+    --message-success-bg: #D7F5E9;
+    --message-warning-bg: #FEF3C7;
     --message-error-bg: #FEE2E2;
 
-    --darkened-bg: #EBF3F2;
-    --selected-bg: #D1E5E1;
-    --selected-row: #EBF3F2;
+    --darkened-bg: #FBF5F4;
+    --selected-bg: #F5E8E4;
+    --selected-row: #FBF5F4;
 
-    --close-button-bg: #334155;
-    --close-button-hover-bg: #1E293B;
+    --close-button-bg: #656D76;
+    --close-button-hover-bg: #1A1A1A;
 
     color-scheme: light;
 }
@@ -334,7 +349,7 @@ body {
     height: 30px;
     border-radius: 8px;
     background: #ffffff;
-    color: #006E59;
+    color: #A83F20;
     font-size: 0.8125rem;
     font-weight: 700;
     letter-spacing: 0;
@@ -385,47 +400,47 @@ div.breadcrumbs {
    -------------------------------------------------------------------------- */
 
 #nav-sidebar {
-    background: #EBF3F2;                      /* brand-50 */
+    background: #FBF5F4;                      /* brand-50 */
     border-right: 1px solid var(--hairline-color);
     padding-top: 8px;
 }
 
 #toggle-nav-sidebar {
-    background: #EBF3F2;
+    background: #FBF5F4;
     border-right: 1px solid var(--hairline-color);
-    color: #006E59;
+    color: #A83F20;
 }
 
 #toggle-nav-sidebar:hover,
 #toggle-nav-sidebar:focus {
-    background: #D1E5E1;
+    background: #F5E8E4;
 }
 
 #nav-sidebar .module caption,
 #nav-sidebar .module th[scope="row"] {
-    color: #334155;                           /* brand-800 */
+    color: #656D76;                           /* brand-800 */
 }
 
 #nav-sidebar a:link,
 #nav-sidebar a:visited {
-    color: #1E293B;                           /* brand-900 */
+    color: #1A1A1A;                           /* brand-900 */
 }
 
 #nav-sidebar a:hover,
 #nav-sidebar a:focus {
-    background: #D1E5E1;                      /* brand-100 */
-    color: #005847;                           /* brand-700 */
+    background: #F5E8E4;                      /* brand-100 */
+    color: #8A341A;                           /* brand-700 */
 }
 
 #nav-sidebar .current-app .section:link,
 #nav-sidebar .current-app .section:visited {
-    color: #005847;                           /* brand-700 */
+    color: #8A341A;                           /* brand-700 */
     font-weight: 700;
 }
 
 /* Active model — brand-600 with white text (overrides --selected-row) */
 #nav-sidebar .current-model {
-    background: #006E59;                      /* brand-600 */
+    background: #A83F20;                      /* brand-600 */
     border-radius: 6px;
 }
 
@@ -449,8 +464,8 @@ div.breadcrumbs {
 }
 
 #nav-filter:focus {
-    border-color: #0D7561;                    /* brand-500 */
-    box-shadow: 0 0 0 3px rgba(13, 117, 97, 0.22);
+    border-color: #B45A3F;                    /* brand-500 */
+    box-shadow: 0 0 0 3px rgba(180, 90, 63, 0.22);
 }
 
 /* --------------------------------------------------------------------------
@@ -468,8 +483,8 @@ div.breadcrumbs {
 .module caption,
 .inline-group h2,
 fieldset.module > h2 {
-    background: #EBF3F2;                      /* brand-50 */
-    color: #1E293B;                           /* brand-900 */
+    background: #FBF5F4;                      /* brand-50 */
+    color: #1A1A1A;                           /* brand-900 */
     font-size: 0.875rem;                      /* the app's card-header size */
     font-weight: 700;
     letter-spacing: 0.01em;
@@ -494,8 +509,8 @@ fieldset.module > h2 {
 }
 
 #content-related .module h2 {
-    background: #EBF3F2;
-    color: #1E293B;
+    background: #FBF5F4;
+    color: #1A1A1A;
 }
 
 /* Fieldsets on change forms */
@@ -528,8 +543,8 @@ fieldset.module {
 
 #changelist table thead th,
 #changelist table thead td {
-    background: #EBF3F2;                      /* brand-50 */
-    color: #334155;                           /* brand-800 */
+    background: #FBF5F4;                      /* brand-50 */
+    color: #656D76;                           /* brand-800 */
     border-bottom: 1px solid var(--hairline-color);
     font-size: 0.6875rem;
     letter-spacing: 0.04em;
@@ -537,22 +552,22 @@ fieldset.module {
 
 #changelist table thead th a:link,
 #changelist table thead th a:visited {
-    color: #334155;
+    color: #656D76;
 }
 
 #changelist table thead th.sorted {
-    background: #D1E5E1;                      /* brand-100 */
+    background: #F5E8E4;                      /* brand-100 */
 }
 
 /* Cell-level so it paints over the tr-level stripe on both colours */
 #changelist table tbody tr:hover > th,
 #changelist table tbody tr:hover > td {
-    background-color: #D1E5E1;                /* brand-100 */
+    background-color: #F5E8E4;                /* brand-100 */
 }
 
 #changelist tbody tr:has(.action-select:checked) > th,
 #changelist tbody tr:has(.action-select:checked) > td {
-    background-color: #A3CBC3;                /* brand-200 — selected row */
+    background-color: #E5C5BC;                /* brand-200 — selected row */
 }
 
 /* None of the four status colours reach 4.5:1 against brand-200 (the
@@ -563,7 +578,7 @@ fieldset.module {
 #changelist tbody tr:has(.action-select:checked) .status-success,
 #changelist tbody tr:has(.action-select:checked) .status-warning,
 #changelist tbody tr:has(.action-select:checked) .status-muted {
-    color: #1E293B;                           /* brand-900 */
+    color: #1A1A1A;                           /* brand-900 */
 }
 
 /* Inline (tabular) tables on change forms */
@@ -579,7 +594,7 @@ fieldset.module {
    -------------------------------------------------------------------------- */
 
 #changelist-filter {
-    background: #EBF3F2;                      /* brand-50 */
+    background: #FBF5F4;                      /* brand-50 */
     border: 1px solid var(--hairline-color);
     border-radius: 0.625rem;
     overflow: hidden;
@@ -587,18 +602,18 @@ fieldset.module {
 
 #changelist-filter h2 {
     background: transparent;
-    color: #1E293B;                           /* brand-900 */
+    color: #1A1A1A;                           /* brand-900 */
     border-bottom: 1px solid var(--hairline-color);
     text-transform: none;
     font-weight: 700;
 }
 
 #changelist-filter h3 {
-    color: #334155;                           /* brand-800 */
+    color: #656D76;                           /* brand-800 */
 }
 
 #changelist-filter li.selected a {
-    color: #006E59;                           /* brand-600 */
+    color: #A83F20;                           /* brand-600 */
     font-weight: 600;
 }
 
@@ -606,7 +621,7 @@ fieldset.module {
 #changelist-filter a:hover,
 #changelist-filter li.selected a:hover,
 #changelist-filter li.selected a:focus {
-    color: #005847;                           /* brand-700 */
+    color: #8A341A;                           /* brand-700 */
 }
 
 /* Date-hierarchy drilldown strip */
@@ -636,22 +651,24 @@ a.button,
 input[type="submit"]:focus-visible,
 input[type="button"]:focus-visible,
 a.button:focus-visible {
-    outline: 2px solid #0D7561;               /* brand-500 */
+    outline: 2px solid #B45A3F;               /* brand-500 */
     outline-offset: 2px;
 }
 
 /* Secondary / non-primary actions — bordered, not filled. Django marks the
    primary submit with .default; everything else in the submit row (Save
    and add another, Save and continue) is secondary.
-   brand-200 (#A3CBC3) against white is only ~1.8:1 — well under the 3:1
-   border floor — so the resting border is brand-300, the hover border
-   brand-400, one step further. */
+   brand-200 (#E5C5BC) against white is only ~1.61:1, and the new brand-300
+   (#D5A394) only reaches ~2.2:1 — both well under the 3:1 border floor, so
+   this uses `line-strong` (3.37:1) instead of a brand tint. On hover the
+   border matches the hover text color (brand-700, 8.11:1) rather than an
+   intermediate shade. */
 .submit-row input:not(.default),
 .submit-row a:not(.deletelink),
 a.button:not(.default) {
     background: #ffffff;
-    color: #006E59;                           /* brand-600 */
-    border: 1px solid #4D9A8B;                /* brand-300 — 3.3:1 on white */
+    color: #A83F20;                           /* brand-600 */
+    border: 1px solid #8C8C8C;                /* line-strong — 3.37:1 on white */
 }
 
 .submit-row input:not(.default):hover,
@@ -659,9 +676,9 @@ a.button:not(.default) {
 .submit-row a:not(.deletelink):hover,
 .submit-row a:not(.deletelink):focus,
 a.button:not(.default):hover {
-    background: #EBF3F2;                      /* brand-50 */
-    color: #005847;                           /* brand-700 */
-    border-color: #268472;                    /* brand-400 — 4.5:1 on white */
+    background: #FBF5F4;                      /* brand-50 */
+    color: #8A341A;                           /* brand-700 */
+    border-color: #8A341A;                    /* brand-700 — 8.11:1 on white */
 }
 
 /* Delete actions — danger, still a pill */
@@ -685,7 +702,7 @@ a.deletelink:focus {
 
 /* Bulk-action bar */
 .actions {
-    background: #EBF3F2;                      /* brand-50 */
+    background: #FBF5F4;                      /* brand-50 */
     border: 1px solid var(--hairline-color);
     border-radius: 0.625rem;
     color: var(--body-fg);
@@ -705,12 +722,12 @@ a.deletelink:focus {
 .object-tools a.addlink,
 .object-tools a.addlink:link,
 .object-tools a.addlink:visited {
-    background: #006E59;                      /* brand-600 */
+    background: #A83F20;                      /* brand-600 */
 }
 
 .object-tools a.addlink:hover,
 .object-tools a.addlink:focus {
-    background: #005847;                      /* brand-700 */
+    background: #8A341A;                      /* brand-700 */
 }
 
 /* --------------------------------------------------------------------------
@@ -760,9 +777,9 @@ input:focus-visible,
 textarea:focus,
 select:focus,
 .vTextField:focus {
-    border-color: #0D7561;                    /* brand-500 */
+    border-color: #B45A3F;                    /* brand-500 */
     outline: none;
-    box-shadow: 0 0 0 3px rgba(13, 117, 97, 0.25);
+    box-shadow: 0 0 0 3px rgba(180, 90, 63, 0.25);
 }
 
 .aligned label {
@@ -801,8 +818,8 @@ td.errors select,
 
 .selector-available h2,
 .selector-chosen h2 {
-    background: #EBF3F2;
-    color: #1E293B;
+    background: #FBF5F4;
+    color: #1A1A1A;
     border-bottom: 1px solid var(--hairline-color);
 }
 
@@ -810,17 +827,17 @@ td.errors select,
 .calendar caption,
 .calendarbox h2,
 .clockbox h2 {
-    background: #006E59;                      /* brand-600 */
+    background: #A83F20;                      /* brand-600 */
     color: #ffffff;
 }
 
 .calendar td.selected a {
-    background: #006E59;
+    background: #A83F20;
 }
 
 .calendar td a:hover,
 .timelist a:hover {
-    background: #005847;
+    background: #8A341A;
 }
 
 /* --------------------------------------------------------------------------
@@ -837,21 +854,21 @@ ul.messagelist li {
     border-radius: 0.625rem;
     padding-top: 12px;
     padding-bottom: 12px;
-    color: #1E293B;                           /* brand-900 */
+    color: #1A1A1A;                           /* brand-900 */
     border: 1px solid transparent;
 }
 
 ul.messagelist li.success {
-    background-color: #DCFCE7;                /* success-100 */
-    border-color: rgba(34, 197, 94, 0.45);   /* success-500 */
-    color: #15803D;                      /* success-700 — matches --success-fg */
+    background-color: #D7F5E9;                /* success-100 */
+    border-color: rgba(26, 191, 134, 0.45);   /* success-500 */
+    color: #0D7A54;                      /* success-700 — matches --success-fg */
 }
 
 ul.messagelist li.warning {
-    background-color: #FFE1B8;                /* warning-100 */
-    border-color: #E8720C;                    /* warning-500 */
+    background-color: #FEF3C7;                /* warning-100 */
+    border-color: #F59E0B;                    /* warning-500 */
     border-width: 1px 1px 1px 4px;
-    color: #9C4B08;
+    color: #B45309;
     font-weight: 600;
 }
 
@@ -863,9 +880,9 @@ ul.messagelist li.error {
 
 ul.messagelist li.info,
 ul.messagelist li.debug {
-    background-color: #D1E5E1;                /* brand-100 */
+    background-color: #F5E8E4;                /* brand-100 */
     border-color: var(--hairline-color);
-    color: #1E293B;
+    color: #1A1A1A;
 }
 
 /* Form-level error callout (e.g. the login "please correct" note) */
@@ -888,20 +905,20 @@ ul.messagelist li.debug {
 
 .paginator a:link,
 .paginator a:visited {
-    background: #EBF3F2;                      /* brand-50 */
-    color: #006E59;                           /* brand-600 */
+    background: #FBF5F4;                      /* brand-50 */
+    color: #A83F20;                           /* brand-600 */
     border-radius: 9999px;
     padding: 4px 12px;
 }
 
 .paginator a:focus,
 .paginator a:hover {
-    background: #006E59;                      /* brand-600 */
+    background: #A83F20;                      /* brand-600 */
     color: #ffffff;
 }
 
 .paginator .this-page {
-    background: #006E59;                      /* brand-600 */
+    background: #A83F20;                      /* brand-600 */
     color: #ffffff;
     border-radius: 9999px;
     padding: 4px 12px;
@@ -909,7 +926,7 @@ ul.messagelist li.debug {
 
 /* Search bar */
 #toolbar {
-    background: #EBF3F2;                      /* brand-50 */
+    background: #FBF5F4;                      /* brand-50 */
     border: 1px solid var(--hairline-color);
     border-radius: 0.625rem;
 }
@@ -921,8 +938,8 @@ ul.messagelist li.debug {
 }
 
 #toolbar #searchbar:focus {
-    border-color: #0D7561;                    /* brand-500 */
-    box-shadow: 0 0 0 3px rgba(13, 117, 97, 0.25);
+    border-color: #B45A3F;                    /* brand-500 */
+    box-shadow: 0 0 0 3px rgba(180, 90, 63, 0.25);
 }
 
 #changelist-search input[type="submit"] {
@@ -942,7 +959,7 @@ ul.messagelist li.debug {
    -------------------------------------------------------------------------- */
 
 body.login {
-    background: linear-gradient(135deg, #EBF3F2 0%, #ffffff 50%, #EBF3F2 100%);
+    background: linear-gradient(135deg, #FBF5F4 0%, #ffffff 50%, #FBF5F4 100%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -954,7 +971,7 @@ body.login #container {
     background: #ffffff;
     border: 1px solid var(--hairline-color);
     border-radius: 1.25rem;                   /* app's rounded-2xl */
-    box-shadow: 0 12px 30px rgba(30, 41, 59, 0.12);
+    box-shadow: 0 12px 30px rgba(26, 26, 26, 0.12);
     width: 25rem;
     max-width: calc(100vw - 2rem);
     margin: 0;
@@ -982,7 +999,7 @@ body.login #branding #site-name {
 body.login #branding #site-name a {
     flex-direction: column;
     gap: 0.625rem;
-    color: #1E293B;                           /* brand-900 on the light card */
+    color: #1A1A1A;                           /* brand-900 on the light card */
     font-size: 1.125rem;
     letter-spacing: -0.01em;
 }
@@ -994,7 +1011,7 @@ body.login #branding #site-name a::before {
     width: 56px;
     height: 56px;
     border-radius: 1rem;
-    background: #006E59;                      /* brand-600 */
+    background: #A83F20;                      /* brand-600 */
     color: #ffffff;
     font-size: 1.125rem;
 }
@@ -1009,14 +1026,14 @@ body.login .form-row {
 
 body.login .form-row label {
     font-weight: 600;
-    color: #1E293B;                           /* brand-900 */
+    color: #1A1A1A;                           /* brand-900 */
 }
 
 body.login .form-row #id_username,
 body.login .form-row #id_password {
     width: 100%;
     min-height: 48px;
-    border: 1px solid var(--border-color);    /* ~3.3:1 on white, see token above */
+    border: 1px solid var(--border-color);    /* line-strong, 3.37:1 on white */
     border-radius: 0.625rem;
     padding: 10px 12px;
     box-sizing: border-box;
@@ -1024,8 +1041,8 @@ body.login .form-row #id_password {
 
 body.login .form-row #id_username:focus,
 body.login .form-row #id_password:focus {
-    border-color: #0D7561;                    /* brand-500 */
-    box-shadow: 0 0 0 3px rgba(13, 117, 97, 0.25);
+    border-color: #B45A3F;                    /* brand-500 */
+    box-shadow: 0 0 0 3px rgba(180, 90, 63, 0.25);
     outline: none;
 }
 
@@ -1037,7 +1054,7 @@ body.login .submit-row input {
     width: 100%;
     min-height: 48px;
     border-radius: 9999px;
-    background: #006E59;                      /* brand-600 */
+    background: #A83F20;                      /* brand-600 */
     color: #ffffff;
     font-weight: 600;
     font-size: 0.9375rem;
@@ -1045,7 +1062,7 @@ body.login .submit-row input {
 
 body.login .submit-row input:hover,
 body.login .submit-row input:focus {
-    background: #005847;                      /* brand-700 */
+    background: #8A341A;                      /* brand-700 */
 }
 
 body.login .password-reset-link {
@@ -1055,7 +1072,7 @@ body.login .password-reset-link {
 }
 
 body.login .password-reset-link a {
-    color: #334155;                           /* brand-800 */
+    color: #656D76;                           /* brand-800 */
 }
 
 body.login .errornote {
@@ -1073,13 +1090,13 @@ select:focus-visible,
 textarea:focus-visible,
 .button:focus-visible,
 [tabindex]:focus-visible {
-    outline: 2px solid #0D7561;               /* brand-500 */
+    outline: 2px solid #B45A3F;               /* brand-500 */
     outline-offset: 1px;
 }
 
 /* Skip-to-content link */
 .skip-to-content-link:focus {
-    background: #006E59;
+    background: #A83F20;
     color: #ffffff;
     border-radius: 0 0 0.5rem 0;
 }
@@ -1091,11 +1108,12 @@ textarea:focus-visible,
    -------------------------------------------------------------------------- */
 
 /*
-   Colour alone is not enough here: danger-700 and warning-700 convert to
-   almost the same grey (their relative luminance is 0.112 vs 0.121 — a
-   greyscale print would show the same shade for "Not yet rotated" and a
-   low-stock warning). Each status gets its own glyph and weight so the
-   four are still four things with the colour turned off.
+   Colour alone is not enough here. Relative luminance: danger-700 ≈ 0.112,
+   warning-700 ≈ 0.159, status-success ≈ 0.120, muted ≈ 0.150 — close
+   enough in pairs (danger/success, warning/muted) that a greyscale print
+   could still blur two statuses together. Each status gets its own glyph
+   and weight so the four are still four things with the colour turned
+   off.
 */
 
 .status-danger {
@@ -1108,11 +1126,11 @@ textarea:focus-visible,
 }
 
 .status-success {
-    /* Not --success-fg (success-700, #15803D): that only reaches ~3.8:1 on
-       the brand-100 hover/selected-row background a badge can sit on, below
-       the 4.5:1 floor. This shade (still success green) holds ≥5:1 against
-       white, brand-50, and brand-100 alike. */
-    color: #0F6B32;
+    /* Not --success-fg (success-700, #0D7A54): that's 5.35:1 on white, but
+       only 4.47:1 on the brand-100 hover background a badge can sit on —
+       just under the 4.5:1 floor. This shade (still Fresh Green, one step
+       darker) holds 5.16:1 against brand-100 and 6.18:1 against white. */
+    color: #0C6F4C;
     font-weight: 400;
 }
 
@@ -1121,7 +1139,7 @@ textarea:focus-visible,
 }
 
 .status-warning {
-    color: var(--warning-fg);                 /* warning-700, #9C4B08 — 6.1:1 */
+    color: var(--warning-fg);                 /* warning-700, #B45309 — 5.02:1 */
     font-weight: 700;
     font-style: italic;
 }
@@ -1132,7 +1150,7 @@ textarea:focus-visible,
 }
 
 .status-muted {
-    color: var(--muted-fg);                   /* muted-600, #475569 — 7.6:1 */
+    color: var(--muted-fg);                   /* secondary text, #656D76 — 5.25:1 */
     font-weight: 400;
 }
 
