@@ -23,7 +23,20 @@ from .services import (
     mortality_timeseries,
     profitability_by_batch,
 )
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
+
+_REPORT_DATE_RANGE_PARAMS = [
+    OpenApiParameter(
+        "from", OpenApiTypes.DATE, OpenApiParameter.QUERY, required=False,
+        description="Inclusive start date (YYYY-MM-DD).",
+    ),
+    OpenApiParameter(
+        "to", OpenApiTypes.DATE, OpenApiParameter.QUERY, required=False,
+        description="Inclusive end date (YYYY-MM-DD).",
+    ),
+]
+_CSV_RESPONSE = {(200, "text/csv"): OpenApiTypes.BINARY}
 
 
 class AnalyticsPermission(FarmScopedPermission):
@@ -308,7 +321,17 @@ class _ReportView(APIView):
     permission_classes = [OwnerManagerAnalyticsPermission]
 
 
-@extend_schema(tags=["Reports"], summary="Daily records — CSV export")
+@extend_schema(
+    tags=["Reports"],
+    summary="Daily records — CSV export",
+    parameters=_REPORT_DATE_RANGE_PARAMS + [
+        OpenApiParameter(
+            "batch", OpenApiTypes.UUID, OpenApiParameter.QUERY, required=False,
+            description="Restrict to one batch.",
+        ),
+    ],
+    responses=_CSV_RESPONSE,
+)
 class DailyRecordsReportView(_ReportView):
     """GET /api/farms/<farm_pk>/reports/daily-records.csv?from=&to=&batch="""
 
@@ -326,7 +349,12 @@ class DailyRecordsReportView(_ReportView):
         )
 
 
-@extend_schema(tags=["Reports"], summary="Mortality summary by batch — CSV export")
+@extend_schema(
+    tags=["Reports"],
+    summary="Mortality summary by batch — CSV export",
+    parameters=_REPORT_DATE_RANGE_PARAMS,
+    responses=_CSV_RESPONSE,
+)
 class MortalitySummaryReportView(_ReportView):
     """GET /api/farms/<farm_pk>/reports/mortality-summary.csv?from=&to="""
 
@@ -341,7 +369,11 @@ class MortalitySummaryReportView(_ReportView):
         )
 
 
-@extend_schema(tags=["Reports"], summary="Feed conversion ratio — CSV export")
+@extend_schema(
+    tags=["Reports"],
+    summary="Feed conversion ratio — CSV export",
+    responses=_CSV_RESPONSE,
+)
 class FCRReportView(_ReportView):
     """GET /api/farms/<farm_pk>/reports/fcr.csv"""
 
@@ -350,7 +382,11 @@ class FCRReportView(_ReportView):
         return _csv_stream(rows, _report_filename(request.farm, "fcr"))
 
 
-@extend_schema(tags=["Reports"], summary="Feed margin by batch — CSV export")
+@extend_schema(
+    tags=["Reports"],
+    summary="Feed margin by batch — CSV export",
+    responses=_CSV_RESPONSE,
+)
 class FeedMarginReportView(_ReportView):
     """GET /api/farms/<farm_pk>/reports/feed-margin.csv"""
 
@@ -359,7 +395,17 @@ class FeedMarginReportView(_ReportView):
         return _csv_stream(rows, _report_filename(request.farm, "feed-margin"))
 
 
-@extend_schema(tags=["Reports"], summary="Inventory usage — CSV export")
+@extend_schema(
+    tags=["Reports"],
+    summary="Inventory usage — CSV export",
+    parameters=_REPORT_DATE_RANGE_PARAMS + [
+        OpenApiParameter(
+            "item", OpenApiTypes.INT, OpenApiParameter.QUERY, required=False,
+            description="Restrict to one inventory item (its id).",
+        ),
+    ],
+    responses=_CSV_RESPONSE,
+)
 class InventoryUsageReportView(_ReportView):
     """GET /api/farms/<farm_pk>/reports/inventory-usage.csv?from=&to=&item="""
 
@@ -379,7 +425,17 @@ class InventoryUsageReportView(_ReportView):
         )
 
 
-@extend_schema(tags=["Reports"], summary="Routine completion — CSV export")
+@extend_schema(
+    tags=["Reports"],
+    summary="Routine completion — CSV export",
+    parameters=_REPORT_DATE_RANGE_PARAMS + [
+        OpenApiParameter(
+            "house", OpenApiTypes.INT, OpenApiParameter.QUERY, required=False,
+            description="Restrict to one house (its id).",
+        ),
+    ],
+    responses=_CSV_RESPONSE,
+)
 class RoutineCompletionReportView(_ReportView):
     """GET /api/farms/<farm_pk>/reports/routine-completion.csv?from=&to=&house="""
 
@@ -399,7 +455,12 @@ class RoutineCompletionReportView(_ReportView):
         )
 
 
-@extend_schema(tags=["Reports"], summary="Sales history — CSV export")
+@extend_schema(
+    tags=["Reports"],
+    summary="Sales history — CSV export",
+    parameters=_REPORT_DATE_RANGE_PARAMS,
+    responses=_CSV_RESPONSE,
+)
 class SalesHistoryReportView(_ReportView):
     """GET /api/farms/<farm_pk>/reports/sales-history.csv?from=&to="""
 

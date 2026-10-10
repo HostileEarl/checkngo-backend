@@ -314,6 +314,43 @@ class InvitationReadSerializer(serializers.ModelSerializer):
         ]
 
 
+class InvitationCreateResponseSerializer(InvitationReadSerializer):
+    """
+    Documents the actual POST /invitations/ response, which hand-builds
+    its payload (see FarmInvitationListCreateView.create) instead of
+    serializing a model instance. Never instantiated — @extend_schema
+    reads its field declarations only, to describe the two mutually
+    exclusive branches: a freshly issued PIN (new invitee) vs. an
+    existing user being added straight to the farm.
+    """
+
+    detail = serializers.CharField(read_only=True)
+
+    # New-invitee branch: a PIN was issued and must be relayed out-of-band.
+    pin = serializers.CharField(read_only=True, required=False)
+    token = serializers.CharField(read_only=True, required=False)
+    accept_url = serializers.CharField(read_only=True, required=False)
+    sms_sent = serializers.BooleanField(
+        read_only=True, required=False,
+        help_text="Whether the invitation PIN was successfully texted to the invitee.",
+    )
+
+    # Existing-user branch: no PIN to issue, the invitee already has one.
+    existing_user = serializers.CharField(read_only=True, required=False)
+    name_mismatch = serializers.BooleanField(read_only=True, required=False)
+
+    class Meta(InvitationReadSerializer.Meta):
+        fields = InvitationReadSerializer.Meta.fields + [
+            "detail",
+            "pin",
+            "token",
+            "accept_url",
+            "sms_sent",
+            "existing_user",
+            "name_mismatch",
+        ]
+
+
 class InvitationAcceptSerializer(serializers.Serializer):
     """Public endpoint — the invitee is not authenticated yet."""
 

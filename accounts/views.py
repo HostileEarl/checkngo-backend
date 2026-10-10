@@ -1,6 +1,7 @@
 # accounts/views.py
 from django.conf import settings
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -14,6 +15,7 @@ from .models import Invitation
 from .serializers import (
     CredentialChangeSerializer,
     InvitationAcceptSerializer,
+    InvitationCreateResponseSerializer,
     InvitationCreateSerializer,
     InvitationReadSerializer,
     LogoutSerializer,
@@ -102,6 +104,9 @@ class LogoutView(APIView):
         return Response(status=status.HTTP_205_RESET_CONTENT)
 
 
+@extend_schema_view(
+    post=extend_schema(responses=InvitationCreateResponseSerializer),
+)
 class FarmInvitationListCreateView(generics.ListCreateAPIView):
     """
     GET  /api/farms/<farm_pk>/invitations/  — list this farm's invitations
