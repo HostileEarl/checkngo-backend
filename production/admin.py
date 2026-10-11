@@ -398,6 +398,16 @@ class InventoryItemAdmin(admin.ModelAdmin):
     readonly_fields = ["created_by", "created_at"]
     inlines = [InventoryStockInInline]
 
+    def get_readonly_fields(self, request, obj=None):
+        # Mirrors InventoryItem.clean(): once an item has stock-ins or usage
+        # logs, is_feed can no longer change. Making the field read-only
+        # here isn't the enforcement — clean() is — it's so the admin UI
+        # reflects the rule instead of only rejecting the save.
+        fields = list(super().get_readonly_fields(request, obj))
+        if obj is not None and not obj.never_stocked:
+            fields.append("is_feed")
+        return fields
+
     def get_queryset(self, request):
         # with_levels() annotates the running balance with independent
         # subqueries, so level() reads an attribute instead of running an

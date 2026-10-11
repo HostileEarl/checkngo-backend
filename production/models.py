@@ -1076,6 +1076,33 @@ class InventoryItem(models.Model):
             raise ValidationError(
                 {"kg_per_unit": "Feed items must have kilograms per unit set."}
             )
+        # kg_per_unit stays editable even with history — feed_kg is computed
+        # and stored at write time, so correcting a sack weight later (e.g.
+        # CBM, seeded with none) never rewrites past records. is_feed is
+        # different: it decides which ledger a transaction is validated
+        # against at the moment it's written, so flipping it after the fact
+        # would silently make existing, already-valid rows look orphaned —
+        # exactly how the BFC item happened, via a bulk migration rather
+        # than the admin, but the risk is the same either way.
+        if self.pk:
+            original_is_feed = (
+                InventoryItem.objects.filter(pk=self.pk)
+                .values_list("is_feed", flat=True)
+                .first()
+            )
+            if (
+                original_is_feed is not None
+                and original_is_feed != self.is_feed
+                and not self.never_stocked
+            ):
+                raise ValidationError(
+                    {
+                        "is_feed": (
+                            "Feed status cannot change once this item has "
+                            "stock-ins or usage logs."
+                        )
+                    }
+                )
 
     # --- Derived, never stored. Same treatment as the feed balance. ---
 
