@@ -99,8 +99,9 @@ html[data-theme="auto"],
     --primary: #FF6B00;                       /* brand-600 */
     --secondary: #FF6B00;                     /* brand-600 — drives the header */
     --accent: #FFD3B3;                        /* brand-200 */
-    --primary-fg: #1A1A1A;                    /* dark text — white fails on
-       #FF6B00 at 2.86:1. See DESIGN.md §Contrast correction 1. */
+    --primary-fg: #ffffff;                    /* white on #FF6B00 is 2.86:1,
+       fails WCAG AA — deliberate brand decision, not an oversight. See
+       DESIGN.md §Contrast: "do not reintroduce dark text here." */
 
     /* Body text — all AA+ on white (brand-900 ≈ 17.4:1, brand-800 ≈ 5.25:1) */
     --body-fg: #1A1A1A;                       /* brand-900 */
@@ -109,12 +110,12 @@ html[data-theme="auto"],
     --body-medium-color: #656D76;             /* brand-800 */
     --body-loud-color: #1A1A1A;               /* brand-900 */
 
-    /* Header — brand-600 is too light for white text (2.86:1, fails);
-       dark text clears it at 6.09:1. Same rule as every button below. */
-    --header-color: #1A1A1A;
-    --header-branding-color: #1A1A1A;
+    /* Header — white text on brand-600, mandated by spec (2.86:1, fails
+       AA; deliberate, see --primary-fg above). */
+    --header-color: #ffffff;
+    --header-branding-color: #ffffff;
     --header-bg: #FF6B00;                     /* brand-600 */
-    --header-link-color: #1A1A1A;
+    --header-link-color: #ffffff;
 
     /* Breadcrumbs — both roles use white: breadcrumbs-bg (brand-700,
        #B35400) is dark enough for white at 5.02:1, but brand-200 as the
@@ -157,14 +158,11 @@ html[data-theme="auto"],
     --selected-bg: #FFEDE0;                   /* brand-100 — selected cells */
     --selected-row: #FFF8F2;                  /* brand-50 */
 
-    /* Buttons — dark text (white fails at 2.86:1, see above). Hover
-       LIGHTENS to brand-500 rather than darkening to brand-700: darkening
-       would drop dark-text contrast to ~3.5:1, under the 4.5:1 floor,
-       since brand-700 is now a foreground-only shade, not a mid-scale
-       fill. Lightening instead improves contrast on hover (6.93:1 vs
-       6.09:1 resting). See DESIGN.md §"Why hover lightens instead of
-       darkens". */
-    --button-fg: #1A1A1A;
+    /* Buttons — white text on brand-600 (mandatory, 2.86:1, see above).
+       Hover still LIGHTENS to brand-500, never darkens to brand-700 —
+       that's a standing rule independent of the text-colour decision
+       (brand-700 is foreground-only, never a fill). */
+    --button-fg: #ffffff;
     --button-bg: #FF6B00;                     /* brand-600 */
     --button-hover-bg: #FF8024;               /* brand-500 */
     --default-button-bg: #FF6B00;             /* brand-600 */
@@ -175,8 +173,8 @@ html[data-theme="auto"],
     --delete-button-hover-bg: #B91C1C;        /* danger-700 */
 
     /* Changelist "Add" / object tools — filled brand, not the pale
-       default. Same dark-text + lighten-on-hover rule as buttons. */
-    --object-tools-fg: #1A1A1A;
+       default. Same white-text + lighten-on-hover rule as buttons. */
+    --object-tools-fg: #ffffff;
     --object-tools-bg: #FF6B00;               /* brand-600 */
     --object-tools-hover-bg: #FF8024;         /* brand-500 */
 
@@ -211,7 +209,7 @@ html[data-theme="auto"],
         --primary: #FF6B00;
         --secondary: #FF6B00;
         --accent: #FFD3B3;
-        --primary-fg: #1A1A1A;
+        --primary-fg: #ffffff;
 
         --body-fg: #1A1A1A;
         --body-bg: #ffffff;
@@ -219,10 +217,10 @@ html[data-theme="auto"],
         --body-medium-color: #656D76;
         --body-loud-color: #1A1A1A;
 
-        --header-color: #1A1A1A;
-        --header-branding-color: #1A1A1A;
+        --header-color: #ffffff;
+        --header-branding-color: #ffffff;
         --header-bg: #FF6B00;
-        --header-link-color: #1A1A1A;
+        --header-link-color: #ffffff;
 
         --breadcrumbs-fg: #ffffff;
         --breadcrumbs-link-fg: #ffffff;
@@ -261,7 +259,7 @@ html[data-theme="dark"] {
     --primary: #FF6B00;
     --secondary: #FF6B00;
     --accent: #FFD3B3;
-    --primary-fg: #1A1A1A;
+    --primary-fg: #ffffff;
 
     --body-fg: #1A1A1A;
     --body-bg: #ffffff;
@@ -269,10 +267,10 @@ html[data-theme="dark"] {
     --body-medium-color: #656D76;
     --body-loud-color: #1A1A1A;
 
-    --header-color: #1A1A1A;
-    --header-branding-color: #1A1A1A;
+    --header-color: #ffffff;
+    --header-branding-color: #ffffff;
     --header-bg: #FF6B00;
-    --header-link-color: #1A1A1A;
+    --header-link-color: #ffffff;
 
     --breadcrumbs-fg: #ffffff;
     --breadcrumbs-link-fg: #ffffff;
@@ -360,8 +358,8 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    color: #1A1A1A;                           /* dark — sits on the
-       brand-600 header bar; white fails at 2.86:1 */
+    color: #ffffff;                           /* white on brand-600 — see
+       --primary-fg above: deliberate, fails AA, not reconsidered here */
 }
 
 /* The frontend uses a brand-600 rounded square holding "CG"; on the brand
@@ -383,32 +381,30 @@ body {
     flex: 0 0 auto;
 }
 
-/* All dark text (brand-900) on the brand-600 header bar — white fails at
-   2.86:1, same rule as every button. */
+/* All white text on the brand-600 header bar — mandatory per spec,
+   2.86:1, fails AA. See --primary-fg above. */
 #user-tools {
     font-size: 0.75rem;
-    color: #1A1A1A;
+    color: #ffffff;
 }
 
 #user-tools a {
-    color: #1A1A1A;
-    border-bottom-color: rgba(26, 26, 26, 0.45);
+    color: #ffffff;
+    border-bottom-color: rgba(255, 255, 255, 0.55);
 }
 
 #user-tools a:focus,
 #user-tools a:hover {
-    color: #1A1A1A;
-    border-bottom-color: #1A1A1A;
+    color: #ffffff;
+    border-bottom-color: #ffffff;
 }
 
-/* Log-out button in the header — pill, subtle on the brand bar. Its
-   translucent-white fill blends to roughly brand-500 against the header,
-   which also needs dark text. */
+/* Log-out button in the header — pill, subtle on the brand bar. */
 #logout-form button {
     border-radius: 9999px;
     padding: 4px 12px;
     background: rgba(255, 255, 255, 0.14);
-    color: #1A1A1A;
+    color: #ffffff;
     font-size: 0.75rem;
 }
 
@@ -469,23 +465,25 @@ div.breadcrumbs {
     font-weight: 700;
 }
 
-/* Active model — brand-600 with DARK text (overrides --selected-row).
-   Same mandate as the frontend's active sidebar item: white fails on
-   #FF6B00 at 2.86:1, dark text clears it at 6.09:1. */
+/* Active model — brand-600 with WHITE text (overrides --selected-row).
+   Mandatory per spec: white fails on #FF6B00 at 2.86:1, but every
+   active-nav fill uses it regardless — see --primary-fg above. Pill
+   radius, not the original 6px — an orange-filled interactive element
+   never gets a small radius. */
 #nav-sidebar .current-model {
     background: #FF6B00;                      /* brand-600 */
-    border-radius: 6px;
+    border-radius: 999px;
 }
 
 #nav-sidebar .current-model a:link,
 #nav-sidebar .current-model a:visited {
-    color: #1A1A1A;
+    color: #ffffff;
 }
 
 #nav-sidebar .current-model a:hover,
 #nav-sidebar .current-model a:focus {
     background: transparent;
-    color: #1A1A1A;
+    color: #ffffff;
 }
 
 #nav-filter {
@@ -861,18 +859,18 @@ td.errors select,
     border-bottom: 1px solid var(--hairline-color);
 }
 
-/* Calendar / clock popups — dark text on brand-600, same rule as
-   everywhere else (white fails at 2.86:1). */
+/* Calendar / clock popups — white text on brand-600, mandatory per spec
+   (2.86:1, fails AA — see --primary-fg above). */
 .calendar caption,
 .calendarbox h2,
 .clockbox h2 {
     background: #FF6B00;                      /* brand-600 */
-    color: #1A1A1A;
+    color: #ffffff;
 }
 
 .calendar td.selected a {
     background: #FF6B00;
-    color: #1A1A1A;
+    color: #ffffff;
 }
 
 .calendar td a:hover,
@@ -956,12 +954,12 @@ ul.messagelist li.debug {
 .paginator a:focus,
 .paginator a:hover {
     background: #FF6B00;                      /* brand-600 */
-    color: #1A1A1A;
+    color: #ffffff;
 }
 
 .paginator .this-page {
     background: #FF6B00;                      /* brand-600 */
-    color: #1A1A1A;
+    color: #ffffff;
     border-radius: 9999px;
     padding: 4px 12px;
 }
@@ -1054,8 +1052,8 @@ body.login #branding #site-name a::before {
     height: 56px;
     border-radius: 1rem;
     background: #FF6B00;                      /* brand-600 */
-    color: #1A1A1A;                           /* dark — white fails at
-       2.86:1, same rule as every other brand-600 fill */
+    color: #ffffff;                           /* white on brand-600,
+       mandatory per spec (2.86:1, fails AA) */
     font-size: 1.125rem;
 }
 
@@ -1098,7 +1096,8 @@ body.login .submit-row input {
     min-height: 48px;
     border-radius: 9999px;
     background: #FF6B00;                      /* brand-600 */
-    color: #1A1A1A;                           /* dark — white fails at 2.86:1 */
+    color: #ffffff;                           /* white, mandatory — 2.86:1,
+       fails AA, deliberate per spec */
     font-weight: 600;
     font-size: 0.9375rem;
 }
@@ -1143,7 +1142,8 @@ textarea:focus-visible,
 /* Skip-to-content link */
 .skip-to-content-link:focus {
     background: #FF6B00;
-    color: #1A1A1A;                           /* dark — white fails at 2.86:1 */
+    color: #ffffff;                           /* white, mandatory — 2.86:1,
+       fails AA, deliberate per spec */
     border-radius: 0 0 0.5rem 0;
 }
 
