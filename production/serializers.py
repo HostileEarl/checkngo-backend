@@ -711,6 +711,7 @@ class SaleEventSerializer(serializers.ModelSerializer):
             "sale_type",
             "bird_count",
             "total_weight_kg",
+            "price_per_kg",
             "revenue",
             "notes",
             "average_weight_kg",
@@ -722,7 +723,7 @@ class SaleEventSerializer(serializers.ModelSerializer):
             "is_editable",
             "sync_delay_seconds",
         ]
-        read_only_fields = ["batch", "recorded_by", "created_at"]
+        read_only_fields = ["batch", "recorded_by", "created_at", "revenue"]
 
     def get_average_weight_kg(self, obj) -> str | None:
         val = obj.average_weight_kg
@@ -749,6 +750,16 @@ class SaleEventSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         batch = self.context["batch"]
+
+        # Required for new sales; a legacy row with no price on record is
+        # left alone rather than forced to acquire a guessed one on edit.
+        price = attrs.get(
+            "price_per_kg", getattr(self.instance, "price_per_kg", None)
+        )
+        if self.instance is None and price is None:
+            raise serializers.ValidationError(
+                {"price_per_kg": "Price per kilogram is required."}
+            )
 
         if batch.status != Batch.Status.ACTIVE:
             raise serializers.ValidationError(
@@ -1033,6 +1044,7 @@ class FeedDeliverySerializer(serializers.ModelSerializer):
             "farm",
             "supplier_link",
             "supplier_name",
+            "other_source",
             "delivery_date",
             "feed_type",
             "quantity_kg",

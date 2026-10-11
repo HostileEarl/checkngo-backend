@@ -98,6 +98,26 @@ class TestMyDeliveries:
         assert [row["invoice_ref"] for row in resp.data] == ["MINE"]
         assert "THEIRS" not in {row["invoice_ref"] for row in resp.data}
 
+    def test_an_other_source_delivery_belongs_to_no_supplier_and_is_absent(
+        self, auth, supplier, farm, link_a
+    ):
+        _delivery(farm, link_a, invoice_ref="MINE")
+        FeedDelivery.objects.create(
+            farm=farm,
+            supplier_link=None,
+            other_source="Neighbor's feed store",
+            delivery_date=date(2026, 1, 15),
+            feed_type=FeedDelivery.FeedType.STARTER,
+            quantity_kg=Decimal("500"),
+            unit_cost=Decimal("30.00"),
+            invoice_ref="OTHER",
+        )
+
+        resp = auth(supplier).get(URL)
+
+        assert resp.status_code == 200
+        assert [row["invoice_ref"] for row in resp.data] == ["MINE"]
+
     def test_internal_user_gets_empty_list_not_403(
         self, auth, worker, farm, supplier, link_a
     ):

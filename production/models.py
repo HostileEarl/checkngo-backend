@@ -543,9 +543,21 @@ class SaleEvent(OfflineSyncModel):
     total_weight_kg = models.DecimalField(
         max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0"))]
     )
+    # Owner-entered input. Nullable only because rows written before this
+    # field existed have no price on record — new sales require it at the
+    # serializer layer, which is what keeps revenue derivable going forward.
+    price_per_kg = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text="Price per kilogram. Revenue is derived from this x total_weight_kg.",
+    )
+    # Derived from price_per_kg x total_weight_kg wherever a price is on
+    # record — never independently typed, same rule as feed_kg/feed_sacks.
+    # Stays nullable so a pre-existing row with no price recorded is left
+    # alone rather than backfilled with a guessed figure.
     revenue = models.DecimalField(
         max_digits=12, decimal_places=2, null=True, blank=True,
-        help_text="Sale value. Optional — a weight-only record is valid.",
+        help_text="Sale value. Derived from price_per_kg; null only on legacy rows.",
     )
     notes = models.CharField(max_length=255, blank=True)
 
@@ -573,6 +585,13 @@ class SaleEvent(OfflineSyncModel):
         if self.revenue is None or not self.total_weight_kg:
             return None
         return (self.revenue / self.total_weight_kg).quantize(Decimal("0.01"))
+
+    def save(self, *args, **kwargs):
+        if self.price_per_kg is not None and self.total_weight_kg is not None:
+            self.revenue = (self.price_per_kg * self.total_weight_kg).quantize(
+                Decimal("0.01")
+            )
+        super().save(*args, **kwargs)
 
     def clean(self):
         if self.sale_date and self.batch_id:
@@ -607,6 +626,12 @@ class FeedDelivery(OfflineSyncModel):
         null=True, blank=True,
         related_name="feed_deliveries",
     )
+    # Free-text attribution for feed that did not come from a registered
+    # supplier — a neighbor, a one-off market buy. A delivery with this set
+    # belongs to no supplier_link and must never surface in a supplier's own
+    # view (MyDeliveriesView filters on supplier_link__partner, so this is
+    # excluded there by construction).
+    other_source = models.CharField(max_length=100, blank=True)
     delivery_date = models.DateField(db_index=True)
     feed_type = models.CharField(max_length=20, choices=FeedType.choices)
     quantity_kg = models.DecimalField(

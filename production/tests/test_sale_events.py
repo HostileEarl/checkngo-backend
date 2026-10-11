@@ -69,7 +69,7 @@ def _payload(**overrides):
         "sale_type": SaleEvent.SaleType.DRESSED,
         "bird_count": 80,
         "total_weight_kg": "160.00",
-        "revenue": "12000.00",
+        "price_per_kg": "75.00",
         "notes": "",
     }
     body.update(overrides)
@@ -162,6 +162,46 @@ class TestRecordingSales:
             _sales_url(staffed_farm, batch), _payload(), format="json"
         )
         assert resp.status_code == 201, resp.data
+
+
+class TestPriceAndRevenue:
+    def test_price_per_kg_is_required_on_create(
+        self, auth, owner, staffed_farm, batch
+    ):
+        body = _payload()
+        del body["price_per_kg"]
+        resp = auth(owner).post(_sales_url(staffed_farm, batch), body, format="json")
+        assert resp.status_code == 400
+        assert "price_per_kg" in resp.data
+
+    def test_revenue_is_derived_from_price_times_weight_and_client_value_ignored(
+        self, auth, owner, staffed_farm, batch
+    ):
+        resp = auth(owner).post(
+            _sales_url(staffed_farm, batch),
+            _payload(
+                total_weight_kg="160.00",
+                price_per_kg="75.00",
+                revenue="1.00",  # ignored — revenue is read-only, server-derived
+            ),
+            format="json",
+        )
+        assert resp.status_code == 201, resp.data
+        assert resp.data["revenue"] == "12000.00"
+
+        sale = SaleEvent.objects.get(pk=resp.data["id"])
+        assert sale.revenue == Decimal("12000.00")
+
+    def test_legacy_rows_with_no_price_are_left_alone(self, batch):
+        sale = SaleEvent.objects.create(
+            batch=batch,
+            sale_date=date(2026, 1, 10),
+            sale_type=SaleEvent.SaleType.DRESSED,
+            bird_count=80,
+            total_weight_kg=Decimal("160.00"),
+        )
+        assert sale.price_per_kg is None
+        assert sale.revenue is None
 
 
 class TestIdempotencyAndLock:
@@ -270,7 +310,7 @@ class TestClosing:
     ):
         auth(owner).post(
             _sales_url(staffed_farm, batch),
-            _payload(bird_count=500, total_weight_kg="1000.00", revenue="70000.00"),
+            _payload(bird_count=500, total_weight_kg="1000.00", price_per_kg="70.00"),
             format="json",
         )
         auth(owner).post(
@@ -280,7 +320,7 @@ class TestClosing:
                 sale_type=SaleEvent.SaleType.LIVE,
                 bird_count=400,
                 total_weight_kg="760.00",
-                revenue="45000.00",
+                price_per_kg="45.00",
             ),
             format="json",
         )
@@ -291,7 +331,8 @@ class TestClosing:
         harvest = Harvest.objects.get(batch=batch)
         assert harvest.birds_harvested == 900
         assert harvest.total_weight_kg == Decimal("1760.00")
-        assert harvest.revenue == Decimal("115000.00")
+        # 1000kg @ 70/kg = 70000, 760kg @ 45/kg = 34200.
+        assert harvest.revenue == Decimal("104200.00")
         # 60 birds never sold -> recorded, not blocked.
         assert "60 birds unaccounted for at closing." in harvest.closing_notes
 
@@ -366,7 +407,7 @@ class TestFcrEquivalence:
         # --- New model: one sale event, then close ---
         auth(owner).post(
             _sales_url(staffed_farm, batch),
-            _payload(bird_count=950, total_weight_kg="800.00", revenue="100000.00"),
+            _payload(bird_count=950, total_weight_kg="800.00", price_per_kg="125.00"),
             format="json",
         )
         auth(owner).post(_close_url(staffed_farm, batch), {}, format="json")
