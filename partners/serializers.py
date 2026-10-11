@@ -2,7 +2,7 @@
 from rest_framework import serializers
 
 from accounts.models import Invitation, User, UserManager
-from production.models import FeedDelivery, Harvest
+from production.models import FeedDelivery, Harvest, Payment
 
 from .models import FarmPartnerLink
 
@@ -192,3 +192,42 @@ class BuyerPurchaseSerializer(serializers.ModelSerializer):
     def get_average_weight_kg(self, obj):
         val = obj.average_weight_kg
         return str(val) if val is not None else None
+
+
+class BuyerPaymentSerializer(serializers.ModelSerializer):
+    """
+    A buyer's read-only view of one payment they made against a sale.
+
+    This is the buyer's own record of money they paid — not a figure the
+    farm entered about them — so, unlike BuyerPurchaseSerializer, there is
+    no dispute risk in showing it back. What stays withheld is the sale's
+    side of the ledger: no revenue, no outstanding balance, no other
+    buyer's payments, nothing about mortality, feed, or FCR.
+    """
+
+    farm = serializers.IntegerField(
+        source="sale.batch.house.farm_id", read_only=True
+    )
+    farm_name = serializers.CharField(
+        source="sale.batch.house.farm.name", read_only=True
+    )
+    batch_code = serializers.CharField(source="sale.batch.batch_code", read_only=True)
+    sale_date = serializers.DateField(source="sale.sale_date", read_only=True)
+    is_reversal = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Payment
+        fields = [
+            "id",
+            "farm",
+            "farm_name",
+            "batch_code",
+            "sale_date",
+            "amount",
+            "received_date",
+            "is_reversal",
+        ]
+        read_only_fields = fields
+
+    def get_is_reversal(self, obj) -> bool:
+        return obj.reverses_id is not None

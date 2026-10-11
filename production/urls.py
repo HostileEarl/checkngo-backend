@@ -27,6 +27,7 @@ from .views import (
     InventoryUsageBulkSyncView,
     InventoryUsageDetailView,
     InventoryUsageListCreateView,
+    PaymentListCreateView,
     TaskCompletionBulkSyncView,
     TaskCompletionDetailView,
     TaskCompletionListCreateView,
@@ -59,6 +60,11 @@ urlpatterns = [
     path(f"{_batch}/sales/", SaleEventListCreateView.as_view(), name="sale-list"),
     path(f"{_batch}/sales/bulk-sync/", SaleEventBulkSyncView.as_view(), name="sale-bulk-sync"),
     path(f"{_batch}/sales/<uuid:pk>/", SaleEventDetailView.as_view(), name="sale-detail"),
+    path(
+        f"{_batch}/sales/<uuid:sale_pk>/payments/",
+        PaymentListCreateView.as_view(),
+        name="payment-list",
+    ),
 
     path(f"{_batch}/close/", BatchCloseView.as_view(), name="batch-close"),
     path(f"{_batch}/harvest/detail/", HarvestDetailView.as_view(), name="harvest-detail"),

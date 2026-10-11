@@ -12,10 +12,11 @@ from accounts.serializers import (
     send_invitation_pin_sms,
 )
 from farms.permissions import HasRotatedCredential, IsFarmManagerOrOwner
-from production.models import FeedDelivery, Harvest
+from production.models import FeedDelivery, Harvest, Payment
 
 from .models import FarmPartnerLink
 from .serializers import (
+    BuyerPaymentSerializer,
     BuyerPurchaseSerializer,
     FarmPartnerLinkSerializer,
     PartnerInvitationCreateSerializer,
@@ -185,4 +186,36 @@ class MyPurchasesView(generics.ListAPIView):
         farm_id = self.request.query_params.get("farm")
         if farm_id and str(farm_id).isdigit():
             qs = qs.filter(batch__house__farm_id=farm_id)
+        return qs
+
+
+class MyPaymentsView(generics.ListAPIView):
+    """
+    GET /api/partners/my-payments/ — a buyer's view of payments they made.
+
+    Scoped to Payment rows whose buyer_link points at the requesting user.
+    A buyer sees only their own payments, never another buyer's, and
+    nothing about the sale's revenue or outstanding balance (that's the
+    farm's side of the ledger — see BuyerPaymentSerializer). Internal
+    staff have no buyer identity here, so they get an empty list rather
+    than a 403, same as MyPurchasesView and MyDeliveriesView.
+    """
+
+    serializer_class = BuyerPaymentSerializer
+    permission_classes = [IsAuthenticated, HasRotatedCredential]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_internal:
+            return Payment.objects.none()
+
+        qs = (
+            Payment.objects.filter(buyer_link__partner=user)
+            .select_related("sale__batch__house__farm", "buyer_link")
+            .order_by("-recorded_at")
+        )
+
+        farm_id = self.request.query_params.get("farm")
+        if farm_id and str(farm_id).isdigit():
+            qs = qs.filter(sale__batch__house__farm_id=farm_id)
         return qs

@@ -6,6 +6,7 @@ from .views import (
     FarmPartnerUnlinkView,
     MyDeliveriesView,
     MyPartnerFarmsView,
+    MyPaymentsView,
     MyPurchasesView,
 )
 
@@ -17,4 +18,5 @@ urlpatterns = [
     path("partners/my-farms/", MyPartnerFarmsView.as_view(), name="my-partner-farms"),
     path("partners/my-deliveries/", MyDeliveriesView.as_view(), name="my-deliveries"),
     path("partners/my-purchases/", MyPurchasesView.as_view(), name="my-purchases"),
+    path("partners/my-payments/", MyPaymentsView.as_view(), name="my-payments"),
 ]

@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 
 from analytics.services import feed_balance
 
-from .mixins import BatchScopedMixin
+from .mixins import BatchScopedMixin, SaleScopedMixin
 from .models import (
     Batch,
     DailyRecord,
@@ -47,6 +47,7 @@ from .models import (
     InventoryItem,
     InventoryStockIn,
     InventoryUsageLog,
+    Payment,
     RecordCorrection,
     SaleEvent,
     TaskCompletion,
@@ -77,6 +78,7 @@ from .serializers import (
     InventoryStockInSerializer,
     InventoryUsageBulkSyncSerializer,
     InventoryUsageLogSerializer,
+    PaymentSerializer,
     RecordCorrectionSerializer,
     SaleEventBulkSyncSerializer,
     SaleEventSerializer,
@@ -451,8 +453,10 @@ class SaleEventListCreateView(BatchScopedMixin, generics.ListCreateAPIView):
     permission_classes = [CanManageBatches]
 
     def get_queryset(self):
-        return SaleEvent.objects.filter(batch=self.batch).select_related(
-            "recorded_by"
+        return (
+            SaleEvent.objects.filter(batch=self.batch)
+            .select_related("recorded_by")
+            .prefetch_related("payments")
         )
 
     def create(self, request, *args, **kwargs):
@@ -487,8 +491,31 @@ class SaleEventDetailView(BatchScopedMixin, generics.RetrieveUpdateAPIView):
     permission_classes = [CanManageBatches]
 
     def get_queryset(self):
-        return SaleEvent.objects.filter(batch=self.batch).select_related(
-            "recorded_by"
+        return (
+            SaleEvent.objects.filter(batch=self.batch)
+            .select_related("recorded_by")
+            .prefetch_related("payments")
+        )
+
+
+class PaymentListCreateView(SaleScopedMixin, generics.ListCreateAPIView):
+    """
+    GET  /api/farms/<farm_pk>/batches/<batch_pk>/sales/<sale_pk>/payments/
+    POST /api/farms/<farm_pk>/batches/<batch_pk>/sales/<sale_pk>/payments/
+
+    Owner and manager write — the owner was explicit that confirming a
+    payment is the owner/manager's job, not the buyer's. Every farm member
+    reads, same split as the sale itself. No update or delete view exists
+    for this model anywhere: a payment row is permanent once written, and
+    a mistake is corrected with a reversing entry instead.
+    """
+
+    serializer_class = PaymentSerializer
+    permission_classes = [CanManageBatches]
+
+    def get_queryset(self):
+        return Payment.objects.filter(sale=self.sale).select_related(
+            "recorded_by", "reverses"
         )
 
 

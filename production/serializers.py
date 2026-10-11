@@ -19,6 +19,7 @@ from .models import (
     InventoryItem,
     InventoryStockIn,
     InventoryUsageLog,
+    Payment,
     RecordCorrection,
     record_feed_delivery,
     SaleEvent,
@@ -696,6 +697,9 @@ class SaleEventSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(required=False)
     average_weight_kg = serializers.SerializerMethodField()
     revenue_per_kg = serializers.SerializerMethodField()
+    total_paid = serializers.SerializerMethodField()
+    outstanding = serializers.SerializerMethodField()
+    is_fully_paid = serializers.SerializerMethodField()
     is_editable = serializers.BooleanField(read_only=True)
     recorded_by_name = serializers.CharField(
         source="recorded_by.full_name", read_only=True, default=None
@@ -716,6 +720,9 @@ class SaleEventSerializer(serializers.ModelSerializer):
             "notes",
             "average_weight_kg",
             "revenue_per_kg",
+            "total_paid",
+            "outstanding",
+            "is_fully_paid",
             "recorded_by",
             "recorded_by_name",
             "recorded_at",
@@ -732,6 +739,16 @@ class SaleEventSerializer(serializers.ModelSerializer):
     def get_revenue_per_kg(self, obj) -> str | None:
         val = obj.revenue_per_kg
         return str(val) if val is not None else None
+
+    def get_total_paid(self, obj) -> str:
+        return str(obj.total_paid)
+
+    def get_outstanding(self, obj) -> str | None:
+        val = obj.outstanding
+        return str(val) if val is not None else None
+
+    def get_is_fully_paid(self, obj) -> bool:
+        return obj.is_fully_paid
 
     def validate_sale_date(self, value):
         batch = self.context["batch"]
@@ -805,6 +822,100 @@ class SaleEventSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         return SaleEvent.objects.create(
             batch=self.context["batch"],
+            recorded_by=self.context["request"].user,
+            **validated_data,
+        )
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    """
+    Append-only — see the view: no update, no delete. Attribution
+    (`recorded_by`, `recorded_at`) is never writable and never edited.
+
+    A plain payment (no `reverses`) must be positive. A reversal must name
+    the exact payment it corrects and carry the exact negative of that
+    payment's amount — a partial reversal would leave the ledger implying
+    a correction that doesn't fully undo the mistake it names.
+    """
+
+    recorded_by_name = serializers.CharField(
+        source="recorded_by.full_name", read_only=True, default=None
+    )
+
+    class Meta:
+        model = Payment
+        fields = [
+            "id",
+            "sale",
+            "amount",
+            "received_date",
+            "note",
+            "buyer_link",
+            "buyer_name",
+            "reverses",
+            "recorded_by",
+            "recorded_by_name",
+            "recorded_at",
+        ]
+        read_only_fields = ["sale", "recorded_by", "recorded_at"]
+
+    buyer_name = serializers.SerializerMethodField()
+
+    def get_buyer_name(self, obj) -> str | None:
+        if not obj.buyer_link:
+            return None
+        return obj.buyer_link.business_name or obj.buyer_link.partner.full_name
+
+    def validate_received_date(self, value):
+        if value > timezone.localdate():
+            raise serializers.ValidationError("Cannot record a future date.")
+        return value
+
+    def validate_buyer_link(self, value):
+        if value is None:
+            return value
+        farm = self.context["farm"]
+        if value.farm_id != farm.pk:
+            raise serializers.ValidationError("That buyer is not linked to this farm.")
+        if value.link_type != FarmPartnerLink.LinkType.CONSUMER:
+            raise serializers.ValidationError("That partner is not registered as a buyer.")
+        return value
+
+    def validate_reverses(self, value):
+        sale = self.context["sale"]
+        if value.sale_id != sale.id:
+            raise serializers.ValidationError(
+                "That payment is not against this sale."
+            )
+        return value
+
+    def validate(self, attrs):
+        amount = attrs.get("amount")
+        reverses = attrs.get("reverses")
+
+        if amount == 0:
+            raise serializers.ValidationError({"amount": "Amount cannot be zero."})
+
+        if reverses is None:
+            if amount is not None and amount < 0:
+                raise serializers.ValidationError(
+                    {"amount": "A payment must be positive. Use a reversal to correct one."}
+                )
+        else:
+            if amount != -reverses.amount:
+                raise serializers.ValidationError(
+                    {
+                        "amount": (
+                            f"A reversal of {reverses.amount} must be exactly "
+                            f"{-reverses.amount}."
+                        )
+                    }
+                )
+        return attrs
+
+    def create(self, validated_data):
+        return Payment.objects.create(
+            sale=self.context["sale"],
             recorded_by=self.context["request"].user,
             **validated_data,
         )

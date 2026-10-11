@@ -3,7 +3,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import SAFE_METHODS
 
-from .models import Batch
+from .models import Batch, SaleEvent
 
 
 class BatchScopedMixin:
@@ -53,4 +53,28 @@ class BatchScopedMixin:
         context = super().get_serializer_context()
         context["farm"] = self.request.farm
         context["batch"] = self.batch
+        return context
+
+
+class SaleScopedMixin(BatchScopedMixin):
+    """
+    Resolves the sale from the URL on top of BatchScopedMixin's batch/farm
+    resolution — same reasoning: without the `batch=self.batch` filter, a
+    sale id from a different batch (or a different farm entirely) would
+    resolve if the ids happened to collide.
+    """
+
+    sale_url_kwarg = "sale_pk"
+
+    @property
+    def sale(self):
+        if not hasattr(self, "_sale"):
+            self._sale = get_object_or_404(
+                SaleEvent, pk=self.kwargs[self.sale_url_kwarg], batch=self.batch
+            )
+        return self._sale
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["sale"] = self.sale
         return context

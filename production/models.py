@@ -586,6 +586,29 @@ class SaleEvent(OfflineSyncModel):
             return None
         return (self.revenue / self.total_weight_kg).quantize(Decimal("0.01"))
 
+    @property
+    def total_paid(self):
+        """Sum of every payment and reversal on this sale. Never stored."""
+        agg = self.payments.aggregate(total=models.Sum("amount"))
+        return agg["total"] or Decimal("0.00")
+
+    @property
+    def outstanding(self):
+        """None when the sale itself carries no revenue figure yet."""
+        if self.revenue is None:
+            return None
+        return self.revenue - self.total_paid
+
+    @property
+    def is_fully_paid(self):
+        """
+        Derived, not stored — a checkbox that could disagree with the
+        payments it is supposed to summarize is the exact failure this
+        avoids. A sale with no revenue on record is never "fully paid".
+        """
+        outstanding = self.outstanding
+        return outstanding is not None and outstanding <= Decimal("0.00")
+
     def save(self, *args, **kwargs):
         if self.price_per_kg is not None and self.total_weight_kg is not None:
             self.revenue = (self.price_per_kg * self.total_weight_kg).quantize(
@@ -601,6 +624,70 @@ class SaleEvent(OfflineSyncModel):
                 )
             if self.sale_date > timezone.localdate():
                 raise ValidationError({"sale_date": "Cannot record a future date."})
+
+
+class Payment(models.Model):
+    """
+    One payment received against a sale. Append-only — a row is never
+    edited or deleted once written (see api views: no update, no delete).
+
+    Instalments are the reason this is a log and not a field on SaleEvent:
+    "nagbayad 2k" against a larger sale is one row of several, and a
+    single amount_paid column would overwrite the earlier instalments and
+    lose them. Outstanding balance is always derived — sale.revenue minus
+    the sum of this sale's payments — never stored, so it can never
+    disagree with the rows it is computed from.
+
+    A mistake is corrected by a reversing entry (`reverses` pointing at the
+    payment being corrected, `amount` the exact negative of it), the same
+    principle RecordCorrection uses elsewhere: nothing is overwritten, the
+    ledger just gets an entry that cancels the earlier one out.
+    """
+
+    sale = models.ForeignKey(
+        SaleEvent, on_delete=models.CASCADE, related_name="payments"
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    received_date = models.DateField(help_text="The day the payment was received.")
+    note = models.CharField(max_length=255, blank=True)
+
+    # SaleEvent deliberately carries no buyer (see its docstring) — a sale
+    # is an event, not an order. A payment is money FROM someone, though,
+    # so the buyer attribution lives here instead, the same optional
+    # FarmPartnerLink pattern FeedDelivery.supplier_link and
+    # Harvest.buyer_link use. Null when the buyer isn't a registered
+    # partner (cash at the gate) — same shape as "other source" on feed.
+    buyer_link = models.ForeignKey(
+        "partners.FarmPartnerLink",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payments_made",
+        help_text="Who paid, if they are a registered buyer.",
+    )
+
+    reverses = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="reversed_by",
+        help_text="The payment this row corrects, if this is a reversal.",
+    )
+
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        related_name="payments_recorded",
+    )
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "production_payment"
+        ordering = ["sale", "recorded_at"]
+
+    def __str__(self):
+        prefix = "Reversal of " if self.reverses_id else ""
+        return f"{prefix}{self.amount} on {self.sale_id}"
 
 
 class FeedDelivery(OfflineSyncModel):
