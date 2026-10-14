@@ -153,19 +153,19 @@ class TestRoleHierarchy:
 
 
 class TestExternalPartners:
-    def test_supplier_has_no_farm_access(self, auth, supplier, staffed_farm):
-        client = auth(supplier)
+    def test_consumer_has_no_farm_access(self, auth, consumer, staffed_farm):
+        client = auth(consumer)
         url = reverse("farms:farm-members", kwargs={"farm_pk": staffed_farm.pk})
         assert client.get(url).status_code == 403
 
-    def test_supplier_cannot_be_invited_to_farm(self, supplier, farm, owner):
+    def test_consumer_cannot_be_invited_to_farm(self, consumer, farm, owner):
         """The upsert path must refuse to attach farm authority to an external account."""
         from django.core.exceptions import ValidationError
         from accounts.models import Invitation
 
         invitation = Invitation(
-            phone_number=supplier.phone_number,
-            full_name=supplier.full_name,
+            phone_number=consumer.phone_number,
+            full_name=consumer.full_name,
             farm=farm,
             account_role="WORKER",
             membership_role="WORKER",

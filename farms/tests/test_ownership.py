@@ -81,12 +81,12 @@ class TestOwnershipTransfer:
         with pytest.raises(ValueError):
             entry.save()
 
-    def test_cannot_transfer_to_external_partner(self, auth, owner, staffed_farm, supplier):
+    def test_cannot_transfer_to_external_partner(self, auth, owner, staffed_farm, consumer):
         client = auth(owner)
         url = reverse("farms:ownership-transfer", kwargs={"farm_pk": staffed_farm.pk})
         response = client.post(
             url,
-            {"new_owner_phone": supplier.phone_number, "confirm_transfer": True},
+            {"new_owner_phone": consumer.phone_number, "confirm_transfer": True},
             format="json",
         )
         assert response.status_code == 400

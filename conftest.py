@@ -161,12 +161,12 @@ def gated_worker(db):
 
 
 @pytest.fixture
-def supplier(db):
+def consumer(db):
     return User.objects.create_user(
         "+639175556666",
         "555555",
-        full_name="FeedCo Supplier",
-        role=User.Role.SUPPLIER,
+        full_name="FeedCo Buyer",
+        role=User.Role.CONSUMER,
         must_change_credential=False,
     )
 

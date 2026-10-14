@@ -12,7 +12,7 @@ from accounts.serializers import (
     send_invitation_pin_sms,
 )
 from farms.permissions import HasRotatedCredential, IsFarmManagerOrOwner
-from production.models import FeedDelivery, Harvest, Payment
+from production.models import Harvest, Payment
 
 from .models import FarmPartnerLink
 from .serializers import (
@@ -20,17 +20,16 @@ from .serializers import (
     BuyerPurchaseSerializer,
     FarmPartnerLinkSerializer,
     PartnerInvitationCreateSerializer,
-    SupplierDeliverySerializer,
 )
 
 
 class FarmPartnerListCreateView(generics.ListCreateAPIView):
     """
-    GET  /api/farms/<farm_pk>/partners/ — this farm's supplier/consumer directory
+    GET  /api/farms/<farm_pk>/partners/ — this farm's consumer directory
     POST /api/farms/<farm_pk>/partners/ — invite a new partner
 
     Owner and manager both permitted: unlike manager promotion, adding a
-    supplier grants no authority over the farm, so it needs no owner gate.
+    consumer grants no authority over the farm, so it needs no owner gate.
     """
 
     permission_classes = [IsFarmManagerOrOwner]
@@ -124,37 +123,6 @@ class MyPartnerFarmsView(generics.ListAPIView):
         return FarmPartnerLink.objects.filter(
             partner=user, is_active=True
         ).select_related("farm", "partner", "linked_by")
-
-
-class MyDeliveriesView(generics.ListAPIView):
-    """
-    GET /api/partners/my-deliveries/ — a supplier's view of what farms
-    recorded receiving from them.
-
-    Scoped to FeedDelivery rows whose supplier_link points at the requesting
-    user. Nothing about flocks, staff, or production, and never another
-    supplier's rows. Internal staff have no supplier identity here, so they
-    get an empty list rather than a 403.
-    """
-
-    serializer_class = SupplierDeliverySerializer
-    permission_classes = [IsAuthenticated, HasRotatedCredential]
-
-    def get_queryset(self):
-        user = self.request.user
-        if user.is_internal:
-            return FeedDelivery.objects.none()
-
-        qs = (
-            FeedDelivery.objects.filter(supplier_link__partner=user)
-            .select_related("farm", "supplier_link")
-            .order_by("-delivery_date")
-        )
-
-        farm_id = self.request.query_params.get("farm")
-        if farm_id and str(farm_id).isdigit():
-            qs = qs.filter(farm_id=farm_id)
-        return qs
 
 
 class MyPurchasesView(generics.ListAPIView):

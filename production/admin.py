@@ -342,14 +342,14 @@ class FeedDeliveryAdmin(admin.ModelAdmin):
         "quantity_kg",
         "unit_cost",
         "total_cost",
-        "supplier_link",
+        "other_source",
         "inventory_item",
     ]
     list_filter = ["feed_type", "farm", "delivery_date"]
     search_fields = ["invoice_ref"]
     readonly_fields = ["id", "created_at", "updated_at"]
     date_hierarchy = "delivery_date"
-    list_select_related = ["farm", "supplier_link", "inventory_item"]
+    list_select_related = ["farm", "inventory_item"]
 
     def save_model(self, request, obj, form, change):
         if not obj.recorded_by_id:

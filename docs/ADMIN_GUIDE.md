@@ -284,7 +284,7 @@ just means an idle no-op most of the time, not extra texts.
 | Farms → Farms | Yes | Membership + ownership-history inlines. |
 | Farms → Farm memberships | Yes | Grant/revoke farm access here. |
 | Farms → Farm ownership history | Read-only | Append-only ledger. |
-| Partners → Farm partner links | Yes | Supplier/consumer relationships. |
+| Partners → Farm partner links | Yes | Consumer (buyer) relationships. |
 | Production → Houses | Yes | Physical sheds. |
 | Production → Batches | Yes | Totals are denormalized; recalculate action provided. |
 | Production → Daily records | 24h window | Then permission-denied. Never deletable. |

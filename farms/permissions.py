@@ -125,7 +125,7 @@ class CanInviteRole(FarmScopedPermission):
 
 
 class IsExternalPartner(BasePermission):
-    """Suppliers and consumers. No farm membership, so no farm scoping."""
+    """Consumers (buyers). No farm membership, so no farm scoping."""
 
     def has_permission(self, request, view):
         user = request.user

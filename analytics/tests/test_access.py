@@ -28,8 +28,8 @@ class TestAnalyticsAccess:
         url = reverse("analytics:dashboard", kwargs={"farm_pk": staffed_farm.pk})
         assert client.get(url).status_code == 403
 
-    def test_supplier_blocked(self, auth, supplier, staffed_farm):
-        client = auth(supplier)
+    def test_consumer_blocked(self, auth, consumer, staffed_farm):
+        client = auth(consumer)
         url = reverse("analytics:dashboard", kwargs={"farm_pk": staffed_farm.pk})
         assert client.get(url).status_code == 403
 

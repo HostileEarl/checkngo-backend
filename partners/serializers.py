@@ -2,7 +2,7 @@
 from rest_framework import serializers
 
 from accounts.models import Invitation, User, UserManager
-from production.models import FeedDelivery, Harvest, Payment
+from production.models import Harvest, Payment
 
 from .models import FarmPartnerLink
 
@@ -37,7 +37,7 @@ class FarmPartnerLinkSerializer(serializers.ModelSerializer):
 
 class PartnerInvitationCreateSerializer(serializers.ModelSerializer):
     """
-    Invite a supplier or consumer. Identical credential mechanics to staff
+    Invite a consumer (buyer). Identical credential mechanics to staff
     invitations — one-time PIN, forced rotation — but the acceptance produces
     a FarmPartnerLink rather than farm authority.
     """
@@ -61,9 +61,9 @@ class PartnerInvitationCreateSerializer(serializers.ModelSerializer):
         return UserManager.normalize_phone(value)
 
     def validate_account_role(self, value):
-        if value not in {User.Role.SUPPLIER, User.Role.CONSUMER}:
+        if value != User.Role.CONSUMER:
             raise serializers.ValidationError(
-                "This endpoint issues supplier and consumer invitations only."
+                "This endpoint issues consumer invitations only."
             )
         return value
 
@@ -118,37 +118,6 @@ class PartnerInvitationCreateSerializer(serializers.ModelSerializer):
 
         invitation.save()
         return invitation
-
-
-class SupplierDeliverySerializer(serializers.ModelSerializer):
-    """
-    A supplier's read-only view of one delivery a farm recorded from them.
-
-    Exposes what the delivery was and what it cost. Withholds `notes` and
-    `recorded_by` — the farm's internal annotations, not the supplier's
-    business.
-    """
-
-    farm_name = serializers.CharField(source="farm.name", read_only=True)
-    feed_type_display = serializers.CharField(
-        source="get_feed_type_display", read_only=True
-    )
-
-    class Meta:
-        model = FeedDelivery
-        fields = [
-            "id",
-            "farm",
-            "farm_name",
-            "delivery_date",
-            "feed_type",
-            "feed_type_display",
-            "quantity_kg",
-            "unit_cost",
-            "total_cost",
-            "invoice_ref",
-        ]
-        read_only_fields = fields
 
 
 class BuyerPurchaseSerializer(serializers.ModelSerializer):

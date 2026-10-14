@@ -65,7 +65,6 @@ class User(AbstractBaseUser, PermissionsMixin):
         OWNER = "OWNER", "Farm Owner"
         MANAGER = "MANAGER", "Farm Manager"
         WORKER = "WORKER", "Farm Worker"
-        SUPPLIER = "SUPPLIER", "Supplier"
         CONSUMER = "CONSUMER", "Consumer"
 
     INTERNAL_ROLES = {Role.OWNER, Role.MANAGER, Role.WORKER}
@@ -328,10 +327,7 @@ class Invitation(models.Model):
             raise ValidationError("This invitation is no longer valid.")
 
         user = User.objects.filter(phone_number=self.phone_number).first()
-        is_external_invite = self.account_role in {
-            User.Role.SUPPLIER,
-            User.Role.CONSUMER,
-        }
+        is_external_invite = self.account_role == User.Role.CONSUMER
 
         if user is None:
             if not raw_pin or not self.check_pin(raw_pin):

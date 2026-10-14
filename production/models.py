@@ -654,9 +654,9 @@ class Payment(models.Model):
     # SaleEvent deliberately carries no buyer (see its docstring) — a sale
     # is an event, not an order. A payment is money FROM someone, though,
     # so the buyer attribution lives here instead, the same optional
-    # FarmPartnerLink pattern FeedDelivery.supplier_link and
-    # Harvest.buyer_link use. Null when the buyer isn't a registered
-    # partner (cash at the gate) — same shape as "other source" on feed.
+    # FarmPartnerLink pattern Harvest.buyer_link uses. Null when the buyer
+    # isn't a registered partner (cash at the gate) — same shape as
+    # "other source" on feed.
     buyer_link = models.ForeignKey(
         "partners.FarmPartnerLink",
         on_delete=models.SET_NULL,
@@ -707,17 +707,9 @@ class FeedDelivery(OfflineSyncModel):
     farm = models.ForeignKey(
         "farms.Farm", on_delete=models.CASCADE, related_name="feed_deliveries"
     )
-    supplier_link = models.ForeignKey(
-        "partners.FarmPartnerLink",
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name="feed_deliveries",
-    )
-    # Free-text attribution for feed that did not come from a registered
-    # supplier — a neighbor, a one-off market buy. A delivery with this set
-    # belongs to no supplier_link and must never surface in a supplier's own
-    # view (MyDeliveriesView filters on supplier_link__partner, so this is
-    # excluded there by construction).
+    # Free-text attribution for where the feed came from — a registered
+    # supplier's name, a neighbor, a one-off market buy. There is no
+    # supplier partner type; this is the only record of source.
     other_source = models.CharField(max_length=100, blank=True)
     delivery_date = models.DateField(db_index=True)
     feed_type = models.CharField(max_length=20, choices=FeedType.choices)

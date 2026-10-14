@@ -91,17 +91,6 @@ class TestWhoCanRecordAPayment:
         assert resp.status_code == 403
         assert not Payment.objects.filter(sale=sale).exists()
 
-    def test_supplier_cannot_record_a_payment(
-        self, auth, supplier, staffed_farm, batch, sale
-    ):
-        resp = auth(supplier).post(
-            _payments_url(staffed_farm, batch, sale),
-            {"amount": "2000.00", "received_date": "2026-01-11"},
-            format="json",
-        )
-        assert resp.status_code in (403, 404)
-        assert not Payment.objects.filter(sale=sale).exists()
-
     def test_buyer_cannot_record_a_payment(
         self, auth, staffed_farm, batch, sale
     ):

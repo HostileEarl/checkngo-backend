@@ -234,4 +234,3 @@ After `py manage.py seed_demo_data --reset`:
 | Owner | `+639171112222` | `111111` |
 | Manager | `+639172223333` | `222222` |
 | Worker | `+639173334444` | `333333` |
-| Supplier | `+639175556666` | `555555` |
