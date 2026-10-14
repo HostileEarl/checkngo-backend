@@ -656,7 +656,7 @@ class FeedDeliveryListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         qs = FeedDelivery.objects.filter(farm=self.request.farm).select_related(
-            "supplier_link__partner", "recorded_by"
+            "recorded_by"
         )
         feed_type = self.request.query_params.get("type")
         if feed_type:

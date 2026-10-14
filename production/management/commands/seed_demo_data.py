@@ -80,7 +80,7 @@ class Command(BaseCommand):
         with transaction.atomic():
             owner, manager, worker = self._create_staff()
             farm = self._create_farm(owner, manager, worker)
-            supplier, buyer = self._create_partners(farm, owner)
+            buyer = self._create_partners(farm, owner)
             houses = self._create_houses(farm)
             self._scope_worker_to_house(farm, worker, houses[0])
             self._create_routine(farm, worker, houses[0])
@@ -88,7 +88,7 @@ class Command(BaseCommand):
             # Order matters: the batches and their daily records must exist
             # before deliveries can be sized to match what they consume.
             self._create_batches(farm, houses, owner, worker, buyer)
-            self._create_feed_deliveries(farm, supplier, owner)
+            self._create_feed_deliveries(farm, owner)
 
         self._report()
 
@@ -187,18 +187,6 @@ class Command(BaseCommand):
         return farm
 
     def _create_partners(self, farm, owner):
-        sup_user, created = User.objects.get_or_create(
-            phone_number="+639175556666",
-            defaults={
-                "full_name": "Ricardo Lim",
-                "role": User.Role.SUPPLIER,
-                "must_change_credential": False,
-            },
-        )
-        if created:
-            sup_user.set_password("555555")
-            sup_user.save()
-
         buy_user, created = User.objects.get_or_create(
             phone_number="+639176667777",
             defaults={
@@ -211,18 +199,13 @@ class Command(BaseCommand):
             buy_user.set_password("666666")
             buy_user.save()
 
-        supplier, _ = FarmPartnerLink.objects.get_or_create(
-            farm=farm, partner=sup_user,
-            link_type=FarmPartnerLink.LinkType.SUPPLIER,
-            defaults={"business_name": "Lim Feeds Trading", "linked_by": owner},
-        )
         buyer, _ = FarmPartnerLink.objects.get_or_create(
             farm=farm, partner=buy_user,
             link_type=FarmPartnerLink.LinkType.CONSUMER,
             defaults={"business_name": "Bautista Poultry Dealers", "linked_by": owner},
         )
-        self.stdout.write(self.style.SUCCESS("- supplier and buyer links"))
-        return supplier, buyer
+        self.stdout.write(self.style.SUCCESS("- buyer link"))
+        return buyer
 
     def _create_houses(self, farm):
         specs = [("House 1", 5000), ("House 2", 5000), ("House 3", 3500)]
@@ -349,7 +332,7 @@ class Command(BaseCommand):
 
     # -- feed ------------------------------------------------
 
-    def _create_feed_deliveries(self, farm, supplier, owner):
+    def _create_feed_deliveries(self, farm, owner):
         """
         Deliveries are sized to what the batches actually consume, plus a
         10-20% buffer - so the farm's feed balance ends positive without
@@ -411,7 +394,7 @@ class Command(BaseCommand):
                 farm=farm,
                 recorded_by=owner,
                 inventory_item=feed_item,
-                supplier_link=supplier,
+                other_source="Lim Feeds Trading",
                 delivery_date=delivery_date,
                 feed_type=feed_type,
                 quantity_kg=qty,

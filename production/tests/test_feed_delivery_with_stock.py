@@ -97,9 +97,7 @@ def test_without_item_creates_only_the_feed_delivery(auth, owner, staffed_farm):
     assert response.data["inventory_stock_in"] is None
 
 
-def test_a_delivery_with_no_supplier_and_an_other_source_is_recorded(
-    auth, owner, staffed_farm
-):
+def test_a_delivery_with_an_other_source_is_recorded(auth, owner, staffed_farm):
     response = auth(owner).post(
         _url(staffed_farm),
         _payload(other_source="Neighbor's feed store"),
@@ -108,7 +106,6 @@ def test_a_delivery_with_no_supplier_and_an_other_source_is_recorded(
     assert response.status_code == 201, response.data
 
     delivery = FeedDelivery.objects.get(farm=staffed_farm)
-    assert delivery.supplier_link_id is None
     assert delivery.other_source == "Neighbor's feed store"
 
 

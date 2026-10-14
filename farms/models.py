@@ -62,8 +62,8 @@ class FarmMembership(models.Model):
     Join table binding an internal user to a farm with an operational role.
     This is the single authoritative source for all permission checks.
 
-    External partners (suppliers, consumers) never appear here — they transact
-    with farms but hold no operational authority over them.
+    External partners (consumers) never appear here — they transact with
+    farms but hold no operational authority over them.
     """
 
     class Role(models.TextChoices):

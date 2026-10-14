@@ -1143,7 +1143,10 @@ class BatchCloseSerializer(serializers.Serializer):
 
 
 class FeedDeliverySerializer(serializers.ModelSerializer):
-    supplier_name = serializers.SerializerMethodField()
+    # Read-only now: feed source is free text (other_source). Kept under
+    # its old name so the frontend keeps showing delivery history without
+    # a rename.
+    supplier_name = serializers.CharField(source="other_source", read_only=True)
     recorded_by_name = serializers.CharField(
         source="recorded_by.full_name", read_only=True, default=None
     )
@@ -1153,7 +1156,6 @@ class FeedDeliverySerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "farm",
-            "supplier_link",
             "supplier_name",
             "other_source",
             "delivery_date",
@@ -1171,23 +1173,6 @@ class FeedDeliverySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["farm", "recorded_by", "created_at"]
         extra_kwargs = {"id": {"required": False}, "inventory_item": {"required": False}}
-
-    def get_supplier_name(self, obj):
-        if not obj.supplier_link:
-            return None
-        return obj.supplier_link.business_name or obj.supplier_link.partner.full_name
-
-    def validate_supplier_link(self, value):
-        if value is None:
-            return value
-        farm = self.context["farm"]
-        if value.farm_id != farm.pk:
-            raise serializers.ValidationError("That supplier is not linked to this farm.")
-        if value.link_type != FarmPartnerLink.LinkType.SUPPLIER:
-            raise serializers.ValidationError("That partner is not registered as a supplier.")
-        if not value.is_active:
-            raise serializers.ValidationError("That supplier link is inactive.")
-        return value
 
     def validate_inventory_item(self, value):
         if value is None:

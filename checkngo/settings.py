@@ -367,7 +367,7 @@ SPECTACULAR_SETTINGS = {
         {"name": "Authentication", "description": "Login, logout, PIN rotation."},
         {"name": "Invitations", "description": "Staff and partner onboarding."},
         {"name": "Farms", "description": "Farms, membership, ownership."},
-        {"name": "Partners", "description": "Suppliers and buyers."},
+        {"name": "Partners", "description": "Buyers (consumer partners)."},
         {"name": "Production", "description": "Houses, batches, daily records."},
         {"name": "Analytics", "description": "Charts and aggregations."},
     ],
