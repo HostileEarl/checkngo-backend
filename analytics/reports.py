@@ -60,6 +60,33 @@ def _as_uuid(value):
         return None
 
 
+def split_report_rows(rows):
+    """
+    Consume one of the row generators above and split it into its three
+    parts: the header row, the data rows, and any trailing disclosure rows
+    (the NOTE / METHODOLOGY / SUMMARY blocks that fcr_rows, feed_margin_rows
+    and sales_history_rows append after a blank separator row).
+
+    This is the one place both the CSV view and the XLSX view look at a
+    generator's shape, so a disclosure block is identified the same way —
+    "the first blank row, and everything after it" — for every consumer.
+    The CSV view does not use this at all (it streams the generator
+    untouched, which is why its byte output cannot drift); only the XLSX
+    builder needs the three parts separated out.
+    """
+    rows = iter(rows)
+    header = next(rows, [])
+    data = []
+    trailing = []
+    in_trailing = False
+    for row in rows:
+        if not row:
+            in_trailing = True
+            continue
+        (trailing if in_trailing else data).append(row)
+    return header, data, trailing
+
+
 # ─────────────────────────────────────────────────────────────
 # 1. Daily records
 # ─────────────────────────────────────────────────────────────

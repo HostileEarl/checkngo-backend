@@ -6,16 +6,23 @@ from .views import (
     BatchGrowthCurveView,
     BatchMortalityView,
     DailyRecordsReportView,
+    DailyRecordsXLSXReportView,
     FarmDashboardView,
     FarmFCRView,
     FarmMortalityComparisonView,
     FarmProfitabilityView,
     FCRReportView,
+    FCRXLSXReportView,
     FeedMarginReportView,
+    FeedMarginXLSXReportView,
     InventoryUsageReportView,
+    InventoryUsageXLSXReportView,
     MortalitySummaryReportView,
+    MortalitySummaryXLSXReportView,
     RoutineCompletionReportView,
+    RoutineCompletionXLSXReportView,
     SalesHistoryReportView,
+    SalesHistoryXLSXReportView,
 )
 
 app_name = "analytics"
@@ -41,4 +48,13 @@ urlpatterns = [
     path(f"{_reports}/inventory-usage.csv", InventoryUsageReportView.as_view(), name="report-inventory-usage"),
     path(f"{_reports}/routine-completion.csv", RoutineCompletionReportView.as_view(), name="report-routine-completion"),
     path(f"{_reports}/sales-history.csv", SalesHistoryReportView.as_view(), name="report-sales-history"),
+
+    # XLSX report exports — same routes, owner and manager only.
+    path(f"{_reports}/daily-records.xlsx", DailyRecordsXLSXReportView.as_view(), name="report-daily-records-xlsx"),
+    path(f"{_reports}/mortality-summary.xlsx", MortalitySummaryXLSXReportView.as_view(), name="report-mortality-summary-xlsx"),
+    path(f"{_reports}/fcr.xlsx", FCRXLSXReportView.as_view(), name="report-fcr-xlsx"),
+    path(f"{_reports}/feed-margin.xlsx", FeedMarginXLSXReportView.as_view(), name="report-feed-margin-xlsx"),
+    path(f"{_reports}/inventory-usage.xlsx", InventoryUsageXLSXReportView.as_view(), name="report-inventory-usage-xlsx"),
+    path(f"{_reports}/routine-completion.xlsx", RoutineCompletionXLSXReportView.as_view(), name="report-routine-completion-xlsx"),
+    path(f"{_reports}/sales-history.xlsx", SalesHistoryXLSXReportView.as_view(), name="report-sales-history-xlsx"),
 ]

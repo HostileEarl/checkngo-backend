@@ -1,7 +1,8 @@
 # analytics/views.py
 import csv
+import io
 
-from django.http import StreamingHttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_date
 from django.utils.text import slugify
@@ -15,6 +16,7 @@ from production.models import Batch
 
 from . import reports
 from .alerts import compute_alerts
+from .xlsx_reports import build_workbook, xlsx_filename
 from .services import (
     farm_dashboard,
     farm_mortality_comparison,
@@ -37,6 +39,10 @@ _REPORT_DATE_RANGE_PARAMS = [
     ),
 ]
 _CSV_RESPONSE = {(200, "text/csv"): OpenApiTypes.BINARY}
+_XLSX_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+_XLSX_RESPONSE = {(200, _XLSX_CONTENT_TYPE): OpenApiTypes.BINARY}
 
 
 class AnalyticsPermission(FarmScopedPermission):
@@ -317,6 +323,24 @@ def _report_filename(farm, slug, date_from=None, date_to=None):
     return f"{base}.csv"
 
 
+def _xlsx_response(report_key, request, farm, date_from=None, date_to=None, extra=None):
+    """
+    Build the workbook for one report and wrap it in a plain
+    HttpResponse — unlike the CSV export, a workbook is not something
+    openpyxl can stream cell-by-cell, so it is built in memory and
+    returned whole. Reports are a farm's own aggregate data (thousands of
+    rows at most, not an unbounded feed), so this does not carry the same
+    memory risk the CSV streaming was written to avoid.
+    """
+    wb = build_workbook(report_key, farm, date_from, date_to, extra)
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    response = HttpResponse(buffer.getvalue(), content_type=_XLSX_CONTENT_TYPE)
+    filename = xlsx_filename(report_key, date_from, date_to)
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
 class _ReportView(APIView):
     permission_classes = [OwnerManagerAnalyticsPermission]
 
@@ -470,4 +494,148 @@ class SalesHistoryReportView(_ReportView):
         return _csv_stream(
             rows,
             _report_filename(request.farm, "sales-history", date_from, date_to),
+        )
+
+
+# ─────────────────────────────────────────────────────────────
+# XLSX report exports — same data, same permission, same farm scoping.
+# ─────────────────────────────────────────────────────────────
+#
+# Each view below pulls its rows from exactly the same analytics.reports
+# generator the CSV sibling above uses (via build_workbook), parses the
+# same query params, and differs only in how the response is built and
+# named. No report's rows are computed twice.
+
+
+@extend_schema(
+    tags=["Reports"],
+    summary="Daily records — XLSX export",
+    parameters=_REPORT_DATE_RANGE_PARAMS + [
+        OpenApiParameter(
+            "batch", OpenApiTypes.UUID, OpenApiParameter.QUERY, required=False,
+            description="Restrict to one batch.",
+        ),
+    ],
+    responses=_XLSX_RESPONSE,
+)
+class DailyRecordsXLSXReportView(_ReportView):
+    """GET /api/farms/<farm_pk>/reports/daily-records.xlsx?from=&to=&batch="""
+
+    def get(self, request, farm_pk):
+        date_from, date_to = _date_range(request)
+        return _xlsx_response(
+            "daily-records",
+            request,
+            request.farm,
+            date_from,
+            date_to,
+            request.query_params.get("batch"),
+        )
+
+
+@extend_schema(
+    tags=["Reports"],
+    summary="Mortality summary by batch — XLSX export",
+    parameters=_REPORT_DATE_RANGE_PARAMS,
+    responses=_XLSX_RESPONSE,
+)
+class MortalitySummaryXLSXReportView(_ReportView):
+    """GET /api/farms/<farm_pk>/reports/mortality-summary.xlsx?from=&to="""
+
+    def get(self, request, farm_pk):
+        date_from, date_to = _date_range(request)
+        return _xlsx_response(
+            "mortality-summary", request, request.farm, date_from, date_to
+        )
+
+
+@extend_schema(
+    tags=["Reports"],
+    summary="Feed conversion ratio — XLSX export",
+    responses=_XLSX_RESPONSE,
+)
+class FCRXLSXReportView(_ReportView):
+    """GET /api/farms/<farm_pk>/reports/fcr.xlsx"""
+
+    def get(self, request, farm_pk):
+        return _xlsx_response("fcr", request, request.farm)
+
+
+@extend_schema(
+    tags=["Reports"],
+    summary="Feed margin by batch — XLSX export",
+    responses=_XLSX_RESPONSE,
+)
+class FeedMarginXLSXReportView(_ReportView):
+    """GET /api/farms/<farm_pk>/reports/feed-margin.xlsx"""
+
+    def get(self, request, farm_pk):
+        return _xlsx_response("feed-margin", request, request.farm)
+
+
+@extend_schema(
+    tags=["Reports"],
+    summary="Inventory usage — XLSX export",
+    parameters=_REPORT_DATE_RANGE_PARAMS + [
+        OpenApiParameter(
+            "item", OpenApiTypes.INT, OpenApiParameter.QUERY, required=False,
+            description="Restrict to one inventory item (its id).",
+        ),
+    ],
+    responses=_XLSX_RESPONSE,
+)
+class InventoryUsageXLSXReportView(_ReportView):
+    """GET /api/farms/<farm_pk>/reports/inventory-usage.xlsx?from=&to=&item="""
+
+    def get(self, request, farm_pk):
+        date_from, date_to = _date_range(request)
+        return _xlsx_response(
+            "inventory-usage",
+            request,
+            request.farm,
+            date_from,
+            date_to,
+            request.query_params.get("item"),
+        )
+
+
+@extend_schema(
+    tags=["Reports"],
+    summary="Routine completion — XLSX export",
+    parameters=_REPORT_DATE_RANGE_PARAMS + [
+        OpenApiParameter(
+            "house", OpenApiTypes.INT, OpenApiParameter.QUERY, required=False,
+            description="Restrict to one house (its id).",
+        ),
+    ],
+    responses=_XLSX_RESPONSE,
+)
+class RoutineCompletionXLSXReportView(_ReportView):
+    """GET /api/farms/<farm_pk>/reports/routine-completion.xlsx?from=&to=&house="""
+
+    def get(self, request, farm_pk):
+        date_from, date_to = _date_range(request)
+        return _xlsx_response(
+            "routine-completion",
+            request,
+            request.farm,
+            date_from,
+            date_to,
+            request.query_params.get("house"),
+        )
+
+
+@extend_schema(
+    tags=["Reports"],
+    summary="Sales history — XLSX export",
+    parameters=_REPORT_DATE_RANGE_PARAMS,
+    responses=_XLSX_RESPONSE,
+)
+class SalesHistoryXLSXReportView(_ReportView):
+    """GET /api/farms/<farm_pk>/reports/sales-history.xlsx?from=&to="""
+
+    def get(self, request, farm_pk):
+        date_from, date_to = _date_range(request)
+        return _xlsx_response(
+            "sales-history", request, request.farm, date_from, date_to
         )
