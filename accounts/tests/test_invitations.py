@@ -282,13 +282,15 @@ class TestInvitationAccept:
         )
         assert response.status_code == 400
 
-    def test_new_user_missing_personal_pin_is_rejected(
+    def test_new_user_without_personal_pin_still_accepts_the_old_way(
         self, api, owner, staffed_farm, auth
     ):
         """
-        The direct sign-in only works because the personal PIN is set in
-        this same call — a new account can't accept with the one-time PIN
-        alone, or it would be left with no way to rotate off it later.
+        new_pin/confirm_pin are an addition, not a requirement: a client
+        that predates this field (or the backend deploying ahead of the
+        frontend) must still be able to redeem a brand-new invitation with
+        just the one-time PIN — exactly the old behaviour, no tokens, the
+        rotation gate left standing.
         """
         created = auth(owner).post(
             reverse("farms:farm-invitations", kwargs={"farm_pk": staffed_farm.pk}),
@@ -309,8 +311,14 @@ class TestInvitationAccept:
             {"token": invitation.token, "pin": pin},
             format="json",
         )
-        assert response.status_code == 400
-        assert not User.objects.filter(phone_number="+639170000023").exists()
+        assert response.status_code == 200
+        assert response.data["must_change_credential"] is True
+        assert "access" not in response.data
+        assert "refresh" not in response.data
+
+        user = User.objects.get(phone_number="+639170000023")
+        assert user.must_change_credential is True
+        assert user.check_password(pin)
 
     def test_new_user_mismatched_confirm_pin_is_rejected(
         self, api, owner, staffed_farm, auth
@@ -591,6 +599,46 @@ class TestInvitationSms:
         pin = response.data["pin"]
         log = SmsLog.objects.get(purpose=SmsLog.Purpose.INVITATION)
         assert pin not in log.message
+
+    def test_sms_fits_one_segment_with_the_accept_link_included(
+        self, auth, owner, staffed_farm, settings
+    ):
+        """
+        End-to-end, not just the pure renderer: the real message sent
+        through send_invitation_pin_sms — farm name, PIN and the real
+        /i/<token> link together — must still fit one 160-character SMS
+        segment, even for a long farm name.
+        """
+        from notifications.sms import SMS_SEGMENT_LIMIT
+
+        settings.SMS_ENABLED = True
+        settings.SEMAPHORE_API_KEY = "test-key"
+
+        staffed_farm.name = "A" * 60
+        staffed_farm.save(update_fields=["name"])
+
+        with patch("notifications.sms.requests.post") as mock_post:
+            mock_post.return_value.json.return_value = [{"message_id": "1"}]
+            response = auth(owner).post(
+                reverse("farms:farm-invitations", kwargs={"farm_pk": staffed_farm.pk}),
+                {
+                    "phone_number": "+639170000052",
+                    "full_name": "Segment Check",
+                    "account_role": "WORKER",
+                    "membership_role": "WORKER",
+                },
+                format="json",
+            )
+
+        assert response.status_code == 201
+        # SmsLog deliberately stores a redacted `log_message`, not the real
+        # text (so a PIN can never leak into it) — the real content sent to
+        # the provider is what send_sms actually posts.
+        sent_message = mock_post.call_args.kwargs["data"]["message"]
+        assert len(sent_message) <= SMS_SEGMENT_LIMIT
+        assert response.data["token"] in sent_message
+        assert "/i/" in sent_message
+        assert response.data["pin"] in sent_message
 
     def test_existing_user_invite_sends_no_sms(self, auth, owner, rival_farm, worker):
         """No new PIN is issued for an existing account, so nothing is sent."""

@@ -376,13 +376,17 @@ class InvitationAcceptSerializer(serializers.Serializer):
     """
     Public endpoint — the invitee is not authenticated yet.
 
-    A brand-new invitee also sets their personal PIN here, in the same
-    call that redeems the one-time one — `new_pin`/`confirm_pin` are
-    required exactly when accepting will create a new account, so the
-    invitee never has to log in a second time just to rotate it. An
-    existing user (joining an additional farm) keeps their own PIN; there
-    is nothing to rotate and no tokens are issued here — they already
-    have a session or can log in with their existing credential.
+    A brand-new invitee can also set their personal PIN here, in the same
+    call that redeems the one-time one — pass `new_pin`/`confirm_pin` and
+    the response hands back tokens directly, so the invitee never has to
+    log in a second time just to rotate it. Both fields are optional, not
+    required: a request that omits them still creates the account exactly
+    as before (must_change_credential stays True, no tokens), so an older
+    client that predates this field — mid-deploy or otherwise — never
+    breaks. An existing user (joining an additional farm) keeps their own
+    PIN regardless; there is nothing to rotate and no tokens are issued
+    here — they already have a session or can log in with their existing
+    credential.
     """
 
     token = serializers.CharField(write_only=True)
@@ -410,9 +414,14 @@ class InvitationAcceptSerializer(serializers.Serializer):
             phone_number=invitation.phone_number
         ).exists()
 
-        if self.is_new_user:
-            new_pin = attrs.get("new_pin")
-            confirm_pin = attrs.get("confirm_pin")
+        # new_pin/confirm_pin are an addition, never a requirement: a
+        # request that omits them (an old client that predates this field,
+        # mid-deploy or otherwise) must still accept exactly as it always
+        # has — new account, must_change_credential left True, no tokens.
+        # Only validate them when at least one was actually sent.
+        new_pin = attrs.get("new_pin")
+        confirm_pin = attrs.get("confirm_pin")
+        if self.is_new_user and (new_pin or confirm_pin):
             if not new_pin or not confirm_pin:
                 raise serializers.ValidationError(
                     {"new_pin": "Choose a personal PIN to replace the one-time PIN."}
