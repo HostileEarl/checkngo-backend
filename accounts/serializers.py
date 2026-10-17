@@ -1,4 +1,5 @@
 # accounts/serializers.py
+from django.conf import settings
 from rest_framework import serializers
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -191,20 +192,40 @@ def existing_user_invite_message(invitation, existing_user):
     return detail, name_mismatch
 
 
+def build_short_accept_url(token, phone_number=None):
+    """
+    The `/i/<token>` path (not `/accept-invite?token=...`) exists purely to
+    keep this link short enough to share a 160-character SMS segment with
+    the farm name and PIN. The PIN itself never travels in the link — the
+    phone number does, only so the app can pre-fill it if the invitee ever
+    has to fall back to the normal login screen.
+    """
+    from urllib.parse import quote
+
+    url = f"{settings.FRONTEND_URL}/i/{token}"
+    if phone_number:
+        url += f"?p={quote(phone_number)}"
+    return url
+
+
 def send_invitation_pin_sms(invitation, raw_pin):
     """
-    Text a freshly issued invitation PIN to the invitee.
+    Text a freshly issued invitation PIN, with a short accept link, to the
+    invitee. Only called for a NEW user (an existing user keeps their own
+    PIN, so there is nothing to send).
 
-    Only called for a NEW user (an existing user keeps their own PIN, so
-    there is nothing to send). The accept link is deliberately left out of
-    the text — the owner already has it via "Copy invite" on screen, and
-    including it would push the message past one 160-character segment.
+    The SMS link is deliberately bare (token only, no phone-prefill
+    query param) — every character here competes with the farm name and
+    PIN for the one 160-character segment. The phone-enriched version of
+    the link is only used in `accept_url` on the API response, which the
+    owner can share through a channel with no such limit.
 
     Returns True if the SMS was actually sent (not skipped, not failed) so
     the caller can surface `sms_sent` in the API response.
     """
     farm_name = invitation.farm.name if invitation.farm else "CheckN Go"
-    message = render_invitation_message(farm_name, raw_pin)
+    accept_url = build_short_accept_url(invitation.token)
+    message = render_invitation_message(farm_name, raw_pin, accept_url)
     result = send_sms(
         invitation.phone_number,
         message,
@@ -352,10 +373,28 @@ class InvitationCreateResponseSerializer(InvitationReadSerializer):
 
 
 class InvitationAcceptSerializer(serializers.Serializer):
-    """Public endpoint — the invitee is not authenticated yet."""
+    """
+    Public endpoint — the invitee is not authenticated yet.
+
+    A brand-new invitee can also set their personal PIN here, in the same
+    call that redeems the one-time one — pass `new_pin`/`confirm_pin` and
+    the response hands back tokens directly, so the invitee never has to
+    log in a second time just to rotate it. Both fields are optional, not
+    required: a request that omits them still creates the account exactly
+    as before (must_change_credential stays True, no tokens), so an older
+    client that predates this field — mid-deploy or otherwise — never
+    breaks. An existing user (joining an additional farm) keeps their own
+    PIN regardless; there is nothing to rotate and no tokens are issued
+    here — they already have a session or can log in with their existing
+    credential.
+    """
 
     token = serializers.CharField(write_only=True)
     pin = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
+    new_pin = serializers.CharField(
+        write_only=True, required=False, min_length=6, trim_whitespace=False
+    )
+    confirm_pin = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
 
     def validate_token(self, value):
         invitation = Invitation.objects.filter(token=value).first()
@@ -364,13 +403,65 @@ class InvitationAcceptSerializer(serializers.Serializer):
         self.invitation = invitation
         return value
 
+    def validate(self, attrs):
+        invitation = getattr(self, "invitation", None)
+        if invitation is None:
+            return attrs
+
+        # Known before the PIN is even checked — whether the phone number
+        # already has an account is independent of which PIN is typed.
+        self.is_new_user = not User.objects.filter(
+            phone_number=invitation.phone_number
+        ).exists()
+
+        # new_pin/confirm_pin are an addition, never a requirement: a
+        # request that omits them (an old client that predates this field,
+        # mid-deploy or otherwise) must still accept exactly as it always
+        # has — new account, must_change_credential left True, no tokens.
+        # Only validate them when at least one was actually sent.
+        new_pin = attrs.get("new_pin")
+        confirm_pin = attrs.get("confirm_pin")
+        if self.is_new_user and (new_pin or confirm_pin):
+            if not new_pin or not confirm_pin:
+                raise serializers.ValidationError(
+                    {"new_pin": "Choose a personal PIN to replace the one-time PIN."}
+                )
+            if new_pin != confirm_pin:
+                raise serializers.ValidationError({"confirm_pin": "PINs do not match."})
+            if new_pin == attrs.get("pin"):
+                raise serializers.ValidationError(
+                    {"new_pin": "Your personal PIN must differ from the one-time PIN."}
+                )
+        return attrs
+
     def save(self, **kwargs):
         # The model raises Django's ValidationError, which DRF does not
         # recognise. Translate it here — the model stays framework-agnostic,
         # and the client still gets a clean 400 instead of a 500.
         try:
-            return self.invitation.accept(self.validated_data.get("pin"))
+            user = self.invitation.accept(self.validated_data.get("pin"))
         except DjangoValidationError as exc:
             raise serializers.ValidationError(
                 {"detail": exc.messages}
             ) from exc
+
+        self.tokens = None
+        new_pin = self.validated_data.get("new_pin")
+        if self.is_new_user and new_pin:
+            # Brand new account — nothing issued yet to revoke.
+            user.set_credential(new_pin, revoke_sessions=False)
+
+            memberships = (
+                user.farm_memberships.filter(is_active=True)
+                .select_related("farm")
+                .prefetch_related("houses")
+            )
+            refresh = PhonePinTokenSerializer.get_token(user)
+            self.tokens = {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "user": UserSerializer(user).data,
+                "memberships": MembershipSummarySerializer(memberships, many=True).data,
+            }
+
+        return user

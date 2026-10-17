@@ -41,6 +41,24 @@ class TestRenderInvitationMessage:
         assert len(message) <= SMS_SEGMENT_LIMIT
         assert "Peña's Farm" in message
 
+    def test_accept_link_included_and_still_fits_one_segment(self):
+        # Real-shape short link: production domain + /i/ + a token_urlsafe(9).
+        url = "https://checkngo-frontend.vercel.app/i/5BswakDq2JGM"
+        message = render_invitation_message("Santos Layer Farm", "483920", url)
+        assert len(message) <= SMS_SEGMENT_LIMIT
+        assert url in message
+        assert "483920" in message
+
+    def test_pin_never_appears_inside_the_link_even_truncated(self):
+        farm_name = "A" * 60
+        url = "https://checkngo-frontend.vercel.app/i/5BswakDq2JGM"
+        pin = "483920"
+        message = render_invitation_message(farm_name, pin, url)
+        assert len(message) <= SMS_SEGMENT_LIMIT
+        assert url in message
+        assert f"PIN is {pin}." in message
+        assert pin not in url
+
 
 class TestRenderLowStockMessage:
     def test_typical_length_fits_one_segment(self):
