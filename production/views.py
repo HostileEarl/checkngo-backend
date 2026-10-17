@@ -55,6 +55,7 @@ from .models import (
     WeightSample,
 )
 from .permissions import (
+    CanArchiveHouse,
     CanCorrectLockedRecord,
     CanManageBatches,
     CanManageFeed,
@@ -96,8 +97,15 @@ from drf_spectacular.utils import OpenApiExample, extend_schema
 
 class HouseListCreateView(generics.ListCreateAPIView):
     """
-    GET  /api/farms/<farm_pk>/houses/
+    GET  /api/farms/<farm_pk>/houses/?include_archived=true
     POST /api/farms/<farm_pk>/houses/  — owner/manager only
+
+    Archived houses are left out by default — the house picker, the daily
+    recording flow and staff assignment all go through this same list, so
+    excluding them here is what keeps an archived house out of all three
+    at once. The frontend's "Show archived houses" toggle is what sends
+    ?include_archived=true to see them again (for restoring one, or just
+    reviewing what used to be there).
     """
 
     serializer_class = HouseSerializer
@@ -109,10 +117,11 @@ class HouseListCreateView(generics.ListCreateAPIView):
         return context
 
     def get_queryset(self):
-        return (
-            House.objects.filter(farm=self.request.farm)
-            .prefetch_related("batches")
-        )
+        qs = House.objects.filter(farm=self.request.farm).prefetch_related("batches")
+        include_archived = self.request.query_params.get("include_archived") == "true"
+        if not include_archived:
+            qs = qs.filter(archived_at__isnull=True)
+        return qs
 
     def perform_create(self, serializer):
         serializer.save(farm=self.request.farm)
@@ -131,6 +140,61 @@ class HouseDetailView(generics.RetrieveUpdateAPIView):
 
     def get_queryset(self):
         return House.objects.filter(farm=self.request.farm)
+
+
+class HouseArchiveView(APIView):
+    """
+    POST /api/farms/<farm_pk>/houses/<pk>/archive/ — owner only.
+
+    Refuses a house with an active (not closed) batch: the farm's current
+    occupancy picture would otherwise lose a house mid-cycle. Harvest the
+    batch first, then archive.
+    """
+
+    permission_classes = [CanArchiveHouse]
+
+    def post(self, request, farm_pk, pk):
+        house = get_object_or_404(House, pk=pk, farm=request.farm)
+
+        if house.is_archived:
+            return Response(
+                {"detail": f"{house.name} is already archived."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if house.is_occupied:
+            return Response(
+                {
+                    "detail": (
+                        f"{house.name} has an active batch "
+                        f"({house.current_batch.batch_code}). Harvest it "
+                        "before archiving this house."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        house.archived_at = timezone.now()
+        house.save(update_fields=["archived_at"])
+        return Response(HouseSerializer(house).data)
+
+
+class HouseRestoreView(APIView):
+    """POST /api/farms/<farm_pk>/houses/<pk>/restore/ — owner only."""
+
+    permission_classes = [CanArchiveHouse]
+
+    def post(self, request, farm_pk, pk):
+        house = get_object_or_404(House, pk=pk, farm=request.farm)
+
+        if not house.is_archived:
+            return Response(
+                {"detail": f"{house.name} is not archived."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        house.archived_at = None
+        house.save(update_fields=["archived_at"])
+        return Response(HouseSerializer(house).data)
 
 
 # ─────────────────────────────────────────────────────────────

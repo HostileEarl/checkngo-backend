@@ -144,7 +144,7 @@ def daily_records_rows(farm, date_from=None, date_to=None, batch=None):
         yield [
             r.record_date.isoformat(),
             r.batch.batch_code,
-            r.batch.house.name,
+            r.batch.house.display_name,
             r.mortality_disease,
             r.mortality_heat,
             r.mortality_culled,
@@ -203,7 +203,7 @@ def mortality_summary_rows(farm, date_from=None, date_to=None):
 
         yield [
             batch.batch_code,
-            batch.house.name,
+            batch.house.display_name,
             batch.status,
             batch.initial_bird_count,
             lost,
@@ -495,7 +495,7 @@ def sales_history_rows(farm, date_from=None, date_to=None):
         yield [
             s.sale_date.isoformat(),
             s.batch.batch_code,
-            s.batch.house.name,
+            s.batch.house.display_name,
             s.get_sale_type_display(),
             s.bird_count,
             _s(s.total_weight_kg),

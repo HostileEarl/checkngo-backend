@@ -60,7 +60,9 @@ class FarmMembershipSerializer(serializers.ModelSerializer):
         return [h.name for h in obj.houses.all()]
 
     def validate_houses(self, value):
-        """A house assigned to a membership must belong to that membership's farm."""
+        """A house assigned to a membership must belong to that membership's
+        farm, and must not be archived — an archived house is retired from
+        daily use, so there is nothing left to assign a worker to it for."""
         farm = self.instance.farm if self.instance else self.context.get("farm")
         if farm is not None:
             stray = [h.name for h in value if h.farm_id != farm.pk]
@@ -68,6 +70,11 @@ class FarmMembershipSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     f"These houses belong to another farm: {', '.join(stray)}."
                 )
+        archived = [h.name for h in value if h.is_archived]
+        if archived:
+            raise serializers.ValidationError(
+                f"These houses are archived: {', '.join(archived)}."
+            )
         return value
 
 

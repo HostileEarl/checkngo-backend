@@ -75,6 +75,15 @@ class House(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # Retirement, not a maintenance flag. `is_active` above is a separate,
+    # never-finished "out of service" concept with no UI to set it; this is
+    # the owner-only archive/restore pair. An archived house is hidden from
+    # daily recording, house assignment, batch creation and the house
+    # picker, but its past records are untouched everywhere else — reports
+    # and dashboards label them with display_name below rather than hiding
+    # them, since the batches that happened in this house are still real.
+    archived_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         db_table = "production_house"
         ordering = ["farm", "name"]
@@ -94,6 +103,16 @@ class House(models.Model):
     @property
     def is_occupied(self):
         return self.current_batch is not None
+
+    @property
+    def is_archived(self):
+        return self.archived_at is not None
+
+    @property
+    def display_name(self):
+        """For reports and dashboards, where a past batch's house still
+        needs naming but there is no separate badge to carry the status."""
+        return f"{self.name} (archived)" if self.is_archived else self.name
 
 
 class Batch(models.Model):
