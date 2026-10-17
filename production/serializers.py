@@ -54,9 +54,10 @@ class HouseSerializer(serializers.ModelSerializer):
             "is_occupied",
             "current_batch_code",
             "current_batch_placed",
+            "archived_at",
             "created_at",
         ]
-        read_only_fields = ["id", "created_at"]
+        read_only_fields = ["id", "archived_at", "created_at"]
 
     def get_current_batch_code(self, obj):
         batch = obj.current_batch
@@ -86,7 +87,7 @@ class HouseSerializer(serializers.ModelSerializer):
 class BatchSerializer(serializers.ModelSerializer):
     """Read view. All derived metrics are computed, never stored."""
 
-    house_name = serializers.CharField(source="house.name", read_only=True)
+    house_name = serializers.CharField(source="house.display_name", read_only=True)
     current_bird_count = serializers.IntegerField(read_only=True)
     mortality_rate_pct = serializers.SerializerMethodField()
     feed_conversion_ratio = serializers.SerializerMethodField()
@@ -175,6 +176,8 @@ class BatchCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("That house belongs to another farm.")
         if not value.is_active:
             raise serializers.ValidationError("That house is not in service.")
+        if value.is_archived:
+            raise serializers.ValidationError("That house is archived.")
         return value
 
     def validate_start_date(self, value):
@@ -1762,7 +1765,7 @@ class TaskCompletionSerializer(serializers.ModelSerializer):
     suggested_time = serializers.CharField(
         source="template.suggested_time", read_only=True
     )
-    house_name = serializers.CharField(source="house.name", read_only=True)
+    house_name = serializers.CharField(source="house.display_name", read_only=True)
     is_editable = serializers.BooleanField(read_only=True)
     recorded_by_name = serializers.CharField(
         source="recorded_by.full_name", read_only=True, default=None
@@ -1808,6 +1811,8 @@ class TaskCompletionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("That house belongs to another farm.")
         if not value.is_active:
             raise serializers.ValidationError("That house is not in service.")
+        if value.is_archived:
+            raise serializers.ValidationError("That house is archived.")
         return value
 
     def validate_completion_date(self, value):

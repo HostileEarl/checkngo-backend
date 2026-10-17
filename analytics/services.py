@@ -135,7 +135,7 @@ def mortality_timeseries(batch):
     return {
         "batch_id": str(batch.id),
         "batch_code": batch.batch_code,
-        "house_name": batch.house.name,
+        "house_name": batch.house.display_name,
         "initial_bird_count": placed,
         "start_date": batch.start_date.isoformat(),
         "status": batch.status,
@@ -164,7 +164,7 @@ def farm_mortality_comparison(farm, status=None):
             {
                 "batch_id": str(batch.id),
                 "batch_code": batch.batch_code,
-                "house_name": batch.house.name,
+                "house_name": batch.house.display_name,
                 "status": batch.status,
                 "start_date": batch.start_date.isoformat(),
                 "initial_bird_count": batch.initial_bird_count,
@@ -219,7 +219,7 @@ def fcr_by_batch(farm):
             {
                 "batch_id": str(batch.id),
                 "batch_code": batch.batch_code,
-                "house_name": batch.house.name,
+                "house_name": batch.house.display_name,
                 "harvest_date": harvest.harvest_date.isoformat(),
                 "cycle_days": cycle_days,
                 "birds_placed": batch.initial_bird_count,
@@ -356,7 +356,7 @@ def profitability_by_batch(farm):
             {
                 "batch_id": str(batch.id),
                 "batch_code": batch.batch_code,
-                "house_name": batch.house.name,
+                "house_name": batch.house.display_name,
                 "harvest_date": harvest.harvest_date.isoformat(),
                 "total_weight_kg": str(weight_sold) if weight_sold is not None else None,
                 "revenue": str(revenue) if revenue is not None else None,
@@ -461,7 +461,7 @@ def farm_dashboard(farm):
             {
                 "batch_id": str(b.id),
                 "batch_code": b.batch_code,
-                "house_name": b.house.name,
+                "house_name": b.house.display_name,
                 "age_days": b.age_days,
                 "birds_alive": b.current_bird_count,
                 "mortality_rate_pct": str(_pct(b.total_mortality, b.initial_bird_count)),

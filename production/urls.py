@@ -19,8 +19,10 @@ from .views import (
     SaleEventBulkSyncView,
     SaleEventDetailView,
     SaleEventListCreateView,
+    HouseArchiveView,
     HouseDetailView,
     HouseListCreateView,
+    HouseRestoreView,
     InventoryItemDetailView,
     InventoryItemListCreateView,
     InventoryStockInListCreateView,
@@ -45,6 +47,8 @@ _batch = f"{_farm}/batches/<uuid:batch_pk>"
 urlpatterns = [
     path(f"{_farm}/houses/", HouseListCreateView.as_view(), name="house-list"),
     path(f"{_farm}/houses/<int:pk>/", HouseDetailView.as_view(), name="house-detail"),
+    path(f"{_farm}/houses/<int:pk>/archive/", HouseArchiveView.as_view(), name="house-archive"),
+    path(f"{_farm}/houses/<int:pk>/restore/", HouseRestoreView.as_view(), name="house-restore"),
 
     path(f"{_farm}/batches/", BatchListCreateView.as_view(), name="batch-list"),
     path(f"{_farm}/batches/<uuid:pk>/", BatchDetailView.as_view(), name="batch-detail"),

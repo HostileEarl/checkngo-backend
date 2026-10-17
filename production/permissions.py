@@ -24,6 +24,15 @@ class CanManageBatches(FarmScopedPermission):
     message = "Only an owner or manager can place or close a batch."
 
 
+class CanArchiveHouse(FarmScopedPermission):
+    """Archive and restore a house — owner only. A manager may create and
+    occupy houses (CanManageBatches), but retiring one is an owner decision."""
+
+    allowed_roles = {FarmMembership.Role.OWNER}
+    read_roles = set()
+    message = "Only the farm owner can archive or restore a house."
+
+
 class CanRecordDaily(FarmScopedPermission):
     """Daily records and weight samples — every active member, workers included."""
 
