@@ -9,18 +9,21 @@ from .sms import SMS_SEGMENT_LIMIT, sanitize_for_sms
 LOW_STOCK_FARM_NAME_MAX_LEN = 30
 
 
-def render_invitation_message(farm_name: str, pin: str) -> str:
+def render_invitation_message(farm_name: str, pin: str, accept_url: str | None = None) -> str:
     """
-    The PIN is never shortened or altered — only the farm name gives way,
-    truncated to whatever budget is left after the fixed wording and the
-    PIN, so the whole message always fits in one 160-character segment.
+    The PIN and link are never shortened or altered — only the farm name
+    gives way, truncated to whatever budget is left after the fixed
+    wording, the PIN and the link, so the whole message always fits in
+    one 160-character segment. The link carries only the invite token,
+    never the PIN — either channel alone is useless to an attacker.
     """
     farm_name = sanitize_for_sms(farm_name)
 
     def render(name: str) -> str:
+        link_part = f" {accept_url}" if accept_url else ""
         return (
             f"CheckN Go: You have been invited to {name}. Your one-time PIN "
-            f"is {pin}. Change it when you first sign in."
+            f"is {pin}. Change it when you first sign in.{link_part}"
         )
 
     budget = SMS_SEGMENT_LIMIT - len(render(""))

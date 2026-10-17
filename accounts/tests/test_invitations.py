@@ -160,7 +160,7 @@ class TestInvitationIssue:
         invitation = Invitation.objects.get(pk=created.data["id"])
         assert created.data["token"] == invitation.token
         assert created.data["accept_url"] == (
-            f"{settings.FRONTEND_URL}/accept-invite?token={invitation.token}"
+            f"{settings.FRONTEND_URL}/i/{invitation.token}?p=%2B639170000030"
         )
 
         listed = client.get(
@@ -205,14 +205,25 @@ class TestInvitationAccept:
         api.force_authenticate(user=None)
         response = api.post(
             reverse("accounts:invitation-accept"),
-            {"token": invitation.token, "pin": pin},
+            {
+                "token": invitation.token,
+                "pin": pin,
+                "new_pin": "246810",
+                "confirm_pin": "246810",
+            },
             format="json",
         )
         assert response.status_code == 200
-        assert response.data["must_change_credential"] is True
+        # The personal PIN was set in this same call, so the gate is
+        # already cleared and the invitee is signed in directly.
+        assert response.data["must_change_credential"] is False
+        assert "access" in response.data
+        assert "refresh" in response.data
+        assert response.data["user"]["phone_number"] == "+639170000020"
 
         user = User.objects.get(phone_number="+639170000020")
-        assert user.must_change_credential is True
+        assert user.must_change_credential is False
+        assert user.check_password("246810")
         assert FarmMembership.objects.filter(user=user, farm=staffed_farm).exists()
 
     def test_wrong_pin_rejected(self, api, owner, staffed_farm, auth):
@@ -254,7 +265,12 @@ class TestInvitationAccept:
         invitation = Invitation.objects.get(pk=created.data["id"])
 
         api.force_authenticate(user=None)
-        payload = {"token": invitation.token, "pin": pin}
+        payload = {
+            "token": invitation.token,
+            "pin": pin,
+            "new_pin": "135790",
+            "confirm_pin": "135790",
+        }
         assert api.post(reverse("accounts:invitation-accept"), payload, format="json").status_code == 200
         assert api.post(reverse("accounts:invitation-accept"), payload, format="json").status_code == 400
 
@@ -265,6 +281,102 @@ class TestInvitationAccept:
             format="json",
         )
         assert response.status_code == 400
+
+    def test_new_user_missing_personal_pin_is_rejected(
+        self, api, owner, staffed_farm, auth
+    ):
+        """
+        The direct sign-in only works because the personal PIN is set in
+        this same call — a new account can't accept with the one-time PIN
+        alone, or it would be left with no way to rotate off it later.
+        """
+        created = auth(owner).post(
+            reverse("farms:farm-invitations", kwargs={"farm_pk": staffed_farm.pk}),
+            {
+                "phone_number": "+639170000023",
+                "full_name": "No New Pin",
+                "account_role": "WORKER",
+                "membership_role": "WORKER",
+            },
+            format="json",
+        )
+        pin = created.data["pin"]
+        invitation = Invitation.objects.get(pk=created.data["id"])
+
+        api.force_authenticate(user=None)
+        response = api.post(
+            reverse("accounts:invitation-accept"),
+            {"token": invitation.token, "pin": pin},
+            format="json",
+        )
+        assert response.status_code == 400
+        assert not User.objects.filter(phone_number="+639170000023").exists()
+
+    def test_new_user_mismatched_confirm_pin_is_rejected(
+        self, api, owner, staffed_farm, auth
+    ):
+        created = auth(owner).post(
+            reverse("farms:farm-invitations", kwargs={"farm_pk": staffed_farm.pk}),
+            {
+                "phone_number": "+639170000024",
+                "full_name": "Mismatch",
+                "account_role": "WORKER",
+                "membership_role": "WORKER",
+            },
+            format="json",
+        )
+        pin = created.data["pin"]
+        invitation = Invitation.objects.get(pk=created.data["id"])
+
+        api.force_authenticate(user=None)
+        response = api.post(
+            reverse("accounts:invitation-accept"),
+            {
+                "token": invitation.token,
+                "pin": pin,
+                "new_pin": "246810",
+                "confirm_pin": "999999",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        assert not User.objects.filter(phone_number="+639170000024").exists()
+
+    def test_existing_user_accept_needs_no_new_pin_and_issues_no_tokens(
+        self, api, owner, rival_farm, worker, auth
+    ):
+        """
+        An existing user joining an additional farm keeps their own PIN —
+        there is nothing to rotate, so this accept call needs no personal
+        PIN and does not hand back a session; they already have one, or
+        can log in with the credential they already hold.
+        """
+        rival_farm.owner = owner
+        rival_farm.save()
+
+        created = auth(owner).post(
+            reverse("farms:farm-invitations", kwargs={"farm_pk": rival_farm.pk}),
+            {
+                "phone_number": worker.phone_number,
+                "full_name": worker.full_name,
+                "account_role": "WORKER",
+                "membership_role": "WORKER",
+            },
+            format="json",
+        )
+        assert created.status_code == 201
+        invitation = Invitation.objects.get(pk=created.data["id"])
+
+        api.force_authenticate(user=None)
+        response = api.post(
+            reverse("accounts:invitation-accept"),
+            {"token": invitation.token},
+            format="json",
+        )
+        assert response.status_code == 200
+        assert "access" not in response.data
+        assert "refresh" not in response.data
+        assert FarmMembership.objects.filter(user=worker, farm=rival_farm).exists()
 
 
 class TestInvitationRevoke:

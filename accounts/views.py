@@ -1,5 +1,4 @@
 # accounts/views.py
-from django.conf import settings
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics, status
@@ -21,6 +20,7 @@ from .serializers import (
     LogoutSerializer,
     PhonePinTokenSerializer,
     UserSerializer,
+    build_short_accept_url,
     existing_user_invite_message,
     send_invitation_pin_sms,
 )
@@ -150,8 +150,8 @@ class FarmInvitationListCreateView(generics.ListCreateAPIView):
             # InvitationReadSerializer (list/detail) deliberately omits it.
             payload["pin"] = serializer.issued_pin
             payload["token"] = invitation.token
-            payload["accept_url"] = (
-                f"{settings.FRONTEND_URL}/accept-invite?token={invitation.token}"
+            payload["accept_url"] = build_short_accept_url(
+                invitation.token, invitation.phone_number
             )
             payload["detail"] = (
                 f"Invitation created. Give this PIN to {invitation.full_name}."
@@ -239,10 +239,13 @@ class InvitationAcceptView(APIView):
         serializer = InvitationAcceptSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        return Response(
-            {
-                "detail": "Invitation accepted.",
-                "must_change_credential": user.must_change_credential,
-            },
-            status=status.HTTP_200_OK,
-        )
+        payload = {
+            "detail": "Invitation accepted.",
+            "must_change_credential": user.must_change_credential,
+        }
+        # Only set when accepting just created the account and a personal
+        # PIN was issued in the same call — the invitee signs straight in
+        # instead of being sent back to the login screen.
+        if serializer.tokens:
+            payload.update(serializer.tokens)
+        return Response(payload, status=status.HTTP_200_OK)

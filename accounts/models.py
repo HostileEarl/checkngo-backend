@@ -149,8 +149,13 @@ def generate_pin(length=6):
 
 
 def generate_invite_token():
-    """URL-safe opaque token. ~256 bits of entropy; not guessable, not enumerable."""
-    return secrets.token_urlsafe(32)
+    """
+    URL-safe opaque token — ~72 bits of entropy, not guessable or
+    enumerable, short enough to fit a one-segment SMS link alongside the
+    farm name and PIN. 72 bits is still far beyond brute-forcing within
+    the 7-day validity window the invite throttle allows.
+    """
+    return secrets.token_urlsafe(9)
 
 
 class InvitationQuerySet(models.QuerySet):
