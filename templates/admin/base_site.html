@@ -20,8 +20,11 @@
   head renders `extrahead` after every `extrastyle` contribution, so
   checkngo-admin.css reliably wins without an !important arms race.
 
-  No template logic, blocks, or context are changed. Every admin view
-  keeps the exact markup Django generates.
+  `branding` adds one decorative <img> — the CheckN Go mark
+  (static/admin/img/checkngo-mark.svg, copied from the frontend's
+  src/assets/brand/) — before the site header; it shows in the header
+  bar and on the login card. No other template logic, blocks, or context
+  are changed. The index's hub layout lives in templates/admin/index.html.
 #}
 
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
@@ -31,7 +34,7 @@
 {% endblock %}
 
 {% block branding %}
-<div id="site-name"><a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a></div>
+<div id="site-name"><a href="{% url 'admin:index' %}"><img class="checkngo-mark" src="{% static 'admin/img/checkngo-mark.svg' %}" alt="" width="35" height="32">{{ site_header|default:_('Django administration') }}</a></div>
 {% if user.is_anonymous %}
   {% include "admin/color_theme_toggle.html" %}
 {% endif %}

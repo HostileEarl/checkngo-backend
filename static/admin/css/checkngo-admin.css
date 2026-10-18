@@ -8,30 +8,25 @@
    — repaints the whole admin in the CheckN Go palette without touching a
    single Django template rule or ModelAdmin.
 
-   Tokens are the frontend's Tailwind config (checkngo-frontend/tailwind.config.js).
-   Migrated to terracotta 2026-10-10, then revised the same day (4th
-   revision) to the orange primary below. Full spec and contrast
-   derivations: checkngo-frontend/DESIGN.md.
+   Tokens are the frontend's (frontend/tailwind.config.js), from the Figma
+   palette node 182:421 — the orange brand of 2026-10-18. Contrast
+   derivations: frontend/DESIGN.md §Contrast.
 
-     brand-50  #FFF8F2          brand-600 #FF6B00  — Primary. MANDATORY
-     brand-100 #FFEDE0            fill for every button and every active
-     brand-200 #FFD3B3            nav state. DARK TEXT ONLY (brand-900) —
-     brand-300 #FFB885            white fails AA at 2.86:1. Never
-     brand-400 #FF9A52            reintroduce white-on-brand-600.
-     brand-500 #FF8024          — hover/press fill for dark-text Primary
-                                   surfaces (lightens, doesn't darken)
-     brand-700 #B35400          — FOREGROUND ONLY: text/links/icons on
-                                   white or Canvas. Never a fill behind
-                                   dark text.
-     brand-800 #656D76          — Secondary text (neutral, not hue-tinted)
-     brand-900 #1A1A1A          — Primary text (neutral, not hue-tinted)
+     primary   #FB5E02  Vermilion — header, buttons, object tools, active
+                        nav. WHITE text, semibold or bold: 3.1:1 is a
+                        deliberate brand exception, never regular text.
+     hover     #E35400  (3.8:1 with white)
+     active    #CC4B00  (4.6:1 with white) — also the breadcrumb bar
+     link      #B34400  dark orange for text: 5.61:1 on white
+     secondary #F88B09  Tangerine — wordmark only, never used here
+     alert     #FF3B30  Coral Red — badges only, not used here
 
-     success-500 #1ABF86  warning-500 #F59E0B  danger-500 #EF4444
-     success-600 #16A878  warning-600 #D97706  danger-600 #DC2626
+     bg #FAFAF7 (page)   surface #FFFFFF (cards)   ink #1A1614
+     muted #5E5A57       outline #D0D0D0           field border #8A8580
+     divider #DCDCDC     hover #E4E4E4             tint #FFECE1 (selected)
+
      success-700 #0D7A54  warning-700 #B45309  danger-700 #B91C1C
-
-     line        #E0E0E0  (decorative dividers/card outlines)
-     line-strong #8C8C8C  (input borders, focus-adjacent control outlines)
+     (unchanged)
 
    Font: Nunito (UI text) + JetBrains Mono (numeric columns) — Nunito is
    the exact same self-hosted file the frontend serves from its own
@@ -95,88 +90,82 @@
 html[data-theme="light"],
 html[data-theme="auto"],
 :root {
-    /* Accents */
-    --primary: #FF6B00;                       /* brand-600 */
-    --secondary: #FF6B00;                     /* brand-600 — drives the header */
-    --accent: #FFD3B3;                        /* brand-200 */
-    --primary-fg: #ffffff;                    /* white on #FF6B00 is 2.86:1,
-       fails WCAG AA — deliberate brand decision, not an oversight. See
-       DESIGN.md §Contrast: "do not reintroduce dark text here." */
+    /* Accents. Django's --secondary is a functional variable (header bar,
+       default buttons, the m2m "chosen" title), not the brand's Tangerine,
+       which is wordmark-only — so both point at Vermilion. */
+    --primary: #FB5E02;                       /* Vermilion */
+    --secondary: #FB5E02;                     /* Vermilion — drives the header */
+    --accent: #FFECE1;                        /* light orange tint */
+    --primary-fg: #ffffff;                    /* white on #FB5E02 is 3.1:1 —
+       deliberate brand exception (frontend DESIGN.md §Contrast); every
+       label on it is semibold or bold. */
 
-    /* Body text — all AA+ on white (brand-900 ≈ 17.4:1, brand-800 ≈ 5.25:1) */
-    --body-fg: #1A1A1A;                       /* brand-900 */
-    --body-bg: #ffffff;
-    --body-quiet-color: #656D76;              /* brand-800 */
-    --body-medium-color: #656D76;             /* brand-800 */
-    --body-loud-color: #1A1A1A;               /* brand-900 */
+    /* Body text */
+    --body-fg: #1A1614;                       /* ink, 17.97:1 on white */
+    --body-bg: #ffffff;                       /* cards and controls; the
+       page itself is #FAFAF7, set on body in §3 */
+    --body-quiet-color: #5E5A57;              /* muted, 6.83:1 on white */
+    --body-medium-color: #5E5A57;
+    --body-loud-color: #1A1614;
 
-    /* Header — white text on brand-600, mandated by spec (2.86:1, fails
-       AA; deliberate, see --primary-fg above). */
+    /* Header — white on Vermilion (brand exception, bold branding,
+       semibold user tools). */
     --header-color: #ffffff;
     --header-branding-color: #ffffff;
-    --header-bg: #FF6B00;                     /* brand-600 */
+    --header-bg: #FB5E02;
     --header-link-color: #ffffff;
 
-    /* Breadcrumbs — both roles use white: breadcrumbs-bg (brand-700,
-       #B35400) is dark enough for white at 5.02:1, but brand-200 as the
-       non-link crumb color only reaches 3.64:1 there, under 4.5:1. White
-       for both means losing the subtle link/current-crumb distinction,
-       traded for both actually passing AA. */
+    /* Breadcrumbs — white on the pressed shade #CC4B00 (4.59:1). */
     --breadcrumbs-fg: #ffffff;
     --breadcrumbs-link-fg: #ffffff;
-    --breadcrumbs-bg: #B35400;               /* brand-700 */
+    --breadcrumbs-bg: #CC4B00;
 
-    /* Links — brand-600 fails as text (2.86:1, same reason as above), so
-       these use brand-700 (foreground-safe, 5.02:1) and brand-900
-       (8.29:1+) instead of the fill color. */
-    --link-fg: #B35400;                       /* brand-700 */
-    --link-hover-color: #1A1A1A;              /* brand-900 */
-    --link-selected-fg: #1A1A1A;              /* brand-900 */
+    /* Links — Vermilion is 3.1:1 as text, so links use a darker orange:
+       #B34400 is 5.61:1 on white, 5.36:1 on #FAFAF7, 4.90:1 on #FFECE1,
+       5.09:1 on the #F4F4F2 row hover. */
+    --link-fg: #B34400;
+    --link-hover-color: #1A1614;
+    --link-selected-fg: #1A1614;
 
-    /* Rules & borders — the frontend's `line` and `line-strong` tokens.
-       line (#E0E0E0) is 1.32:1 against white, by design — decorative
-       dividers only. border-color uses line-strong (#8C8C8C, 3.37:1 on
-       white, 3.19:1 on Canvas) for anything that has to distinguish an
-       interactive control from its background. */
-    --hairline-color: #E0E0E0;
-    --border-color: #8C8C8C;
+    /* Rules & borders — hairline (#DCDCDC, decorative only) and the field
+       border (#8A8580, 3.65:1 on white) for anything that distinguishes a
+       control from its background. */
+    --hairline-color: #DCDCDC;
+    --border-color: #8A8580;
 
     --error-fg: #B91C1C;                      /* danger-700 */
     --success-fg: #0D7A54;                    /* success-700 */
     --warning-fg: #B45309;                    /* warning-700 */
-    --muted-fg: #656D76;                      /* secondary text (brand-800) */
+    --muted-fg: #5E5A57;
 
     /* Messages — meaning-named, matching the frontend's success/warning/danger */
     --message-debug-bg: #F3F3F3;
-    --message-info-bg: #FFEDE0;               /* brand-100 */
+    --message-info-bg: #FFECE1;
     --message-success-bg: #D7F5E9;            /* success-100 */
     --message-warning-bg: #FEF3C7;            /* warning-100 */
     --message-error-bg: #FEE2E2;              /* danger-100 */
 
     /* Surfaces */
-    --darkened-bg: #FFF8F2;                   /* brand-50 — striped rows, panels, th */
-    --selected-bg: #FFEDE0;                   /* brand-100 — selected cells */
-    --selected-row: #FFF8F2;                  /* brand-50 */
+    --darkened-bg: #FAFAF7;                   /* striped rows, panels, th */
+    --selected-bg: #FFECE1;                   /* selected cells */
+    --selected-row: #FFECE1;
 
-    /* Buttons — white text on brand-600 (mandatory, 2.86:1, see above).
-       Hover still LIGHTENS to brand-500, never darkens to brand-700 —
-       that's a standing rule independent of the text-colour decision
-       (brand-700 is foreground-only, never a fill). */
+    /* Buttons — white semibold on Vermilion; hover darkens to #E35400
+       (3.8:1), pressed #CC4B00 (4.6:1). */
     --button-fg: #ffffff;
-    --button-bg: #FF6B00;                     /* brand-600 */
-    --button-hover-bg: #FF8024;               /* brand-500 */
-    --default-button-bg: #FF6B00;             /* brand-600 */
-    --default-button-hover-bg: #FF8024;       /* brand-500 */
-    --close-button-bg: #656D76;               /* brand-800 */
-    --close-button-hover-bg: #1A1A1A;         /* brand-900 */
+    --button-bg: #FB5E02;
+    --button-hover-bg: #E35400;
+    --default-button-bg: #FB5E02;
+    --default-button-hover-bg: #E35400;
+    --close-button-bg: #5E5A57;
+    --close-button-hover-bg: #1A1614;
     --delete-button-bg: #DC2626;              /* danger-600 */
     --delete-button-hover-bg: #B91C1C;        /* danger-700 */
 
-    /* Changelist "Add" / object tools — filled brand, not the pale
-       default. Same white-text + lighten-on-hover rule as buttons. */
+    /* Changelist "Add" / object tools — filled Vermilion, white text. */
     --object-tools-fg: #ffffff;
-    --object-tools-bg: #FF6B00;               /* brand-600 */
-    --object-tools-hover-bg: #FF8024;         /* brand-500 */
+    --object-tools-bg: #FB5E02;
+    --object-tools-hover-bg: #E35400;
 
     /* Typography — Nunito first (self-hosted above), Django's own stack
        as fallback while a page's first paint waits on the font. */
@@ -206,100 +195,118 @@ html[data-theme="auto"],
 
 @media (prefers-color-scheme: dark) {
     :root {
-        --primary: #FF6B00;
-        --secondary: #FF6B00;
-        --accent: #FFD3B3;
+        --primary: #FB5E02;
+        --secondary: #FB5E02;
+        --accent: #FFECE1;
         --primary-fg: #ffffff;
 
-        --body-fg: #1A1A1A;
+        --body-fg: #1A1614;
         --body-bg: #ffffff;
-        --body-quiet-color: #656D76;
-        --body-medium-color: #656D76;
-        --body-loud-color: #1A1A1A;
+        --body-quiet-color: #5E5A57;
+        --body-medium-color: #5E5A57;
+        --body-loud-color: #1A1614;
 
         --header-color: #ffffff;
         --header-branding-color: #ffffff;
-        --header-bg: #FF6B00;
+        --header-bg: #FB5E02;
         --header-link-color: #ffffff;
 
         --breadcrumbs-fg: #ffffff;
         --breadcrumbs-link-fg: #ffffff;
-        --breadcrumbs-bg: #B35400;
+        --breadcrumbs-bg: #CC4B00;
 
-        --link-fg: #B35400;
-        --link-hover-color: #1A1A1A;
-        --link-selected-fg: #1A1A1A;
+        --link-fg: #B34400;
+        --link-hover-color: #1A1614;
+        --link-selected-fg: #1A1614;
 
-        --hairline-color: #E0E0E0;
-        --border-color: #8C8C8C;
+        --hairline-color: #DCDCDC;
+        --border-color: #8A8580;
 
         --error-fg: #B91C1C;
         --success-fg: #0D7A54;
         --warning-fg: #B45309;
-        --muted-fg: #656D76;
+        --muted-fg: #5E5A57;
 
         --message-debug-bg: #F3F3F3;
-        --message-info-bg: #FFEDE0;
+        --message-info-bg: #FFECE1;
         --message-success-bg: #D7F5E9;
         --message-warning-bg: #FEF3C7;
         --message-error-bg: #FEE2E2;
 
-        --darkened-bg: #FFF8F2;
-        --selected-bg: #FFEDE0;
-        --selected-row: #FFF8F2;
+        --darkened-bg: #FAFAF7;
+        --selected-bg: #FFECE1;
+        --selected-row: #FFECE1;
 
-        --close-button-bg: #656D76;
-        --close-button-hover-bg: #1A1A1A;
+        --button-fg: #ffffff;
+        --button-bg: #FB5E02;
+        --button-hover-bg: #E35400;
+        --default-button-bg: #FB5E02;
+        --default-button-hover-bg: #E35400;
+        --close-button-bg: #5E5A57;
+        --close-button-hover-bg: #1A1614;
+
+        --object-tools-fg: #ffffff;
+        --object-tools-bg: #FB5E02;
+        --object-tools-hover-bg: #E35400;
 
         color-scheme: light;
     }
 }
 
 html[data-theme="dark"] {
-    --primary: #FF6B00;
-    --secondary: #FF6B00;
-    --accent: #FFD3B3;
+    --primary: #FB5E02;
+    --secondary: #FB5E02;
+    --accent: #FFECE1;
     --primary-fg: #ffffff;
 
-    --body-fg: #1A1A1A;
+    --body-fg: #1A1614;
     --body-bg: #ffffff;
-    --body-quiet-color: #656D76;
-    --body-medium-color: #656D76;
-    --body-loud-color: #1A1A1A;
+    --body-quiet-color: #5E5A57;
+    --body-medium-color: #5E5A57;
+    --body-loud-color: #1A1614;
 
     --header-color: #ffffff;
     --header-branding-color: #ffffff;
-    --header-bg: #FF6B00;
+    --header-bg: #FB5E02;
     --header-link-color: #ffffff;
 
     --breadcrumbs-fg: #ffffff;
     --breadcrumbs-link-fg: #ffffff;
-    --breadcrumbs-bg: #B35400;
+    --breadcrumbs-bg: #CC4B00;
 
-    --link-fg: #B35400;
-    --link-hover-color: #1A1A1A;
-    --link-selected-fg: #1A1A1A;
+    --link-fg: #B34400;
+    --link-hover-color: #1A1614;
+    --link-selected-fg: #1A1614;
 
-    --hairline-color: #E0E0E0;
-    --border-color: #8C8C8C;
+    --hairline-color: #DCDCDC;
+    --border-color: #8A8580;
 
     --error-fg: #B91C1C;
     --success-fg: #0D7A54;
     --warning-fg: #B45309;
-    --muted-fg: #656D76;
+    --muted-fg: #5E5A57;
 
     --message-debug-bg: #F3F3F3;
-    --message-info-bg: #FFEDE0;
+    --message-info-bg: #FFECE1;
     --message-success-bg: #D7F5E9;
     --message-warning-bg: #FEF3C7;
     --message-error-bg: #FEE2E2;
 
-    --darkened-bg: #FFF8F2;
-    --selected-bg: #FFEDE0;
-    --selected-row: #FFF8F2;
+    --darkened-bg: #FAFAF7;
+    --selected-bg: #FFECE1;
+    --selected-row: #FFECE1;
 
-    --close-button-bg: #656D76;
-    --close-button-hover-bg: #1A1A1A;
+    --button-fg: #ffffff;
+    --button-bg: #FB5E02;
+    --button-hover-bg: #E35400;
+    --default-button-bg: #FB5E02;
+    --default-button-hover-bg: #E35400;
+    --close-button-bg: #5E5A57;
+    --close-button-hover-bg: #1A1614;
+
+    --object-tools-fg: #ffffff;
+    --object-tools-bg: #FB5E02;
+    --object-tools-hover-bg: #E35400;
 
     color-scheme: light;
 }
@@ -321,6 +328,7 @@ body {
     font-family: var(--font-family-primary);
     font-size: 0.875rem;                      /* 14px floor for a data interface */
     -webkit-font-smoothing: antialiased;
+    background: #FAFAF7;                      /* page; cards stay white */
 }
 
 #content h1,
@@ -339,8 +347,7 @@ body {
 }
 
 /* --------------------------------------------------------------------------
-   4. Header — brand-600 bar, DARK text (white fails at 2.86:1), "CG"
-      mark to echo the app sidebar
+   4. Header — Vermilion bar, white bold branding, the CheckN Go mark
    -------------------------------------------------------------------------- */
 
 #header {
@@ -358,33 +365,27 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    color: #ffffff;                           /* white on brand-600 — see
-       --primary-fg above: deliberate, fails AA, not reconsidered here */
+    color: #ffffff;                           /* white bold on Vermilion —
+       brand exception, see --primary-fg */
 }
 
-/* The frontend uses a brand-600 rounded square holding "CG"; on the brand
-   header that inverts to a white tile with brand text. */
-#branding #site-name a::before {
-    content: "CG";
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
-    background: #ffffff;
-    color: #B35400;                           /* brand-700 — foreground-safe;
-       brand-600 fails as text on white (2.86:1) */
-    font-size: 0.8125rem;
-    font-weight: 700;
-    letter-spacing: 0;
+/* The mark (templates/admin/base_site.html) is Vermilion itself, so on the
+   Vermilion bar it sits on a white tile; on the login card it stands bare. */
+#branding .checkngo-mark {
+    display: block;
     flex: 0 0 auto;
+    width: auto;
+    height: 32px;
+    padding: 4px;
+    border-radius: 10px;
+    background: #ffffff;
+    box-sizing: border-box;
 }
 
-/* All white text on the brand-600 header bar — mandatory per spec,
-   2.86:1, fails AA. See --primary-fg above. */
+/* White text on the Vermilion bar — semibold, per the brand exception. */
 #user-tools {
     font-size: 0.75rem;
+    font-weight: 600;
     color: #ffffff;
 }
 
@@ -406,6 +407,7 @@ body {
     background: rgba(255, 255, 255, 0.14);
     color: #ffffff;
     font-size: 0.75rem;
+    font-weight: 600;
 }
 
 #logout-form button:hover {
@@ -422,62 +424,68 @@ div.breadcrumbs {
 }
 
 /* --------------------------------------------------------------------------
-   6. Left navigation sidebar — reads like the app's sidebar
-   (brand-50 panel, brand-900 text, brand-100 hover, brand-600 active)
+   6. Left navigation sidebar — the same hubs as the index
+      (checkngo/admin_hubs.py): white panel, ink text, #E4E4E4 hover,
+      Vermilion active model
    -------------------------------------------------------------------------- */
 
 #nav-sidebar {
-    background: #FFF8F2;                      /* brand-50 */
+    background: #ffffff;
     border-right: 1px solid var(--hairline-color);
     padding-top: 8px;
 }
 
 #toggle-nav-sidebar {
-    background: #FFF8F2;
+    background: #ffffff;
     border-right: 1px solid var(--hairline-color);
-    color: #B35400;                           /* brand-700, foreground-safe */
+    color: #B34400;                           /* dark orange, 5.61:1 */
 }
 
 #toggle-nav-sidebar:hover,
 #toggle-nav-sidebar:focus {
-    background: #FFEDE0;
+    background: #E4E4E4;
 }
 
 #nav-sidebar .module caption,
 #nav-sidebar .module th[scope="row"] {
-    color: #656D76;                           /* brand-800 */
+    color: #5E5A57;                           /* muted */
 }
 
 #nav-sidebar a:link,
 #nav-sidebar a:visited {
-    color: #1A1A1A;                           /* brand-900 */
+    color: #1A1614;                           /* ink */
 }
 
 #nav-sidebar a:hover,
 #nav-sidebar a:focus {
-    background: #FFEDE0;                      /* brand-100 */
-    color: #B35400;                           /* brand-700 */
+    background: #E4E4E4;                      /* hover — ink is 14.1:1 on it */
+    color: #1A1614;
+}
+
+/* Hub captions read as headings, not links. */
+#nav-sidebar .module caption a.section:link,
+#nav-sidebar .module caption a.section:visited {
+    color: #1A1614;
+    font-weight: 700;
 }
 
 #nav-sidebar .current-app .section:link,
 #nav-sidebar .current-app .section:visited {
-    color: #B35400;                           /* brand-700 */
+    color: #1A1614;
     font-weight: 700;
 }
 
-/* Active model — brand-600 with WHITE text (overrides --selected-row).
-   Mandatory per spec: white fails on #FF6B00 at 2.86:1, but every
-   active-nav fill uses it regardless — see --primary-fg above. Pill
-   radius, not the original 6px — an orange-filled interactive element
-   never gets a small radius. */
+/* Active model — Vermilion pill, white semibold text (brand exception;
+   overrides --selected-row). */
 #nav-sidebar .current-model {
-    background: #FF6B00;                      /* brand-600 */
+    background: #FB5E02;
     border-radius: 999px;
 }
 
 #nav-sidebar .current-model a:link,
 #nav-sidebar .current-model a:visited {
     color: #ffffff;
+    font-weight: 600;
 }
 
 #nav-sidebar .current-model a:hover,
@@ -495,32 +503,57 @@ div.breadcrumbs {
 }
 
 #nav-filter:focus {
-    border-color: #B35400;                    /* brand-700 */
-    box-shadow: 0 0 0 3px rgba(179, 84, 0, 0.22);
+    border-color: #B34400;                    /* dark orange */
+    box-shadow: 0 0 0 3px rgba(179, 68, 0, 0.22);
 }
 
 /* --------------------------------------------------------------------------
-   7. Cards / modules — 0.625rem radius, brand-50 header, line borders
+   7. Cards / modules — white cards, 0.625rem radius, #FAFAF7 header,
+      hairline borders
    -------------------------------------------------------------------------- */
 
 .module {
     border: 1px solid var(--hairline-color);
     border-radius: 0.625rem;
     overflow: hidden;
-    background: var(--body-bg);
+    background: #ffffff;
 }
 
+/* Card headers. Django paints these var(--header-bg) with
+   var(--header-link-color) — white — and every one here is on a light
+   header, so each sets ink explicitly, including the heading forms
+   Django 5+ uses on change forms (.fieldset-heading, .inline-heading,
+   collapsible <summary>). */
 .module > h2,
 .module caption,
 .inline-group h2,
-fieldset.module > h2 {
-    background: #FFF8F2;                      /* brand-50 */
-    color: #1A1A1A;                           /* brand-900 */
+fieldset.module > h2,
+fieldset .fieldset-heading,
+fieldset .inline-heading,
+:not(.inline-related) .collapse summary {
+    background: #FAFAF7;
+    color: #1A1614;                           /* ink, 17.18:1 */
     font-size: 0.875rem;                      /* the app's card-header size */
     font-weight: 700;
     letter-spacing: 0.01em;
     text-transform: none;
+    border: none;
     border-bottom: 1px solid var(--hairline-color);
+}
+
+/* The index's hub captions ("People", "Farms" …) are links styled by
+   Django's `a.section { color: var(--header-link-color) }` — white on the
+   light header above, i.e. invisible. Ink, like every other card title. */
+.module caption a.section:link,
+.module caption a.section:visited,
+.module h2 a.section:link,
+.module h2 a.section:visited {
+    color: #1A1614;
+}
+
+.module caption a.section:hover,
+.module caption a.section:focus {
+    color: #B34400;
 }
 
 /* Admin index: app cards */
@@ -540,8 +573,8 @@ fieldset.module > h2 {
 }
 
 #content-related .module h2 {
-    background: #FFF8F2;
-    color: #1A1A1A;
+    background: #FAFAF7;
+    color: #1A1614;
 }
 
 /* Fieldsets on change forms */
@@ -561,8 +594,8 @@ fieldset.module {
 }
 
 /* --------------------------------------------------------------------------
-   8. Tables — line borders, brand-50 header, subtle brand-100 row hover
-      (Django's zebra striping already resolves to white / brand-50 through
+   8. Tables — hairline borders, #FAFAF7 header, #F4F4F2 row hover
+      (Django's zebra striping already resolves to white / #FAFAF7 through
       --body-bg and --darkened-bg, so it only needs the hover added.)
    -------------------------------------------------------------------------- */
 
@@ -574,8 +607,8 @@ fieldset.module {
 
 #changelist table thead th,
 #changelist table thead td {
-    background: #FFF8F2;                      /* brand-50 */
-    color: #656D76;                           /* brand-800 */
+    background: #FAFAF7;
+    color: #5E5A57;                           /* muted, 6.53:1 */
     border-bottom: 1px solid var(--hairline-color);
     font-size: 0.6875rem;
     letter-spacing: 0.04em;
@@ -583,33 +616,36 @@ fieldset.module {
 
 #changelist table thead th a:link,
 #changelist table thead th a:visited {
-    color: #656D76;
+    color: #5E5A57;
 }
 
 #changelist table thead th.sorted {
-    background: #FFEDE0;                      /* brand-100 */
+    background: #FFECE1;                      /* tint — muted is 5.96:1 */
 }
 
-/* Cell-level so it paints over the tr-level stripe on both colours */
+/* Cell-level so it paints over the tr-level stripe on both colours.
+   #F4F4F2, not the general #E4E4E4 hover: on #E4E4E4 the link orange
+   (4.41:1) and warning amber (3.95:1) drop under 4.5:1; on #F4F4F2 every
+   link and status colour stays above it (lowest: warning, 4.56:1). */
 #changelist table tbody tr:hover > th,
 #changelist table tbody tr:hover > td {
-    background-color: #FFEDE0;                /* brand-100 */
+    background-color: #F4F4F2;
 }
 
 #changelist tbody tr:has(.action-select:checked) > th,
 #changelist tbody tr:has(.action-select:checked) > td {
-    background-color: #FFD3B3;                /* brand-200 — selected row */
+    background-color: #FFECE1;                /* tint — selected row */
 }
 
-/* None of the four status colours reach 4.5:1 against brand-200 (the
-   darkest is ~3.8:1). The glyph added above already carries each status's
-   meaning without colour, so a selected row falls back to plain text —
-   still legible, still distinguishable, just not tinted while selected. */
+/* Warning amber is 4.38:1 on the selected-row tint, under 4.5:1. The glyph
+   added below already carries each status's meaning without colour, so a
+   selected row falls back to plain ink text — still legible, still
+   distinguishable, just not tinted while selected. */
 #changelist tbody tr:has(.action-select:checked) .status-danger,
 #changelist tbody tr:has(.action-select:checked) .status-success,
 #changelist tbody tr:has(.action-select:checked) .status-warning,
 #changelist tbody tr:has(.action-select:checked) .status-muted {
-    color: #1A1A1A;                           /* brand-900 */
+    color: #1A1614;
 }
 
 /* Inline (tabular) tables on change forms */
@@ -620,31 +656,30 @@ fieldset.module {
 }
 
 /* --------------------------------------------------------------------------
-   9. Filter sidebar — brand-50 card, matching the app's panel treatment
-      (#changelist-filter background already resolves to --darkened-bg)
+   9. Filter sidebar — white card
    -------------------------------------------------------------------------- */
 
 #changelist-filter {
-    background: #FFF8F2;                      /* brand-50 */
+    background: #ffffff;
     border: 1px solid var(--hairline-color);
     border-radius: 0.625rem;
     overflow: hidden;
 }
 
 #changelist-filter h2 {
-    background: transparent;
-    color: #1A1A1A;                           /* brand-900 */
+    background: #FAFAF7;
+    color: #1A1614;
     border-bottom: 1px solid var(--hairline-color);
     text-transform: none;
     font-weight: 700;
 }
 
 #changelist-filter h3 {
-    color: #656D76;                           /* brand-800 */
+    color: #5E5A57;
 }
 
 #changelist-filter li.selected a {
-    color: #B35400;                           /* brand-700, foreground-safe */
+    color: #B34400;                           /* dark orange, 5.61:1 */
     font-weight: 600;
 }
 
@@ -652,7 +687,7 @@ fieldset.module {
 #changelist-filter a:hover,
 #changelist-filter li.selected a:hover,
 #changelist-filter li.selected a:focus {
-    color: #B35400;                           /* brand-700 */
+    color: #B34400;
 }
 
 /* Date-hierarchy drilldown strip */
@@ -661,10 +696,10 @@ fieldset.module {
 }
 
 /* --------------------------------------------------------------------------
-   10. Buttons — pill shape; primary brand-600 with dark text, secondary
-       bordered (line-strong, text brand-700), delete danger. (Colours
-       come from the button custom properties above; this section only
-       reshapes and adds the secondary treatment.)
+   10. Buttons — pill shape; primary Vermilion with white semibold text,
+       secondary white with ink text and the field border, delete danger.
+       (Fill colours come from the button custom properties above; this
+       section reshapes and adds the secondary treatment.)
    -------------------------------------------------------------------------- */
 
 .button,
@@ -675,34 +710,37 @@ a.button,
 .object-tools a {
     border-radius: 9999px;
     padding: 10px 18px;
-    font-weight: 600;
+    font-weight: 600;                         /* white on Vermilion: semibold */
     transition: background 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+
+/* Pressed — filled buttons only; secondary buttons keep their white fill. */
+.default:active,
+#changelist-search input[type="submit"]:active,
+.actions .button:active,
+.object-tools a.addlink:active {
+    background-color: #CC4B00;                /* pressed, 4.6:1 with white */
 }
 
 .button:focus-visible,
 input[type="submit"]:focus-visible,
 input[type="button"]:focus-visible,
 a.button:focus-visible {
-    outline: 2px solid #B35400;               /* brand-700 */
+    outline: 2px solid #B34400;
     outline-offset: 2px;
 }
 
-/* Secondary / non-primary actions — bordered, not filled. Django marks the
-   primary submit with .default; everything else in the submit row (Save
-   and add another, Save and continue) is secondary.
-   brand-200 (#FFD3B3) against white is only ~1.61:1, and the new brand-300
-   (#FFB885) only reaches ~2.2:1 — both well under the 3:1 border floor, so
-   this uses `line-strong` (3.37:1) instead of a brand tint. On hover the
-   border matches the hover text color (brand-700, 5.02:1) rather than an
-   intermediate shade. Text uses brand-700, not brand-600: the new
-   primary fails as foreground text on white (2.86:1), same reason it
-   fails as white-on-fill. */
+/* Secondary / non-primary actions — the frontend's secondary button: white
+   fill, ink text, 1px field border (#8A8580, 3.65:1 on white), hover
+   #E4E4E4. Django marks the primary submit with .default; everything else
+   in the submit row (Save and add another, Save and continue) is
+   secondary. */
 .submit-row input:not(.default),
 .submit-row a:not(.deletelink),
 a.button:not(.default) {
     background: #ffffff;
-    color: #B35400;                           /* brand-700, foreground-safe */
-    border: 1px solid #8C8C8C;                /* line-strong — 3.37:1 on white */
+    color: #1A1614;
+    border: 1px solid #8A8580;
 }
 
 .submit-row input:not(.default):hover,
@@ -710,9 +748,9 @@ a.button:not(.default) {
 .submit-row a:not(.deletelink):hover,
 .submit-row a:not(.deletelink):focus,
 a.button:not(.default):hover {
-    background: #FFF8F2;                      /* brand-50 */
-    color: #B35400;                           /* brand-700 */
-    border-color: #B35400;                    /* brand-700 — 5.02:1 on white */
+    background: #E4E4E4;                      /* hover — ink is 14.1:1 */
+    color: #1A1614;
+    border-color: #8A8580;
 }
 
 /* Delete actions — danger, still a pill */
@@ -736,7 +774,7 @@ a.deletelink:focus {
 
 /* Bulk-action bar */
 .actions {
-    background: #FFF8F2;                      /* brand-50 */
+    background: #ffffff;
     border: 1px solid var(--hairline-color);
     border-radius: 0.625rem;
     color: var(--body-fg);
@@ -756,18 +794,17 @@ a.deletelink:focus {
 .object-tools a.addlink,
 .object-tools a.addlink:link,
 .object-tools a.addlink:visited {
-    background: #FF6B00;                      /* brand-600 — dark text via
-       --object-tools-fg, see root block */
+    background: #FB5E02;                      /* white semibold text via
+       --object-tools-fg */
 }
 
 .object-tools a.addlink:hover,
 .object-tools a.addlink:focus {
-    background: #FF8024;                      /* brand-500 — lighten, not
-       darken, so dark text stays ≥4.5:1 on hover */
+    background: #E35400;                      /* hover darkens */
 }
 
 /* --------------------------------------------------------------------------
-   11. Forms — line border, brand-700 focus ring, 0.625rem radius,
+   11. Forms — field border, dark-orange focus ring, 0.625rem radius,
        48px min touch target (matches the frontend's inputs)
    -------------------------------------------------------------------------- */
 
@@ -813,9 +850,9 @@ input:focus-visible,
 textarea:focus,
 select:focus,
 .vTextField:focus {
-    border-color: #B35400;                    /* brand-700 */
+    border-color: #B34400;
     outline: none;
-    box-shadow: 0 0 0 3px rgba(179, 84, 0, 0.25);
+    box-shadow: 0 0 0 3px rgba(179, 68, 0, 0.25);
 }
 
 .aligned label {
@@ -852,31 +889,54 @@ td.errors select,
     border-radius: 0.625rem;
 }
 
+/* Both titles light with ink text. Django paints the "chosen" title
+   var(--secondary) (Vermilion here) with white regular-weight text, which
+   is under the brand exception's semibold rule. */
 .selector-available h2,
-.selector-chosen h2 {
-    background: #FFF8F2;
-    color: #1A1A1A;
+.selector-chosen h2,
+.selector-available-title,
+.selector-chosen-title {
+    background: #FAFAF7;
+    color: #1A1614;
     border-bottom: 1px solid var(--hairline-color);
 }
 
-/* Calendar / clock popups — white text on brand-600, mandatory per spec
-   (2.86:1, fails AA — see --primary-fg above). */
+.selector-chosen-title label,
+.selector-available-title label {
+    color: #1A1614;
+}
+
+/* The chosen box's "Remove all" footer: Django paints it var(--primary)
+   with white text and a pale clear link (#FFFFFF-ish on Vermilion,
+   regular weight). Light footer, ink text, link-orange clear action. */
+.selector-chosen .list-footer-display {
+    background: #FAFAF7;
+    color: #1A1614;
+    border-color: var(--hairline-color);
+}
+
+.selector-chosen .list-footer-display__clear {
+    color: #B34400;
+}
+
+/* Calendar / clock popups — white semibold on Vermilion (brand exception). */
 .calendar caption,
 .calendarbox h2,
 .clockbox h2 {
-    background: #FF6B00;                      /* brand-600 */
+    background: #FB5E02;
     color: #ffffff;
+    font-weight: 600;
 }
 
 .calendar td.selected a {
-    background: #FF6B00;
+    background: #FB5E02;
     color: #ffffff;
+    font-weight: 600;
 }
 
 .calendar td a:hover,
 .timelist a:hover {
-    background: #B35400;                      /* brand-700 — dark fill,
-       so these go white rather than staying dark-on-dark */
+    background: #CC4B00;                      /* pressed shade, 4.6:1 */
     color: #ffffff;
 }
 
@@ -894,7 +954,7 @@ ul.messagelist li {
     border-radius: 0.625rem;
     padding-top: 12px;
     padding-bottom: 12px;
-    color: #1A1A1A;                           /* brand-900 */
+    color: #1A1614;
     border: 1px solid transparent;
 }
 
@@ -920,9 +980,9 @@ ul.messagelist li.error {
 
 ul.messagelist li.info,
 ul.messagelist li.debug {
-    background-color: #FFEDE0;                /* brand-100 */
+    background-color: #FFECE1;                /* tint — ink is 15.69:1 */
     border-color: var(--hairline-color);
-    color: #1A1A1A;
+    color: #1A1614;
 }
 
 /* Form-level error callout (e.g. the login "please correct" note) */
@@ -945,28 +1005,30 @@ ul.messagelist li.debug {
 
 .paginator a:link,
 .paginator a:visited {
-    background: #FFF8F2;                      /* brand-50 */
-    color: #B35400;                           /* brand-700, foreground-safe */
+    background: #FFECE1;                      /* tint — link orange 4.90:1 */
+    color: #B34400;
     border-radius: 9999px;
     padding: 4px 12px;
 }
 
 .paginator a:focus,
 .paginator a:hover {
-    background: #FF6B00;                      /* brand-600 */
+    background: #FB5E02;
     color: #ffffff;
+    font-weight: 600;
 }
 
 .paginator .this-page {
-    background: #FF6B00;                      /* brand-600 */
+    background: #FB5E02;
     color: #ffffff;
+    font-weight: 600;
     border-radius: 9999px;
     padding: 4px 12px;
 }
 
 /* Search bar */
 #toolbar {
-    background: #FFF8F2;                      /* brand-50 */
+    background: #ffffff;
     border: 1px solid var(--hairline-color);
     border-radius: 0.625rem;
 }
@@ -978,8 +1040,8 @@ ul.messagelist li.debug {
 }
 
 #toolbar #searchbar:focus {
-    border-color: #B35400;                    /* brand-700 */
-    box-shadow: 0 0 0 3px rgba(179, 84, 0, 0.25);
+    border-color: #B34400;
+    box-shadow: 0 0 0 3px rgba(179, 68, 0, 0.25);
 }
 
 #changelist-search input[type="submit"] {
@@ -994,12 +1056,12 @@ ul.messagelist li.debug {
 }
 
 /* --------------------------------------------------------------------------
-   14. Login page — centred card, app-style logo mark, matching the
-       frontend's Login.tsx (brand-50 wash, rounded-2xl card, pill button)
+   14. Login page — centred card with the mark, matching the frontend's
+       Login.tsx (#FAFAF7 page, rounded-2xl white card, pill button)
    -------------------------------------------------------------------------- */
 
 body.login {
-    background: linear-gradient(135deg, #FFF8F2 0%, #ffffff 50%, #FFF8F2 100%);
+    background: #FAFAF7;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1011,7 +1073,7 @@ body.login #container {
     background: #ffffff;
     border: 1px solid var(--hairline-color);
     border-radius: 1.25rem;                   /* app's rounded-2xl */
-    box-shadow: 0 12px 30px rgba(26, 26, 26, 0.12);
+    box-shadow: 0 12px 30px rgba(26, 22, 20, 0.12);
     width: 25rem;
     max-width: calc(100vw - 2rem);
     margin: 0;
@@ -1039,22 +1101,16 @@ body.login #branding #site-name {
 body.login #branding #site-name a {
     flex-direction: column;
     gap: 0.625rem;
-    color: #1A1A1A;                           /* brand-900 on the light card */
+    color: #1A1614;                           /* ink on the white card */
     font-size: 1.125rem;
     letter-spacing: -0.01em;
 }
 
-/* The global rule renders a white "CG" tile for the dark header; on the
-   light login card it inverts back to the app's brand-600 tile, enlarged
-   to match Login.tsx (size-14, rounded-2xl). */
-body.login #branding #site-name a::before {
-    width: 56px;
-    height: 56px;
-    border-radius: 1rem;
-    background: #FF6B00;                      /* brand-600 */
-    color: #ffffff;                           /* white on brand-600,
-       mandatory per spec (2.86:1, fails AA) */
-    font-size: 1.125rem;
+/* On the white card the Vermilion mark needs no tile. */
+body.login #branding .checkngo-mark {
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
 }
 
 body.login #content {
@@ -1067,14 +1123,14 @@ body.login .form-row {
 
 body.login .form-row label {
     font-weight: 600;
-    color: #1A1A1A;                           /* brand-900 */
+    color: #1A1614;
 }
 
 body.login .form-row #id_username,
 body.login .form-row #id_password {
     width: 100%;
     min-height: 48px;
-    border: 1px solid var(--border-color);    /* line-strong, 3.37:1 on white */
+    border: 1px solid var(--border-color);    /* field border, 3.65:1 on white */
     border-radius: 0.625rem;
     padding: 10px 12px;
     box-sizing: border-box;
@@ -1082,8 +1138,8 @@ body.login .form-row #id_password {
 
 body.login .form-row #id_username:focus,
 body.login .form-row #id_password:focus {
-    border-color: #B35400;                    /* brand-700 */
-    box-shadow: 0 0 0 3px rgba(179, 84, 0, 0.25);
+    border-color: #B34400;
+    box-shadow: 0 0 0 3px rgba(179, 68, 0, 0.25);
     outline: none;
 }
 
@@ -1095,17 +1151,19 @@ body.login .submit-row input {
     width: 100%;
     min-height: 48px;
     border-radius: 9999px;
-    background: #FF6B00;                      /* brand-600 */
-    color: #ffffff;                           /* white, mandatory — 2.86:1,
-       fails AA, deliberate per spec */
+    background: #FB5E02;
+    color: #ffffff;                           /* white semibold — brand exception */
     font-weight: 600;
     font-size: 0.9375rem;
 }
 
 body.login .submit-row input:hover,
 body.login .submit-row input:focus {
-    background: #FF8024;                      /* brand-500 — lighten, not
-       darken (brand-700 would drop dark text below 4.5:1 here) */
+    background: #E35400;
+}
+
+body.login .submit-row input:active {
+    background: #CC4B00;
 }
 
 body.login .password-reset-link {
@@ -1115,7 +1173,7 @@ body.login .password-reset-link {
 }
 
 body.login .password-reset-link a {
-    color: #656D76;                           /* brand-800 */
+    color: #5E5A57;
 }
 
 body.login .errornote {
@@ -1123,7 +1181,7 @@ body.login .errornote {
 }
 
 /* --------------------------------------------------------------------------
-   15. Focus visibility — one consistent brand ring everywhere
+   15. Focus visibility — one consistent ring everywhere
    -------------------------------------------------------------------------- */
 
 a:focus-visible,
@@ -1133,17 +1191,16 @@ select:focus-visible,
 textarea:focus-visible,
 .button:focus-visible,
 [tabindex]:focus-visible {
-    outline: 2px solid #B35400;               /* brand-700 — 5.02:1 on
-       white; brand-500 (#FF8024) would only reach 2.51:1 against white,
-       under the 3:1 floor for a focus indicator */
+    outline: 2px solid #B34400;               /* dark orange, 5.61:1 on
+       white — well over the 3:1 floor for a focus indicator */
     outline-offset: 1px;
 }
 
 /* Skip-to-content link */
 .skip-to-content-link:focus {
-    background: #FF6B00;
-    color: #ffffff;                           /* white, mandatory — 2.86:1,
-       fails AA, deliberate per spec */
+    background: #FB5E02;
+    color: #ffffff;                           /* white semibold — brand exception */
+    font-weight: 600;
     border-radius: 0 0 0.5rem 0;
 }
 
@@ -1172,10 +1229,10 @@ textarea:focus-visible,
 }
 
 .status-success {
-    /* Not --success-fg (success-700, #0D7A54): that's 5.35:1 on white, but
-       only 4.47:1 on the brand-100 hover background a badge can sit on —
-       just under the 4.5:1 floor. This shade (still Fresh Green, one step
-       darker) holds 5.16:1 against brand-100 and 6.18:1 against white. */
+    /* Not --success-fg (success-700, #0D7A54): that's 5.35:1 on white but
+       4.20:1 on #E4E4E4. This shade (still Fresh Green, one step darker)
+       holds 6.18:1 on white, 5.62:1 on the #F4F4F2 row hover and 5.40:1 on
+       the #FFECE1 tint. */
     color: #0C6F4C;
     font-weight: 400;
 }
@@ -1196,7 +1253,7 @@ textarea:focus-visible,
 }
 
 .status-muted {
-    color: var(--muted-fg);                   /* secondary text, #656D76 — 5.25:1 */
+    color: var(--muted-fg);                   /* secondary text, #5E5A57 — 5.25:1 */
     font-weight: 400;
 }
 
@@ -1236,4 +1293,66 @@ textarea:focus-visible,
     font-family: var(--font-family-mono);
     font-variant-numeric: tabular-nums;
     text-align: right;
+}
+
+/* --------------------------------------------------------------------------
+   18. Index — Quick actions card and the collapsed System hub
+       (templates/admin/index.html)
+   -------------------------------------------------------------------------- */
+
+.checkngo-quick-actions__body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 20px;
+    padding: 14px 16px;
+}
+
+.checkngo-quick-actions__body a.button.default {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    box-sizing: border-box;
+    color: #ffffff;                           /* white semibold on Vermilion */
+}
+
+.checkngo-quick-actions__body a.button.default:hover,
+.checkngo-quick-actions__body a.button.default:focus {
+    background: #E35400;
+    color: #ffffff;
+}
+
+.checkngo-quick-actions__link {
+    font-weight: 600;                         /* --link-fg, 5.61:1 on white */
+}
+
+/* System starts closed: a <details> styled as a card whose <summary> is
+   the card header. Its table's own caption is visually hidden, so the
+   title is not read twice. */
+details.checkngo-hub-collapsed {
+    margin-bottom: 30px;
+    border: 1px solid var(--hairline-color);
+    border-radius: 0.625rem;
+    background: #ffffff;
+    overflow: hidden;
+}
+
+details.checkngo-hub-collapsed > summary {
+    padding: 8px;
+    background: #FAFAF7;
+    color: #1A1614;
+    font-size: 0.875rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+}
+
+details.checkngo-hub-collapsed[open] > summary {
+    border-bottom: 1px solid var(--hairline-color);
+}
+
+details.checkngo-hub-collapsed > .module {
+    margin: 0;
+    border: none;
+    border-radius: 0;
 }
