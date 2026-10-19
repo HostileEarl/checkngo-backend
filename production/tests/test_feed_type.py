@@ -1,7 +1,14 @@
 # production/tests/test_feed_type.py
 """
 Part A: feed_type on InventoryItem, and the three-choice rework of
-FeedDelivery.FeedType (GROWER -> BOOSTER, OTHER retired to legacy-only).
+FeedDelivery.FeedType (GROWER -> BOOSTER, OTHER retired to legacy-only
+at the model level).
+
+The live frontend has not shipped the updated picker yet, so the API
+stays backward compatible with what it sends today: GROWER is accepted
+and silently aliased to BOOSTER, and OTHER is accepted (flagged legacy
+on read) rather than rejected. See FeedDelivery.NEW_DELIVERY_FEED_TYPES
+and FeedDeliverySerializer.to_internal_value.
 """
 from datetime import date
 from decimal import Decimal
@@ -72,22 +79,64 @@ class TestFeedDeliveryFeedTypeChoices:
         assert resp.status_code == 201, resp.data
         assert resp.data["feed_type"] == "BOOSTER"
 
-    def test_new_delivery_without_item_rejects_other(self, auth, owner, staffed_farm):
+    def test_new_delivery_without_item_still_accepts_other_as_legacy(
+        self, auth, owner, staffed_farm
+    ):
+        # Backward compat: the live frontend's delivery picker still offers
+        # OTHER. Accepted for now, flagged legacy on read — drop this
+        # acceptance once that frontend ships its updated picker.
         resp = auth(owner).post(
             _delivery_url(staffed_farm),
             _payload(feed_type=FeedDelivery.FeedType.OTHER),
             format="json",
         )
-        assert resp.status_code == 400
-        assert "feed_type" in resp.data
+        assert resp.status_code == 201, resp.data
+        assert resp.data["feed_type"] == "OTHER"
+        assert resp.data["legacy_feed_type"] is True
 
-    def test_new_delivery_without_item_rejects_grower(self, auth, owner, staffed_farm):
+    def test_new_delivery_without_item_accepts_grower_and_stores_booster(
+        self, auth, owner, staffed_farm
+    ):
+        # Backward compat: the live frontend's delivery picker still offers
+        # GROWER, renamed to BOOSTER in this release. Accept it as an
+        # alias and store BOOSTER, never GROWER — drop this alias once
+        # that frontend ships its updated picker.
         resp = auth(owner).post(
             _delivery_url(staffed_farm),
             _payload(feed_type="GROWER"),
             format="json",
         )
+        assert resp.status_code == 201, resp.data
+        assert resp.data["feed_type"] == "BOOSTER"
+        assert resp.data["legacy_feed_type"] is False
+
+    def test_new_delivery_rejects_an_unknown_feed_type(
+        self, auth, owner, staffed_farm
+    ):
+        resp = auth(owner).post(
+            _delivery_url(staffed_farm),
+            _payload(feed_type="LAYER"),
+            format="json",
+        )
         assert resp.status_code == 400
+
+    def test_list_filter_by_grower_matches_booster_rows(
+        self, auth, owner, staffed_farm
+    ):
+        FeedDelivery.objects.create(
+            farm=staffed_farm, delivery_date=date(2026, 1, 1),
+            feed_type=FeedDelivery.FeedType.BOOSTER, quantity_kg=Decimal("100.00"),
+            recorded_by=owner,
+        )
+        FeedDelivery.objects.create(
+            farm=staffed_farm, delivery_date=date(2026, 1, 2),
+            feed_type=FeedDelivery.FeedType.STARTER, quantity_kg=Decimal("50.00"),
+            recorded_by=owner,
+        )
+        resp = auth(owner).get(_delivery_url(staffed_farm), {"type": "grower"})
+        assert resp.status_code == 200
+        assert len(resp.data) == 1
+        assert resp.data[0]["feed_type"] == "BOOSTER"
 
     def test_delivery_against_an_item_with_a_feed_type_ignores_the_client_value(
         self, auth, owner, staffed_farm
@@ -113,7 +162,7 @@ class TestFeedDeliveryFeedTypeChoices:
         assert resp.status_code == 201, resp.data
         assert resp.data["feed_type"] == "BOOSTER"
 
-    def test_delivery_against_an_item_with_no_feed_type_still_requires_one_of_the_three(
+    def test_delivery_against_an_item_with_no_feed_type_accepts_legacy_other(
         self, auth, owner, staffed_farm
     ):
         item = InventoryItem.objects.create(
@@ -129,6 +178,29 @@ class TestFeedDeliveryFeedTypeChoices:
             _payload(
                 inventory_item=item.id,
                 feed_type=FeedDelivery.FeedType.OTHER,
+                quantity_kg="100.00",
+            ),
+            format="json",
+        )
+        assert resp.status_code == 201, resp.data
+        assert resp.data["feed_type"] == "OTHER"
+
+    def test_delivery_against_an_item_with_no_feed_type_rejects_an_unknown_type(
+        self, auth, owner, staffed_farm
+    ):
+        item = InventoryItem.objects.create(
+            farm=staffed_farm,
+            name="CBM Layer",
+            unit="sack",
+            kg_per_unit=Decimal("25"),
+            is_feed=True,
+            created_by=owner,
+        )
+        resp = auth(owner).post(
+            _delivery_url(staffed_farm),
+            _payload(
+                inventory_item=item.id,
+                feed_type="LAYER",
                 quantity_kg="100.00",
             ),
             format="json",

@@ -535,6 +535,95 @@ class TestSaleBuyerLink:
         assert resp.status_code == 400
         assert "buyer_link" in resp.data
 
+    def test_owner_can_change_buyer_link_within_the_24_hour_window(
+        self, auth, owner, staffed_farm, batch, link
+    ):
+        created = auth(owner).post(
+            _sales_url(staffed_farm, batch), _payload(), format="json"
+        )
+        assert created.data["buyer_link"] is None
+
+        resp = auth(owner).patch(
+            f"{_sales_url(staffed_farm, batch)}{created.data['id']}/",
+            {"buyer_link": link.pk},
+            format="json",
+        )
+        assert resp.status_code == 200, resp.data
+        assert resp.data["buyer_link"] == link.pk
+
+    def test_changing_buyer_link_past_24_hours_is_locked_same_as_any_other_edit(
+        self, auth, owner, staffed_farm, batch, link
+    ):
+        created = auth(owner).post(
+            _sales_url(staffed_farm, batch), _payload(), format="json"
+        )
+        sale = SaleEvent.objects.get(pk=created.data["id"])
+        _age_out(sale)
+
+        resp = auth(owner).patch(
+            f"{_sales_url(staffed_farm, batch)}{sale.pk}/",
+            {"buyer_link": link.pk},
+            format="json",
+        )
+        assert resp.status_code == 400
+        assert "locked" in str(resp.data).lower()
+        sale.refresh_from_db()
+        assert sale.buyer_link is None
+
+    def test_a_worker_cannot_set_buyer_link_via_bulk_sync(
+        self, auth, worker, staffed_farm, batch, link
+    ):
+        """
+        A worker's offline sale payload is the bulk-sync endpoint — same
+        CanManageBatches permission as the plain create/update views, so a
+        buyer_link in that payload is refused along with the entire
+        request, never silently dropped and never written.
+        """
+        rid = str(uuid.uuid4())
+        resp = auth(worker).post(
+            _bulk_url(staffed_farm, batch),
+            {"records": [{"id": rid, **_payload(buyer_link=link.pk)}]},
+            format="json",
+        )
+        assert resp.status_code == 403
+        assert not SaleEvent.objects.filter(pk=rid).exists()
+
+    def test_owner_can_set_buyer_link_via_bulk_sync(
+        self, auth, owner, staffed_farm, batch, link
+    ):
+        rid = str(uuid.uuid4())
+        resp = auth(owner).post(
+            _bulk_url(staffed_farm, batch),
+            {"records": [{"id": rid, **_payload(buyer_link=link.pk)}]},
+            format="json",
+        )
+        assert resp.status_code == 200, resp.data
+        assert resp.data["created"] == [rid]
+        assert SaleEvent.objects.get(pk=rid).buyer_link_id == link.pk
+
+    def test_bulk_sync_cannot_change_buyer_link_on_a_locked_row(
+        self, auth, owner, staffed_farm, batch, link
+    ):
+        rid = str(uuid.uuid4())
+        auth(owner).post(
+            _bulk_url(staffed_farm, batch),
+            {"records": [{"id": rid, **_payload()}]},
+            format="json",
+        )
+        sale = SaleEvent.objects.get(pk=rid)
+        _age_out(sale)
+
+        resp = auth(owner).post(
+            _bulk_url(staffed_farm, batch),
+            {"records": [{"id": rid, **_payload(buyer_link=link.pk)}]},
+            format="json",
+        )
+        # 207: the one record in this batch failed (locked).
+        assert resp.status_code == 207, resp.data
+        assert resp.data["failed"] and resp.data["failed"][0]["id"] == rid
+        sale.refresh_from_db()
+        assert sale.buyer_link is None
+
 
 # ─────────────────────────────────────────────────────────────
 # Part C: OTHERS sale type

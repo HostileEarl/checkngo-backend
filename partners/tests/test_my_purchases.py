@@ -100,6 +100,33 @@ def _harvest(target_farm, link, *, owner, harvest_date=date(2026, 2, 1), **kw):
     )
 
 
+def _sale_batch(target_farm, link, *, owner, batch_code, bird_count=80):
+    """A farm -> house -> active batch -> one buyer-linked SaleEvent."""
+    global _seq
+    _seq += 1
+    house = House.objects.create(
+        farm=target_farm, name=f"House {_seq}", capacity=10000
+    )
+    batch = Batch.objects.create(
+        house=house,
+        batch_code=batch_code,
+        initial_bird_count=1000,
+        start_date=date(2026, 1, 1),
+        created_by=owner,
+    )
+    sale = SaleEvent.objects.create(
+        batch=batch,
+        sale_date=date(2026, 2, 1),
+        sale_type=SaleEvent.SaleType.DRESSED,
+        bird_count=bird_count,
+        total_weight_kg=Decimal("160.00"),
+        price_per_kg=Decimal("75.00"),
+        buyer_link=link,
+        recorded_by=owner,
+    )
+    return batch, sale
+
+
 class TestMyPurchases:
     def test_buyer_sees_only_their_own_purchases(
         self, auth, buyer, owner, farm, link_buyer, link_buyer_b
@@ -206,30 +233,9 @@ class TestMyPurchases:
         assert row["source"] == "harvest"
 
     def _batch_with_sale(self, target_farm, link, *, owner, batch_code, bird_count=80):
-        """A farm -> house -> active batch -> one buyer-linked SaleEvent."""
-        global _seq
-        _seq += 1
-        house = House.objects.create(
-            farm=target_farm, name=f"House {_seq}", capacity=10000
+        return _sale_batch(
+            target_farm, link, owner=owner, batch_code=batch_code, bird_count=bird_count
         )
-        batch = Batch.objects.create(
-            house=house,
-            batch_code=batch_code,
-            initial_bird_count=1000,
-            start_date=date(2026, 1, 1),
-            created_by=owner,
-        )
-        sale = SaleEvent.objects.create(
-            batch=batch,
-            sale_date=date(2026, 2, 1),
-            sale_type=SaleEvent.SaleType.DRESSED,
-            bird_count=bird_count,
-            total_weight_kg=Decimal("160.00"),
-            price_per_kg=Decimal("75.00"),
-            buyer_link=link,
-            recorded_by=owner,
-        )
-        return batch, sale
 
     def test_buyer_linked_sale_appears_tagged_as_sale(
         self, auth, buyer, owner, farm, link_buyer
@@ -309,6 +315,32 @@ class TestMyPurchases:
 
         assert codes == {"MINE-SALE"}
 
+    def test_no_price_total_or_revenue_key_leaks_to_buyer(
+        self, auth, buyer, owner, farm, link_buyer
+    ):
+        """
+        A generic regression guard, not just a check of today's known
+        field list: any key whose name contains "price", "revenue", or
+        "total" is assumed to be a money figure and must never reach a
+        buyer, from either source row. total_weight_kg/average_weight_kg
+        are the one allowed exception — they are weight, not money.
+        """
+        _harvest(farm, link_buyer, owner=owner, batch_code="GUARD-HARVEST")
+        self._batch_with_sale(farm, link_buyer, owner=owner, batch_code="GUARD-SALE")
+
+        rows = auth(buyer).get(URL).data
+        assert len(rows) == 2
+
+        allowed_weight_keys = {"total_weight_kg", "average_weight_kg"}
+        for row in rows:
+            for key in row:
+                if key in allowed_weight_keys:
+                    continue
+                lowered = key.lower()
+                assert "price" not in lowered, f"{key!r} leaks a price figure"
+                assert "revenue" not in lowered, f"{key!r} leaks a revenue figure"
+                assert "total" not in lowered, f"{key!r} leaks a total figure"
+
     def test_payload_shape(self, auth, buyer, owner, farm, link_buyer):
         _harvest(
             farm,
@@ -325,3 +357,83 @@ class TestMyPurchases:
         assert row["birds_harvested"] == 1000
         assert row["total_weight_kg"] == "1500.00"
         assert row["average_weight_kg"] == "1.500"
+
+
+class TestNewRowsBuyerIsolation:
+    """
+    Isolation specifically for the per-sale buyer_link rows added in this
+    change (BuyerSalePurchaseSerializer), and for the "no buyer_link"
+    case's only route to a buyer: the legacy Harvest rule — which is
+    itself shut off the moment the batch has any sale events at all (see
+    MyPurchasesView.list's no-double-counting note).
+    """
+
+    def test_a_buyer_never_sees_another_buyers_linked_sale(
+        self, auth, buyer, buyer_b, owner, farm, link_buyer, link_buyer_b
+    ):
+        _sale_batch(
+            farm, link_buyer, owner=owner, batch_code="A-SALE"
+        )
+        _sale_batch(
+            farm, link_buyer_b, owner=owner, batch_code="B-SALE"
+        )
+
+        buyer_rows = auth(buyer).get(URL).data
+        buyer_b_rows = auth(buyer_b).get(URL).data
+
+        assert {r["batch_code"] for r in buyer_rows} == {"A-SALE"}
+        assert {r["batch_code"] for r in buyer_b_rows} == {"B-SALE"}
+        assert "B-SALE" not in {r["batch_code"] for r in buyer_rows}
+        assert "A-SALE" not in {r["batch_code"] for r in buyer_b_rows}
+
+    def test_a_buyer_linked_sale_is_invisible_to_a_farm_member_with_no_buyer_link(
+        self, auth, buyer, manager, owner, farm, link_buyer
+    ):
+        # manager is internal staff, not a registered buyer at all — the
+        # query is scoped by buyer_link__partner, so there is no identity
+        # to even match against.
+        _sale_batch(
+            farm, link_buyer, owner=owner, batch_code="STAFF-INVISIBLE"
+        )
+        assert auth(manager).get(URL).data == []
+
+    def test_a_sale_with_no_buyer_link_reaches_no_one_even_via_the_harvest_rule(
+        self, auth, buyer, owner, farm, link_buyer
+    ):
+        """
+        A SaleEvent cannot name a buyer unless buyer_link is set on it
+        directly — there is no fallback from a bare sale row to anyone.
+        The ONLY other route to a buyer for that batch is the legacy
+        Harvest rule, and that rule itself never fires once the batch has
+        any sale events (regardless of whether those carry a buyer_link),
+        per the no-double-counting rule. So a batch with an unlinked sale
+        AND a buyer-linked Harvest must still be invisible.
+        """
+        house = House.objects.create(farm=farm, name="Unlinked sale house", capacity=5000)
+        batch = Batch.objects.create(
+            house=house, batch_code="UNLINKED", initial_bird_count=1000,
+            start_date=date(2026, 1, 1), created_by=owner,
+        )
+        SaleEvent.objects.create(
+            batch=batch, sale_date=date(2026, 2, 1),
+            sale_type=SaleEvent.SaleType.DRESSED, bird_count=50,
+            total_weight_kg=Decimal("90.00"), price_per_kg=Decimal("70.00"),
+            buyer_link=None, recorded_by=owner,
+        )
+        Harvest.objects.create(
+            batch=batch, harvest_date=date(2026, 3, 1),
+            birds_harvested=900, total_weight_kg=Decimal("1500.00"),
+            revenue=Decimal("200000.00"), buyer_link=link_buyer,
+        )
+
+        assert auth(buyer).get(URL).data == []
+
+    def test_a_buyer_without_any_sale_events_still_reaches_the_batch_via_harvest(
+        self, auth, buyer, owner, farm, link_buyer
+    ):
+        # Control case: with no sale events on the batch at all, the
+        # legacy Harvest rule is the batch's only route to a buyer, and it
+        # still works.
+        _harvest(farm, link_buyer, owner=owner, batch_code="HARVEST-ONLY")
+        codes = {r["batch_code"] for r in auth(buyer).get(URL).data}
+        assert codes == {"HARVEST-ONLY"}

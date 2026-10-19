@@ -765,8 +765,13 @@ class FeedDelivery(OfflineSyncModel):
         # keep passing validation on any future full_clean().
         OTHER = "OTHER", "Other"
 
-    # The three a new delivery may pick. OTHER survives only as history.
-    NEW_DELIVERY_FEED_TYPES = {"STARTER", "BOOSTER", "FINISHER"}
+    # What a new delivery may declare. The live frontend (pre feed-type
+    # rename) still offers GROWER and OTHER in its picker; GROWER is
+    # aliased to BOOSTER before it ever reaches here (see
+    # FeedDeliverySerializer.to_internal_value), so only OTHER needs to
+    # stay accepted at this layer. Drop OTHER from this set once that
+    # frontend ships its STARTER/BOOSTER/FINISHER-only picker.
+    NEW_DELIVERY_FEED_TYPES = {"STARTER", "BOOSTER", "FINISHER", "OTHER"}
 
     farm = models.ForeignKey(
         "farms.Farm", on_delete=models.CASCADE, related_name="feed_deliveries"
@@ -856,13 +861,16 @@ class FeedDelivery(OfflineSyncModel):
     def _validate_new_delivery_feed_type(self):
         """
         A brand-new delivery (no item, or an item with no feed_type of its
-        own to inherit) must pick one of the three current types. GROWER no
-        longer exists as a choice and OTHER is legacy-only — reached by a
-        pre-existing row's own feed_type, never by this check, since a row
-        already in the database (`_state.adding` False) is exempt. Note
-        `self.pk` can't tell new from existing here: the UUID primary key
-        inherited from OfflineSyncModel gets its default at construction
-        time, not at save, so it is truthy even on a brand-new instance.
+        own to inherit) must pick one of NEW_DELIVERY_FEED_TYPES. GROWER no
+        longer exists as a model-level choice — it is aliased to BOOSTER by
+        the serializer before this runs. OTHER stays accepted here too,
+        temporarily, because the live frontend still sends it; a
+        pre-existing row's own feed_type is exempt regardless, since a row
+        already in the database (`_state.adding` False) never reaches this
+        check. Note `self.pk` can't tell new from existing here: the UUID
+        primary key inherited from OfflineSyncModel gets its default at
+        construction time, not at save, so it is truthy even on a
+        brand-new instance.
         """
         if not self._state.adding:
             return

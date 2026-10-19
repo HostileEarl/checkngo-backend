@@ -938,6 +938,7 @@ class PaymentSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         amount = attrs.get("amount")
         reverses = attrs.get("reverses")
+        buyer_link = attrs.get("buyer_link")
 
         if amount == 0:
             raise serializers.ValidationError({"amount": "Amount cannot be zero."})
@@ -957,6 +958,33 @@ class PaymentSerializer(serializers.ModelSerializer):
                         )
                     }
                 )
+
+        # A sale carries no buyer of its own by default; its batch's
+        # closing Harvest may. When either already names a buyer, a
+        # payment naming a different one is a contradiction — same farm,
+        # same partner, not just the same FarmPartnerLink row (a buyer can
+        # be linked more than once across farms). A payment that names no
+        # buyer at all is left alone: we never invent an attribution the
+        # caller didn't supply.
+        if buyer_link is not None:
+            sale = self.context["sale"]
+            expected = sale.buyer_link
+            if expected is None:
+                harvest = getattr(sale.batch, "harvest", None)
+                expected = harvest.buyer_link if harvest else None
+            if expected is not None and (
+                buyer_link.farm_id != expected.farm_id
+                or buyer_link.partner_id != expected.partner_id
+            ):
+                raise serializers.ValidationError(
+                    {
+                        "buyer_link": (
+                            "This payment's buyer does not match the buyer "
+                            "already on record for this sale."
+                        )
+                    }
+                )
+
         return attrs
 
     def create(self, validated_data):
@@ -1230,6 +1258,17 @@ class FeedDeliverySerializer(serializers.ModelSerializer):
 
     def get_legacy_feed_type(self, obj) -> bool:
         return obj.feed_type == FeedDelivery.FeedType.OTHER
+
+    def to_internal_value(self, data):
+        # Backward compat: the live frontend's delivery picker still offers
+        # GROWER (renamed to BOOSTER in this release — see migration
+        # 0019_grower_to_booster_data). GROWER is not a model-level choice
+        # any more, so it has to be rewritten here, before DRF's
+        # ChoiceField validates feed_type, rather than after. Remove once
+        # that frontend ships its STARTER/BOOSTER/FINISHER-only picker.
+        if isinstance(data, dict) and data.get("feed_type") == "GROWER":
+            data = {**data, "feed_type": FeedDelivery.FeedType.BOOSTER}
+        return super().to_internal_value(data)
 
     def validate_inventory_item(self, value):
         if value is None:
