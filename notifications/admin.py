@@ -1,10 +1,11 @@
 from django.contrib import admin
+from unfold.admin import ModelAdmin
 
 from .models import SmsLog
 
 
 @admin.register(SmsLog)
-class SmsLogAdmin(admin.ModelAdmin):
+class SmsLogAdmin(ModelAdmin):
     """Read-only — this table is an audit trail, not something to hand-edit."""
 
     list_display = ("sent_at", "purpose", "status", "recipient", "related_farm")

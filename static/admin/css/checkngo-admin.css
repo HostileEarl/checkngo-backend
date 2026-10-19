@@ -1,1440 +1,325 @@
 /* ==========================================================================
-   CheckN Go — Django admin restyle (theming only)
+   CheckN Go admin — brand layer on top of django-unfold.
 
-   The Django admin is driven almost entirely by CSS custom properties
-   declared on :root in admin/css/base.css, with dark-theme values in
-   admin/css/dark_mode.css. Re-declaring those properties here — this sheet
-   loads after every core and page sheet (see templates/admin/base_site.html)
-   — repaints the whole admin in the CheckN Go palette without touching a
-   single Django template rule or ModelAdmin.
+   Unfold draws the layout, forms, tables, sidebar and dark mode. Its colour
+   scales come from UNFOLD["COLORS"] (checkngo/admin_theme.py): primary-600 is
+   the olive, primary-300 the lime. This file only adds what a colour scale
+   can't express:
 
-   The admin mirrors the frontend's Lime / Olive palette (Figma "CheckN Go
-   PWA Prototype 2.0"; frontend/tailwind.config.js and frontend/DESIGN.md,
-   which also holds the contrast derivations).
+     1. Nunito, self-hosted (same file the frontend serves), instead of Inter.
+     2. The main Save button and primary actions in lime with INK text, like
+        the app's primary button. Unfold paints them primary-600 + white.
+     3. Status labels used by list columns (status-danger / -success /
+        -warning / -muted), returned by the ModelAdmins' format_html calls.
+     4. The dashboard (templates/admin/index.html).
 
-     primary   #C4F188  Lime — button fill with INK text (13.9:1). Never
-                        text, an icon or a line on a light ground (1.3:1).
-                        hover #B6E07E, active #A9D271
-     secondary #4F6334  Olive — links, secondary buttons (white text,
-                        6.6:1), focus rings. hover #3E4F28
-     accent    #76CE00  Vivid Green — checked checkboxes (ink tick) and the
-                        success accent. Never text on white (2.0:1).
-
-     bg #F4F4F4 (page)   surface #FFFFFF (cards)   ink #1A1614
-     muted #5E5A57       outline #D0D0D0           field border #8A8580
-     divider #DCDCDC     hover #E4E4E4             tint #F3FBE7 (selected)
-
-     danger-700 #B91C1C  warning-700 #B45309 (unchanged)
-
-   How the themes work: every colour below is a --cng-* token. Section 1
-   maps Django's own variables onto those tokens once, on a selector that
-   outranks both of dark_mode.css's blocks, and Section 2 only swaps token
-   values — light on :root, dark under the OS preference (unless the
-   header toggle says Light) and under the toggle's Dark. No rule after
-   §2 names a colour directly.
-
-   Font: Nunito (UI text) + JetBrains Mono (numeric columns) — Nunito is
-   the exact same self-hosted file the frontend serves from its own
-   /fonts (one variable-weight woff2 covering 400/500/600/700). See the
-   @font-face block below.
-   Radius: 0.625rem for cards/inputs, 9999px (pill) for buttons.
+   Tokens (from the frontend's tailwind.config.js)
+     lime #C4F188 (ink text, 13.9:1) · hover #B6E07E
+     olive #4F6334 (white text, 6.6:1) · hover #3E4F28
+     accent #76CE00 · bg #F4F4F4 · ink #1A1614 · muted #5E5A57
+     danger-700 #B91C1C · warning-700 #B45309
    ========================================================================== */
 
-/* --------------------------------------------------------------------------
-   0. Fonts — self-hosted, same files as checkngo-frontend/public/fonts.
-      The admin has no offline requirement of its own, but reviewers open
-      it on the same connections as the app, and two typefaces side by
-      side (a CDN font here, self-hosted Nunito there) would be the first
-      thing that reads as "two different systems".
-   -------------------------------------------------------------------------- */
+/* 1. Fonts ----------------------------------------------------------------- */
 
 @font-face {
     font-family: "Nunito";
     font-style: normal;
-    font-weight: 400;
+    font-weight: 400 800;
     font-display: swap;
     src: url("../fonts/nunito-latin.woff2") format("woff2");
 }
-
-@font-face {
-    font-family: "Nunito";
-    font-style: normal;
-    font-weight: 500;
-    font-display: swap;
-    src: url("../fonts/nunito-latin.woff2") format("woff2");
-}
-
-@font-face {
-    font-family: "Nunito";
-    font-style: normal;
-    font-weight: 600;
-    font-display: swap;
-    src: url("../fonts/nunito-latin.woff2") format("woff2");
-}
-
-@font-face {
-    font-family: "Nunito";
-    font-style: normal;
-    font-weight: 700;
-    font-display: swap;
-    src: url("../fonts/nunito-latin.woff2") format("woff2");
-}
-
-@font-face {
-    font-family: "JetBrains Mono";
-    font-style: normal;
-    font-weight: 500;
-    font-display: swap;
-    src: url("../fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2");
-}
-
-
-/* --------------------------------------------------------------------------
-   1. Django's variables → CheckN Go tokens
-
-   `:root, html[data-theme]` outranks dark_mode.css's `:root` (inside its
-   prefers-color-scheme block) and ties its `html[data-theme="dark"]`,
-   which this sheet beats on source order — so these mappings hold in
-   every theme, and only the token values in §2 change.
-   -------------------------------------------------------------------------- */
-
-:root,
-html[data-theme] {
-    --primary: var(--cng-primary);
-    --secondary: var(--cng-secondary);
-    --accent: var(--cng-tint);
-    --primary-fg: var(--cng-on-primary);
-
-    --body-fg: var(--cng-ink);
-    --body-bg: var(--cng-surface);                /* cards and controls; the
-       page itself is --cng-bg, set on body in §3 */
-    --body-quiet-color: var(--cng-muted);
-    --body-medium-color: var(--cng-muted);
-    --body-loud-color: var(--cng-ink);
-
-    /* Header — a white bar with ink branding (dark: the raised surface). */
-    --header-color: var(--cng-ink);
-    --header-branding-color: var(--cng-ink);
-    --header-bg: var(--cng-header-bg);
-    --header-link-color: var(--cng-ink);
-
-    /* Breadcrumbs — page grey, muted text, olive links. */
-    --breadcrumbs-fg: var(--cng-muted);
-    --breadcrumbs-link-fg: var(--cng-link);
-    --breadcrumbs-bg: var(--cng-bg);
-
-    --link-fg: var(--cng-link);
-    --link-hover-color: var(--cng-link-hover);
-    --link-selected-fg: var(--cng-ink);
-
-    /* Hairline (decorative) and the field border (a control's edge). */
-    --hairline-color: var(--cng-divider);
-    --border-color: var(--cng-field);
-
-    --error-fg: var(--cng-error-fg);
-    --success-fg: var(--cng-ink);                 /* success is ink text with
-       a green mark beside it, never green text */
-    --warning-fg: var(--cng-warning-fg);
-    --muted-fg: var(--cng-muted);
-
-    --message-debug-bg: var(--cng-info-bg);
-    --message-info-bg: var(--cng-info-bg);
-    --message-success-bg: var(--cng-success-bg);
-    --message-warning-bg: var(--cng-warning-bg);
-    --message-error-bg: var(--cng-error-bg);
-
-    --darkened-bg: var(--cng-bg);                 /* striped rows, panels, th */
-    --selected-bg: var(--cng-tint);
-    --selected-row: var(--cng-tint);
-
-    /* Buttons — ink semibold on Lime. Secondary (olive, white text), cancel
-       and delete are styled in §10. */
-    --button-fg: var(--cng-on-primary);
-    --button-bg: var(--cng-primary);
-    --button-hover-bg: var(--cng-primary-hover);
-    --default-button-bg: var(--cng-primary);
-    --default-button-hover-bg: var(--cng-primary-hover);
-    --close-button-bg: var(--cng-secondary);
-    --close-button-hover-bg: var(--cng-secondary-hover);
-    --delete-button-bg: var(--cng-danger);
-    --delete-button-hover-bg: var(--cng-danger-hover);
-
-    /* Changelist "Add" / object tools — Lime, ink text. */
-    --object-tools-fg: var(--cng-on-primary);
-    --object-tools-bg: var(--cng-primary);
-    --object-tools-hover-bg: var(--cng-primary-hover);
-
-    /* Typography — Nunito first (self-hosted above), Django's own stack
-       as fallback while a page's first paint waits on the font. */
-    --font-family-primary:
-        "Nunito", "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial,
-        sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
-        "Noto Color Emoji";
-
-    /* Numeric columns — record counts, percentages, kg, FCR — so a figure
-       reads visually distinct from its label, matching the frontend. */
-    --font-family-mono:
-        "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas,
-        "Liberation Mono", monospace;
-}
-
-/* --------------------------------------------------------------------------
-   2. Tokens — light, then dark
-
-   Light is the default. Dark applies under the OS preference unless the
-   header toggle is on Light, and whenever the toggle is on Dark. The two
-   dark blocks are identical (CSS can't share one rule between a media
-   query and an attribute selector).
-   -------------------------------------------------------------------------- */
 
 :root {
+    --font-sans: "Nunito", ui-sans-serif, system-ui, sans-serif;
+    --cng-lime: #C4F188;
+    --cng-lime-hover: #B6E07E;
+    --cng-olive: #4F6334;
+    --cng-olive-hover: #3E4F28;
+    --cng-accent: #76CE00;
+    --cng-ink: #1A1614;
+    --cng-muted: #5E5A57;
     --cng-bg: #F4F4F4;
-    --cng-surface: #FFFFFF;
-    --cng-ink: #1A1614;                            /* 17.97:1 on white */
-    --cng-muted: #5E5A57;                          /* 6.83:1 on white, 6.21:1 on bg */
-    --cng-outline: #D0D0D0;
-    --cng-field: #8A8580;                          /* 3.65:1 on white */
-    --cng-divider: #DCDCDC;
-    --cng-hover: #E4E4E4;
-    /* Table row hover: a faint lime, not #E4E4E4, so warning amber (4.85:1)
-       and olive links (6.4:1) stay over 4.5:1 on it. */
-    --cng-row-hover: #F8FBF3;
-    --cng-tint: #F3FBE7;                           /* selected; olive 6.24:1 */
-
-    --cng-primary: #C4F188;                        /* ink on it 13.93:1 */
-    --cng-primary-hover: #B6E07E;
-    --cng-primary-active: #A9D271;
-    --cng-on-primary: #1A1614;
-    --cng-secondary: #4F6334;                      /* white on it 6.63:1 */
-    --cng-secondary-hover: #3E4F28;
-    --cng-on-secondary: #FFFFFF;
-    --cng-link: #4F6334;                           /* 6.63:1 on white */
-    --cng-link-hover: #1A1614;
-    --cng-focus: #4F6334;
-    --cng-accent: #76CE00;
-
-    --cng-header-bg: #FFFFFF;
-    --cng-mark-tile: transparent;                  /* olive mark on white */
-
-    --cng-info-bg: #F4F4F4;
-    --cng-success-bg: #EEF9E0;                     /* ink on it 16.48:1 */
-    --cng-warning-bg: #FEF3C7;
-    --cng-warning-border: #F59E0B;
-    --cng-warning-fg: #B45309;
-    --cng-error-bg: #FEE2E2;
-    --cng-error-border: #EF4444;
-    --cng-error-fg: #B91C1C;
-    --cng-danger: #DC2626;
-    --cng-danger-hover: #B91C1C;
-
-    --cng-shadow: 0 1px 2px rgba(26, 22, 20, 0.04), 0 1px 3px rgba(26, 22, 20, 0.06);
-    --cng-shadow-raised: 0 12px 30px rgba(26, 22, 20, 0.12);
-
-    color-scheme: light;
+    --cng-danger: #B91C1C;
+    --cng-warning: #B45309;
+    --cng-shadow: 0 1px 2px rgba(26, 22, 20, 0.03), 0 4px 12px rgba(26, 22, 20, 0.045);
 }
-
-@media (prefers-color-scheme: dark) {
-    html:not([data-theme="light"]) {
-        --cng-bg: #1A1614;
-        --cng-surface: #24201E;
-        --cng-ink: #F4F4F4;                        /* 14.68:1 on the surface */
-        --cng-muted: #B5B0AB;                      /* 7.51:1 */
-        --cng-outline: #3A3532;
-        --cng-field: #8A8580;                      /* 4.42:1 — controls keep a
-           visible edge; #3A3532 is decorative only */
-        --cng-divider: #3A3532;
-        --cng-hover: #322D2A;
-        --cng-row-hover: #2B2724;
-        --cng-tint: #2F3824;
-
-        --cng-primary: #C4F188;
-        --cng-primary-hover: #B6E07E;
-        --cng-primary-active: #A9D271;
-        --cng-on-primary: #1A1614;
-        --cng-secondary: #4F6334;
-        --cng-secondary-hover: #5F7642;
-        --cng-on-secondary: #FFFFFF;
-        --cng-link: #C4F188;                       /* Lime is text on dark: 12.52:1 */
-        --cng-link-hover: #F4F4F4;
-        --cng-focus: #C4F188;                      /* olive is 2.44:1 here */
-        --cng-accent: #76CE00;
-
-        --cng-header-bg: #24201E;
-        --cng-mark-tile: #F4F4F4;                  /* olive mark needs a light tile */
-
-        --cng-info-bg: #2B2724;
-        --cng-success-bg: #22301A;
-        --cng-warning-bg: #3A2E12;
-        --cng-warning-border: #F59E0B;
-        --cng-warning-fg: #FBBF24;
-        --cng-error-bg: #3B1A1A;
-        --cng-error-border: #EF4444;
-        --cng-error-fg: #F87171;
-        --cng-danger: #DC2626;
-        --cng-danger-hover: #B91C1C;
-
-        --cng-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.4);
-        --cng-shadow-raised: 0 12px 30px rgba(0, 0, 0, 0.45);
-
-        color-scheme: dark;
-    }
-}
-
-html[data-theme="dark"] {
-    --cng-bg: #1A1614;
-    --cng-surface: #24201E;
-    --cng-ink: #F4F4F4;
-    --cng-muted: #B5B0AB;
-    --cng-outline: #3A3532;
-    --cng-field: #8A8580;
-    --cng-divider: #3A3532;
-    --cng-hover: #322D2A;
-    --cng-row-hover: #2B2724;
-    --cng-tint: #2F3824;
-
-    --cng-primary: #C4F188;
-    --cng-primary-hover: #B6E07E;
-    --cng-primary-active: #A9D271;
-    --cng-on-primary: #1A1614;
-    --cng-secondary: #4F6334;
-    --cng-secondary-hover: #5F7642;
-    --cng-on-secondary: #FFFFFF;
-    --cng-link: #C4F188;
-    --cng-link-hover: #F4F4F4;
-    --cng-focus: #C4F188;
-    --cng-accent: #76CE00;
-
-    --cng-header-bg: #24201E;
-    --cng-mark-tile: #F4F4F4;
-
-    --cng-info-bg: #2B2724;
-    --cng-success-bg: #22301A;
-    --cng-warning-bg: #3A2E12;
-    --cng-warning-border: #F59E0B;
-    --cng-warning-fg: #FBBF24;
-    --cng-error-bg: #3B1A1A;
-    --cng-error-border: #EF4444;
-    --cng-error-fg: #F87171;
-    --cng-danger: #DC2626;
-    --cng-danger-hover: #B91C1C;
-
-    --cng-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.4);
-    --cng-shadow-raised: 0 12px 30px rgba(0, 0, 0, 0.45);
-
-    color-scheme: dark;
-}
-
-/* The header's Auto / Light / Dark toggle (Django's), in the user tools
-   and on the login card. Each icon is a full-size square painted
-   `currentColor` under the glyph painted `fill`, so `color` must be the
-   surface it sits on (the header and the login card are both
-   --cng-surface): muted glyph, ink on hover. */
-.theme-toggle svg.theme-icon-when-auto,
-.theme-toggle svg.theme-icon-when-dark,
-.theme-toggle svg.theme-icon-when-light {
-    fill: var(--cng-muted);
-    color: var(--cng-surface);
-}
-
-.theme-toggle:hover svg,
-.theme-toggle:focus-visible svg {
-    fill: var(--cng-ink);
-}
-
-/* --------------------------------------------------------------------------
-   3. Typography & base
-   -------------------------------------------------------------------------- */
 
 body {
-    font-family: var(--font-family-primary);
-    font-size: 0.875rem;                      /* 14px floor for a data interface */
-    -webkit-font-smoothing: antialiased;
-    background: var(--cng-bg);                /* page; cards stay white */
-    color: var(--cng-ink);
+    font-family: var(--font-sans);
 }
 
-#content h1,
-.dashboard #content h1 {
-    font-size: 1.5rem;                        /* matches the app's text-2xl headings */
+/* Page background matches the app (#F4F4F4) in light mode. */
+html:not(.dark) #main,
+html:not(.dark) body {
+    background-color: var(--cng-bg);
+}
+
+/* 2. Primary buttons: lime + ink ------------------------------------------- */
+
+/* Unfold's primary button = bg-primary-600 text-white. Repaint it lime with
+   ink text everywhere it appears (Save, Add, login, filters' Apply). */
+html:not(.dark) .bg-primary-600.text-white:is(button, a, input),
+html:not(.dark) button[type="submit"].bg-primary-600,
+html:not(.dark) input[type="submit"].bg-primary-600 {
+    background-color: var(--cng-lime) !important;
+    border-color: var(--cng-lime) !important;
+    color: var(--cng-ink) !important;
     font-weight: 700;
-    letter-spacing: -0.01em;
-    color: var(--body-loud-color);
 }
 
-#content h2 {
-    font-size: 1.125rem;                      /* the app's text-lg step */
-    font-weight: 700;
-    letter-spacing: -0.005em;
-    color: var(--body-loud-color);
+html:not(.dark) .bg-primary-600.text-white:is(button, a, input):hover,
+html:not(.dark) button[type="submit"].bg-primary-600:hover {
+    background-color: var(--cng-lime-hover) !important;
 }
 
-/* Native checkboxes and radios: Vivid Green when checked. The browser
-   picks the tick colour for contrast, which on #76CE00 is ink. */
-input[type="checkbox"],
-input[type="radio"] {
-    accent-color: var(--cng-accent);
-}
+/* 3. Status labels ----------------------------------------------------------- */
 
-/* --------------------------------------------------------------------------
-   4. Header — white bar, ink branding, the olive CheckN Go mark, a 1px
-      divider under it
-   -------------------------------------------------------------------------- */
-
-#header {
-    padding: 14px 40px;
-    line-height: 1.2;
-    background: var(--cng-header-bg);
-    color: var(--cng-ink);
-    border-bottom: 1px solid var(--cng-divider);
-}
-
-#branding #site-name {
-    margin: 0;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-}
-
-#branding #site-name a,
-#branding #site-name a:link,
-#branding #site-name a:visited {
+.status-danger,
+.status-success,
+.status-warning,
+.status-muted {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    color: var(--cng-ink);                    /* "CheckN Go Administration" */
-}
-
-/* The mark (templates/admin/base_site.html) is olive, as in the app. On
-   the white bar it stands bare; in dark it sits on a light tile. */
-#branding .checkngo-mark {
-    display: block;
-    flex: 0 0 auto;
-    width: auto;
-    height: 32px;
-    padding: 4px;
-    border-radius: 10px;
-    background: var(--cng-mark-tile);
-    box-sizing: border-box;
-}
-
-/* User tools — muted, ink on hover. */
-#user-tools {
+    gap: 0.3em;
+    padding: 0.125rem 0.6rem;
+    border-radius: 9999px;
     font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--cng-muted);
-}
-
-#user-tools a {
-    color: var(--cng-muted);
-    border-bottom-color: transparent;
-}
-
-#user-tools a:focus,
-#user-tools a:hover {
-    color: var(--cng-ink);
-    border-bottom-color: var(--cng-ink);
-}
-
-/* Log out — a small olive-outline pill (lime outline on dark). */
-#logout-form button {
-    border-radius: 9999px;
-    padding: 4px 12px;
-    background: transparent;
-    border: 1px solid var(--cng-link);
-    color: var(--cng-link);
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: none;
-}
-
-#logout-form button:hover,
-#logout-form button:focus {
-    background: var(--cng-tint);
-    color: var(--cng-ink);
-    border-color: var(--cng-link);
-}
-
-/* --------------------------------------------------------------------------
-   5. Breadcrumbs — page grey, muted text, olive links (Django 6 renders
-      them as ol.breadcrumbs; div.breadcrumbs is the older markup)
-   -------------------------------------------------------------------------- */
-
-ol.breadcrumbs,
-div.breadcrumbs {
-    padding: 12px 40px;
-    font-size: 0.8125rem;
-    background: var(--cng-bg);
-    color: var(--cng-muted);
-    border-bottom: 1px solid var(--cng-divider);
-}
-
-ol.breadcrumbs a:link,
-ol.breadcrumbs a:visited,
-div.breadcrumbs a:link,
-div.breadcrumbs a:visited {
-    color: var(--cng-link);
-}
-
-ol.breadcrumbs a:hover,
-ol.breadcrumbs a:focus,
-div.breadcrumbs a:hover,
-div.breadcrumbs a:focus {
-    color: var(--cng-link-hover);
-}
-
-/* --------------------------------------------------------------------------
-   6. Left navigation sidebar — the same hubs as the index
-      (checkngo/admin_hubs.py): white panel, ink text, #E4E4E4 hover,
-      the active model on the lime tint
-   -------------------------------------------------------------------------- */
-
-#nav-sidebar {
-    background: var(--cng-surface);
-    border-right: 1px solid var(--hairline-color);
-    padding-top: 8px;
-}
-
-#toggle-nav-sidebar {
-    background: var(--cng-surface);
-    border-right: 1px solid var(--hairline-color);
-    color: var(--cng-link);
-}
-
-#toggle-nav-sidebar:hover,
-#toggle-nav-sidebar:focus {
-    background: var(--cng-hover);
-}
-
-#nav-sidebar .module caption,
-#nav-sidebar .module th[scope="row"] {
-    color: var(--cng-muted);
-}
-
-#nav-sidebar a:link,
-#nav-sidebar a:visited {
-    color: var(--cng-ink);
-}
-
-#nav-sidebar a:hover,
-#nav-sidebar a:focus {
-    background: var(--cng-hover);             /* ink is 14.1:1 on it */
-    color: var(--cng-ink);
-}
-
-/* Hub captions read as headings, not links. */
-#nav-sidebar .module caption a.section:link,
-#nav-sidebar .module caption a.section:visited {
-    color: var(--cng-ink);
     font-weight: 700;
+    line-height: 1.4;
+    white-space: nowrap;
 }
 
-#nav-sidebar .current-app .section:link,
-#nav-sidebar .current-app .section:visited {
-    color: var(--cng-ink);
-    font-weight: 700;
-}
-
-/* Active model — the selected tint, ink bold, like the app's selected
-   nav (selection carried by fill and weight, never colour alone). */
-#nav-sidebar .current-model {
-    background: var(--cng-tint);
-    border-radius: 999px;
-}
-
-#nav-sidebar .current-model a:link,
-#nav-sidebar .current-model a:visited {
-    color: var(--cng-ink);
-    font-weight: 700;
-}
-
-#nav-sidebar .current-model a:hover,
-#nav-sidebar .current-model a:focus {
-    background: transparent;
-    color: var(--cng-ink);
-}
-
-#nav-filter {
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    min-height: 36px;
-    background: var(--cng-surface);
-    color: var(--body-fg);
-}
-
-#nav-filter:focus {
-    border-color: var(--cng-focus);
-    box-shadow: 0 0 0 2px var(--cng-focus);
-}
-
-/* --------------------------------------------------------------------------
-   7. Cards / modules — white, 1px outline, 0.625rem radius, the card
-      shadow; captions ink bold on white with a divider under them
-   -------------------------------------------------------------------------- */
-
-.module {
-    border: 1px solid var(--cng-outline);
-    border-radius: 0.625rem;
-    overflow: hidden;
-    background: var(--cng-surface);
-    box-shadow: var(--cng-shadow);
-}
-
-/* Card headers. Django paints these var(--header-bg) with
-   var(--header-link-color); each is set explicitly here, including the
-   heading forms Django 5+ uses on change forms (.fieldset-heading,
-   .inline-heading, collapsible <summary>). */
-.module > h2,
-.module caption,
-.inline-group h2,
-fieldset.module > h2,
-fieldset .fieldset-heading,
-fieldset .inline-heading,
-:not(.inline-related) .collapse summary {
-    background: var(--cng-surface);
-    color: var(--cng-ink);
-    font-size: 0.875rem;                      /* the app's card-header size */
-    font-weight: 700;
-    letter-spacing: 0.01em;
-    text-transform: none;
-    border: none;
-    border-bottom: 1px solid var(--hairline-color);
-}
-
-/* The index's hub captions ("People", "Farms" …) are links styled by
-   Django's `a.section { color: var(--header-link-color) }`. Ink, like
-   every other card title. */
-.module caption a.section:link,
-.module caption a.section:visited,
-.module h2 a.section:link,
-.module h2 a.section:visited {
-    color: var(--cng-ink);
-}
-
-.module caption a.section:hover,
-.module caption a.section:focus {
-    color: var(--cng-link);
-}
-
-/* Admin index: app cards */
-.dashboard .module table th,
-.dashboard .module table td {
-    border-bottom: 1px solid var(--hairline-color);
-}
-
-.dashboard .module table tr:last-child th,
-.dashboard .module table tr:last-child td {
-    border-bottom: none;
-}
-
-/* Recent-actions panel on the dashboard */
-#content-related .module {
-    border-radius: 0.625rem;
-}
-
-#content-related .module h2 {
-    background: var(--cng-surface);
-    color: var(--cng-ink);
-}
-
-/* Fieldsets on change forms */
-fieldset.module {
-    border: 1px solid var(--cng-outline);
-    border-radius: 0.625rem;
-}
-
-.aligned .help,
-.form-row .help {
-    color: var(--body-quiet-color);
-}
-
-/* Collapsible fieldset toggle */
-.collapse-toggle {
-    color: var(--link-fg);
-}
-
-/* --------------------------------------------------------------------------
-   8. Tables — hairline borders, grey header, a faint lime row hover
-      (Django's zebra striping already resolves to white / #F4F4F4 through
-      --body-bg and --darkened-bg, so it only needs the hover added.)
-   -------------------------------------------------------------------------- */
-
-#changelist table {
-    border: 1px solid var(--cng-outline);
-    border-radius: 0.625rem;
-    overflow: hidden;
-}
-
-#changelist table thead th,
-#changelist table thead td {
-    background: var(--cng-bg);
-    color: var(--cng-muted);                  /* 6.21:1 */
-    border-bottom: 1px solid var(--hairline-color);
-    font-size: 0.6875rem;
-    letter-spacing: 0.04em;
-}
-
-#changelist table thead th a:link,
-#changelist table thead th a:visited {
-    color: var(--cng-muted);
-}
-
-#changelist table thead th.sorted {
-    background: var(--cng-tint);
-}
-
-/* Cell-level so it paints over the tr-level stripe on both colours. */
-#changelist table tbody tr:hover > th,
-#changelist table tbody tr:hover > td {
-    background-color: var(--cng-row-hover);
-}
-
-#changelist tbody tr:has(.action-select:checked) > th,
-#changelist tbody tr:has(.action-select:checked) > td {
-    background-color: var(--cng-tint);        /* selected row */
-}
-
-/* On the selected tint the status colours fall back to plain ink: the
-   glyph added in §16 already carries each status without colour. */
-#changelist tbody tr:has(.action-select:checked) .status-danger,
-#changelist tbody tr:has(.action-select:checked) .status-success,
-#changelist tbody tr:has(.action-select:checked) .status-warning,
-#changelist tbody tr:has(.action-select:checked) .status-muted {
-    color: var(--cng-ink);
-}
-
-/* Inline (tabular) tables on change forms */
-.inline-group .tabular tr.has_original td,
-.inline-group .tabular td,
-.inline-group .tabular th {
-    border-color: var(--hairline-color);
-}
-
-/* --------------------------------------------------------------------------
-   9. Filter sidebar — white card
-   -------------------------------------------------------------------------- */
-
-#changelist-filter {
-    background: var(--cng-surface);
-    border: 1px solid var(--cng-outline);
-    border-radius: 0.625rem;
-    overflow: hidden;
-    box-shadow: var(--cng-shadow);
-}
-
-#changelist-filter h2 {
-    background: var(--cng-surface);
-    color: var(--cng-ink);
-    border-bottom: 1px solid var(--hairline-color);
-    text-transform: none;
-    font-weight: 700;
-}
-
-#changelist-filter h3 {
-    color: var(--cng-muted);
-}
-
-#changelist-filter li.selected a {
-    color: var(--cng-link);
-    font-weight: 700;
-}
-
-#changelist-filter a:focus,
-#changelist-filter a:hover,
-#changelist-filter li.selected a:hover,
-#changelist-filter li.selected a:focus {
-    color: var(--cng-link-hover);
-}
-
-/* Date-hierarchy drilldown strip */
-.change-list .toplinks {
-    border-color: var(--hairline-color);
-}
-
-/* --------------------------------------------------------------------------
-   10. Buttons — pill shape. Primary: ink semibold on Lime. Secondary
-       ("Save and continue", "Save and add another", cancel): white on
-       Olive. Delete: danger. (Primary fills come from the custom
-       properties in §1; this section reshapes and adds the others.)
-   -------------------------------------------------------------------------- */
-
-.button,
-input[type="submit"],
-input[type="button"],
-.submit-row input,
-a.button,
-.object-tools a {
-    border-radius: 9999px;
-    padding: 10px 18px;
-    font-weight: 600;
-    transition: background 0.15s, box-shadow 0.15s, border-color 0.15s;
-}
-
-/* Pressed — Lime buttons. */
-.default:active,
-.object-tools a:active {
-    background-color: var(--cng-primary-active);
-}
-
-/* Secondary / non-primary actions. Django marks the primary submit with
-   .default; everything else in the submit row is secondary, as are the
-   changelist's Search and bulk-action Run. */
-.submit-row input:not(.default),
-.submit-row a.closelink,
-.submit-row a.cancel-link,
-.cancel-link,
-a.button:not(.default),
-#toolbar form input[type="submit"],
-.actions .button {
-    background: var(--cng-secondary);
-    color: var(--cng-on-secondary);
-    border: none;
-}
-
-.submit-row input:not(.default):hover,
-.submit-row input:not(.default):focus,
-.submit-row a.closelink:hover,
-.submit-row a.closelink:focus,
-.submit-row a.cancel-link:hover,
-.cancel-link:hover,
-.cancel-link:focus,
-a.button:not(.default):hover,
-#toolbar form input[type="submit"]:hover,
-#toolbar form input[type="submit"]:focus,
-.actions .button:hover,
-.actions .button:focus {
-    background: var(--cng-secondary-hover);
-    color: var(--cng-on-secondary);
-}
-
-#toolbar form input[type="submit"] {
-    box-shadow: none;                         /* Django's inset gradient */
-}
-
-.submit-row input:not(.default):active,
-.submit-row a.closelink:active,
-.cancel-link:active,
-#toolbar form input[type="submit"]:active,
-.actions .button:active {
-    background: var(--cng-secondary-hover);
-}
+.status-danger  { background: #FDECEC; color: var(--cng-danger); }
+.status-success { background: #EEF8DF; color: var(--cng-olive); }
+.status-warning { background: #FEF3E2; color: var(--cng-warning); }
+.status-muted   { background: #EFEFEE; color: var(--cng-muted); }
 
-/* Delete actions — danger, still a pill */
-.submit-row a.deletelink,
-.deletelink,
-a.deletelink:link,
-a.deletelink:visited,
-.delete-confirmation form input[type="submit"] {
-    background: var(--cng-danger);
-    color: #ffffff;
-    border-radius: 9999px;
-    border: none;
-    padding: 10px 18px;
-}
-
-.submit-row a.deletelink:hover,
-.deletelink:hover,
-a.deletelink:focus,
-.delete-confirmation form input[type="submit"]:hover {
-    background: var(--cng-danger-hover);
-    color: #ffffff;
-}
-
-/* Bulk-action bar */
-.actions {
-    background: var(--cng-surface);
-    border: 1px solid var(--cng-outline);
-    border-radius: 0.625rem;
-    color: var(--body-fg);
-}
-
-.actions .button {
-    padding: 8px 16px;
-}
-
-/* Object tools ("History", "View on site", "Add …") — Lime, ink text. */
-.object-tools a,
-.object-tools a:link,
-.object-tools a:visited {
-    text-transform: none;
-    letter-spacing: 0;
-    font-size: 0.75rem;
-    background: var(--cng-primary);
-    color: var(--cng-on-primary);
-}
-
-.object-tools a:hover,
-.object-tools a:focus {
-    background: var(--cng-primary-hover);
-    color: var(--cng-on-primary);
-}
-
-/* --------------------------------------------------------------------------
-   11. Forms — field border, 2px olive focus ring, 0.625rem radius,
-       48px min touch target (matches the frontend's inputs)
-   -------------------------------------------------------------------------- */
-
-input[type="text"],
-input[type="password"],
-input[type="email"],
-input[type="url"],
-input[type="tel"],
-input[type="number"],
-input[type="search"],
-textarea,
-select,
-.vTextField,
-.vURLField,
-.vLargeTextField,
-.vForeignKeyRawIdAdminField {
-    border: 1px solid var(--border-color);
-    border-radius: 0.625rem;
-    min-height: 48px;
-    padding: 10px 12px;
-    box-sizing: border-box;
-    background-color: var(--cng-surface);
-    color: var(--body-fg);
-    font-family: var(--font-family-primary);
-    font-size: 0.875rem;
-}
-
-textarea,
-.vLargeTextField {
-    min-height: 6em;
-    line-height: 1.5;
-}
-
-/* Small paired date / time fields shouldn't balloon */
-.datetime input,
-input.vDateField,
-input.vTimeField {
-    min-height: 44px;
-}
-
-input:focus,
-input:focus-visible,
-textarea:focus,
-select:focus,
-.vTextField:focus {
-    border-color: var(--cng-focus);
-    outline: none;
-    box-shadow: 0 0 0 1px var(--cng-focus);   /* with the border: 2px */
-}
-
-.aligned label {
-    color: var(--body-loud-color);
-    font-weight: 600;
-}
-
-/* Inline field errors */
-.errorlist {
-    color: var(--error-fg);
-}
-
-ul.errorlist li {
-    background: var(--cng-error-bg);
-    border-radius: 6px;
-}
-
-td.errors input,
-td.errors select,
-.errors input,
-.errors textarea {
-    border-color: var(--cng-error-border);
-}
-
-/* Read-only field values (locked records, audit ledgers) */
-.readonly {
-    color: var(--body-medium-color);
-}
-
-/* Selector (m2m) & related-widget boxes */
-.selector-available,
-.selector-chosen,
-.related-widget-wrapper {
-    border-radius: 0.625rem;
-}
-
-/* Both titles on the surface with ink text (Django paints the "chosen"
-   one var(--secondary) with white regular text). */
-.selector-available h2,
-.selector-chosen h2,
-.selector-available-title,
-.selector-chosen-title {
-    background: var(--cng-bg);
-    color: var(--cng-ink);
-    border-bottom: 1px solid var(--hairline-color);
-}
-
-.selector-chosen-title label,
-.selector-available-title label {
-    color: var(--cng-ink);
-}
-
-/* The chosen box's "Remove all" footer: light footer, ink text, olive
-   clear action. */
-.selector-chosen .list-footer-display {
-    background: var(--cng-bg);
-    color: var(--cng-ink);
-    border-color: var(--hairline-color);
-}
-
-.selector-chosen .list-footer-display__clear {
-    color: var(--cng-link);
-}
-
-/* Calendar / clock popups — ink on Lime. */
-.calendar caption,
-.calendarbox h2,
-.clockbox h2 {
-    background: var(--cng-primary);
-    color: var(--cng-on-primary);
-    font-weight: 600;
-}
-
-.calendar td.selected a {
-    background: var(--cng-primary);
-    color: var(--cng-on-primary);
-    font-weight: 600;
-}
-
-.calendar td a:hover,
-.calendar td a:focus,
-.timelist a:hover,
-.timelist a:focus {
-    background: var(--cng-primary-hover);
-    color: var(--cng-on-primary);
-}
-
-/* --------------------------------------------------------------------------
-   12. Messages — success / warning / danger, and the one-time PIN banner
-
-   Success: a light green tint, ink text, a Vivid Green accent bar.
-   FarmOwnerAccountAdmin.response_add emits the owner's one-time PIN with
-   messages.WARNING. It is the single most important thing the admin ever
-   shows, so the warning style is made prominent (full border, weight,
-   room to breathe) while staying warning-amber rather than error-red.
-   -------------------------------------------------------------------------- */
-
-ul.messagelist li {
-    font-size: 0.875rem;                      /* 14px — up from Django's 13px */
-    border-radius: 0.625rem;
-    padding-top: 12px;
-    padding-bottom: 12px;
-    color: var(--cng-ink);
-    border: 1px solid transparent;
-}
-
-ul.messagelist li.success {
-    background-color: var(--cng-success-bg);
-    border-color: var(--cng-accent);
-    border-width: 1px 1px 1px 4px;
-    color: var(--cng-ink);
-}
-
-ul.messagelist li.warning {
-    background-color: var(--cng-warning-bg);
-    border-color: var(--cng-warning-border);
-    border-width: 1px 1px 1px 4px;
-    color: var(--cng-warning-fg);
-    font-weight: 600;
-}
-
-ul.messagelist li.error {
-    background-color: var(--cng-error-bg);
-    border-color: var(--cng-error-border);
-    color: var(--cng-error-fg);
-}
-
-ul.messagelist li.info,
-ul.messagelist li.debug {
-    background-color: var(--cng-info-bg);
-    border-color: var(--hairline-color);
-    color: var(--cng-ink);
-}
+.status-danger::before  { content: "\2715"; }   /* ✕ */
+.status-success::before { content: "\2713"; color: var(--cng-accent); }  /* ✓ */
+.status-warning::before { content: "\25B2"; font-size: 0.65em; }  /* ▲ */
 
-/* Form-level error callout (e.g. the login "please correct" note) */
-.errornote {
-    background: var(--cng-error-bg);
-    border: 1px solid var(--cng-error-border);
-    border-radius: 0.625rem;
-    color: var(--cng-error-fg);
-    font-size: 0.875rem;
-}
-
-/* --------------------------------------------------------------------------
-   13. Pagination & misc changelist chrome
-   -------------------------------------------------------------------------- */
-
-.paginator {
-    border-top: 1px solid var(--hairline-color);
-    color: var(--body-quiet-color);
-}
-
-.paginator a:link,
-.paginator a:visited {
-    background: var(--cng-tint);
-    color: var(--cng-link);
-    border-radius: 9999px;
-    padding: 4px 12px;
-}
-
-.paginator a:focus,
-.paginator a:hover {
-    background: var(--cng-primary);
-    color: var(--cng-on-primary);
-    font-weight: 600;
-}
-
-.paginator .this-page {
-    background: var(--cng-primary);
-    color: var(--cng-on-primary);
-    font-weight: 600;
-    border-radius: 9999px;
-    padding: 4px 12px;
-}
-
-/* Search bar */
-#toolbar {
-    background: var(--cng-surface);
-    border: 1px solid var(--cng-outline);
-    border-radius: 0.625rem;
-}
-
-#toolbar #searchbar {
-    border: 1px solid var(--border-color);
-    border-radius: 9999px;
-    min-height: 44px;
-}
-
-#toolbar #searchbar:focus {
-    border-color: var(--cng-focus);
-    box-shadow: 0 0 0 1px var(--cng-focus);
-}
-
-#changelist-search input[type="submit"] {
-    padding: 8px 18px;
-}
-
-/* Selected-count / clear-selection row */
-.action-counter,
-.actions .all,
-.actions .question {
-    color: var(--body-quiet-color);
-}
+.dark .status-danger  { background: rgba(185, 28, 28, 0.2); color: #FCA5A5; }
+.dark .status-success { background: rgba(118, 206, 0, 0.15); color: var(--cng-lime); }
+.dark .status-warning { background: rgba(180, 83, 9, 0.2); color: #FCD34D; }
+.dark .status-muted   { background: rgba(255, 255, 255, 0.08); color: #CFCBC8; }
 
-/* --------------------------------------------------------------------------
-   14. Login page — centred white card on the page grey, the olive mark,
-       a Lime "Log in" pill (matches the frontend's Login.tsx)
-   -------------------------------------------------------------------------- */
+/* 4. Dashboard ---------------------------------------------------------------- */
 
-body.login {
-    background: var(--cng-bg);
+.checkngo-dash {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    min-height: 100dvh;
-}
-
-body.login #container {
-    background: var(--cng-surface);
-    border: 1px solid var(--cng-outline);
-    border-radius: 1.25rem;                   /* app's rounded-2xl */
-    box-shadow: var(--cng-shadow-raised);
-    width: 25rem;
-    max-width: calc(100vw - 2rem);
-    margin: 0;
-    padding: 2rem;
-    overflow: hidden;
-}
-
-/* Header sits inside the card: logo mark + title, centred, no bar. */
-body.login #header {
-    background: transparent;
-    box-shadow: none;
-    border-bottom: none;
-    padding: 0 0 1.25rem;
-    min-height: 0;
-    justify-content: center;
-}
-
-body.login #branding {
-    text-align: center;
-}
-
-body.login #branding #site-name {
-    margin: 0;
-}
-
-body.login #branding #site-name a {
     flex-direction: column;
-    gap: 0.625rem;
-    color: var(--cng-ink);
-    font-size: 1.125rem;
-    letter-spacing: -0.01em;
+    gap: 1.5rem;
 }
 
-body.login #content {
-    padding: 0;
-}
-
-body.login .form-row {
-    padding: 6px 0;
-}
-
-body.login .form-row label {
-    font-weight: 600;
-    color: var(--cng-ink);
-}
-
-body.login .form-row #id_username,
-body.login .form-row #id_password {
-    width: 100%;
-    min-height: 48px;
-    border: 1px solid var(--border-color);    /* field border, 3.65:1 on white */
-    border-radius: 0.625rem;
-    padding: 10px 12px;
-    box-sizing: border-box;
-}
-
-body.login .form-row #id_username:focus,
-body.login .form-row #id_password:focus {
-    border-color: var(--cng-focus);
-    box-shadow: 0 0 0 1px var(--cng-focus);
-    outline: none;
-}
-
-body.login .submit-row {
-    padding: 1.25rem 0 0;
-}
-
-body.login .submit-row input {
-    width: 100%;
-    min-height: 48px;
-    border-radius: 9999px;
-    background: var(--cng-primary);
-    color: var(--cng-on-primary);             /* ink semibold on Lime */
-    font-weight: 600;
-    font-size: 0.9375rem;
-}
-
-body.login .submit-row input:hover,
-body.login .submit-row input:focus {
-    background: var(--cng-primary-hover);
-}
-
-body.login .submit-row input:active {
-    background: var(--cng-primary-active);
-}
-
-body.login .password-reset-link {
-    margin-top: 1rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--hairline-color);
-}
-
-body.login .password-reset-link a {
-    color: var(--cng-link);
-}
-
-body.login .errornote {
-    margin-bottom: 1rem;
-}
-
-/* The theme toggle on the login card (base_site.html includes it for
-   signed-out visitors): top-right of the card. */
-body.login #branding .theme-toggle {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-}
-
-body.login #container {
-    position: relative;
-}
-
-/* --------------------------------------------------------------------------
-   15. Focus visibility — one consistent 2px ring everywhere (olive; lime
-       on dark)
-   -------------------------------------------------------------------------- */
-
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-.button:focus-visible,
-[tabindex]:focus-visible {
-    outline: 2px solid var(--cng-focus);      /* olive 6.63:1 on white */
-    outline-offset: 2px;
-}
-
-/* Skip-to-content link */
-.skip-to-content-link:focus {
-    background: var(--cng-primary);
-    color: var(--cng-on-primary);
-    font-weight: 600;
-    border-radius: 0 0 0.5rem 0;
-}
-
-/* --------------------------------------------------------------------------
-   16. Status badges — ModelAdmin list_display spans (credential rotation,
-       record lock state, stock levels, mortality rate)
-   -------------------------------------------------------------------------- */
-
-/*
-   Colour alone is not enough here. Each status gets its own glyph and
-   weight so the four are still four things with the colour turned off.
-   Success follows the app: ink text with a green mark beside it, never
-   green text.
-*/
-
-.status-danger {
-    color: var(--error-fg);                   /* danger-700 — 6.5:1 on white */
-    font-weight: 700;
-}
-
-.status-danger::before {
-    content: "\2715\a0";                      /* ✕ */
-}
-
-.status-success {
-    color: var(--cng-ink);
-    font-weight: 600;
-}
-
-.status-success::before {
-    content: "\2713\a0";                      /* ✓ */
-    color: var(--cng-accent);                 /* decorative, beside the word */
-    font-weight: 700;
-}
-
-.status-warning {
-    color: var(--warning-fg);                 /* warning-700 — 5.02:1 */
-    font-weight: 700;
-    font-style: italic;
-}
-
-.status-warning::before {
-    content: "\25B2\a0";                      /* ▲ */
-    font-style: normal;
-}
-
-.status-muted {
-    color: var(--muted-fg);
-    font-weight: 400;
-}
-
-.status-muted::before {
-    content: "\2014\a0";                      /* — */
-}
-
-/* --------------------------------------------------------------------------
-   17. Numeric columns — mono face, right-aligned, tabular figures. Django
-       stamps every changelist cell with field-<name>, so this needs no
-       admin.py change: it targets the columns that are already numbers.
-   -------------------------------------------------------------------------- */
-
-#changelist table .field-initial_bird_count,
-#changelist table .field-birds_alive,
-#changelist table .field-birds_sold,
-#changelist table .field-birds_remaining,
-#changelist table .field-mortality_pct,
-#changelist table .field-fcr_display,
-#changelist table .field-capacity,
-#changelist table .field-mortality_total,
-#changelist table .field-feed_kg,
-#changelist table .field-average_grams,
-#changelist table .field-birds_weighed,
-#changelist table .field-birds_harvested,
-#changelist table .field-total_weight_kg,
-#changelist table .field-revenue,
-#changelist table .field-bird_count,
-#changelist table .field-quantity_kg,
-#changelist table .field-unit_cost,
-#changelist table .field-total_cost,
-#changelist table .field-kg_per_unit,
-#changelist table .field-low_stock_threshold,
-#changelist table .field-level,
-#changelist table .field-quantity,
-#changelist table .field-quantity_used {
-    font-family: var(--font-family-mono);
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-}
-
-/* --------------------------------------------------------------------------
-   18. Index — Quick actions card and the collapsed System hub
-       (templates/admin/index.html)
-   -------------------------------------------------------------------------- */
-
-.checkngo-quick-actions__body {
+.checkngo-dash__hero {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 12px 20px;
-    padding: 14px 16px;
+    justify-content: space-between;
+    gap: 1.25rem;
+    padding: 1.75rem;
+    border-radius: 16px;
+    background: var(--cng-olive);
+    color: #fff;
+    box-shadow: var(--cng-shadow);
 }
 
-/* "+ Create farm owner account" — the page's Lime button, ink text. */
-.checkngo-quick-actions__body a.button.default,
-.checkngo-quick-actions__body a.button.default:link,
-.checkngo-quick-actions__body a.button.default:visited {
+.checkngo-dash__eyebrow {
+    margin: 0 0 0.25rem;
+    color: var(--cng-lime);
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.checkngo-dash__title {
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1.2;
+    color: #fff;
+}
+
+.checkngo-dash__lead {
+    margin: 0.35rem 0 0;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.checkngo-dash__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.checkngo-btn {
     display: inline-flex;
     align-items: center;
+    gap: 0.5rem;
     min-height: 44px;
-    box-sizing: border-box;
-    background: var(--cng-primary);
-    color: var(--cng-on-primary);
+    padding: 0 1.15rem;
+    border-radius: 9999px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: background-color 0.15s ease;
 }
 
-.checkngo-quick-actions__body a.button.default:hover,
-.checkngo-quick-actions__body a.button.default:focus {
-    background: var(--cng-primary-hover);
-    color: var(--cng-on-primary);
+.checkngo-btn .material-symbols-outlined { font-size: 20px; }
+
+.checkngo-btn--primary { background: var(--cng-lime); color: var(--cng-ink); }
+.checkngo-btn--primary:hover { background: var(--cng-lime-hover); }
+
+.checkngo-btn--secondary {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+.checkngo-btn--secondary:hover { background: rgba(255, 255, 255, 0.2); }
+
+.checkngo-dash__kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 1rem;
 }
 
-/* "Pending invitations" — an olive text link. */
-.checkngo-quick-actions__link,
-.checkngo-quick-actions__link:link,
-.checkngo-quick-actions__link:visited {
-    color: var(--cng-link);
+.checkngo-kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 1.1rem 1.25rem;
+    border: 1px solid #DCDCDC;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: var(--cng-shadow);
+    color: var(--cng-ink);
+    text-decoration: none;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.checkngo-kpi:hover {
+    border-color: var(--cng-olive);
+    transform: translateY(-1px);
+}
+
+.checkngo-kpi__label {
+    color: var(--cng-muted);
+    font-size: 0.85rem;
     font-weight: 600;
 }
 
-.checkngo-quick-actions__link:hover,
-.checkngo-quick-actions__link:focus {
-    color: var(--cng-link-hover);
+.checkngo-kpi__value {
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
 }
 
-/* System starts closed: a <details> styled as a card whose <summary> is
-   the card header. Its table's own caption is visually hidden, so the
-   title is not read twice. */
-details.checkngo-hub-collapsed {
-    margin-bottom: 30px;
-    border: 1px solid var(--cng-outline);
-    border-radius: 0.625rem;
-    background: var(--cng-surface);
+.checkngo-dash__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1rem;
+}
+
+.checkngo-panel {
+    border: 1px solid #DCDCDC;
+    border-radius: 12px;
+    background: #fff;
     box-shadow: var(--cng-shadow);
     overflow: hidden;
 }
 
-details.checkngo-hub-collapsed > summary {
-    padding: 8px;
-    background: var(--cng-surface);
-    color: var(--cng-ink);
-    font-size: 0.875rem;
-    font-weight: 700;
-    letter-spacing: 0.01em;
-    cursor: pointer;
+.checkngo-panel__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.9rem 1.25rem;
+    border-bottom: 1px solid #DCDCDC;
 }
 
-details.checkngo-hub-collapsed[open] > summary {
-    border-bottom: 1px solid var(--hairline-color);
-}
-
-details.checkngo-hub-collapsed > .module {
+.checkngo-panel__head h2 {
     margin: 0;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--cng-ink);
+}
+
+.checkngo-panel__head a {
+    color: var(--cng-olive);
+    font-weight: 700;
+    font-size: 0.875rem;
+}
+
+.checkngo-panel__empty {
+    margin: 0;
+    padding: 1.25rem;
+    color: var(--cng-muted);
+}
+
+.checkngo-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.checkngo-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid #EEEEEE;
+}
+
+.checkngo-list li:last-child { border-bottom: 0; }
+
+.checkngo-list li > div {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.checkngo-list__name {
+    font-weight: 700;
+    color: var(--cng-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.checkngo-list__name a { color: inherit; }
+.checkngo-list__name a:hover { color: var(--cng-olive); text-decoration: underline; }
+
+.checkngo-list__meta {
+    color: var(--cng-muted);
+    font-size: 0.8rem;
+}
+
+/* Dark mode: Unfold switches the chrome; keep the dashboard readable. */
+.dark .checkngo-kpi,
+.dark .checkngo-panel {
+    background: #1F1C1A;
+    border-color: #3A3633;
+}
+.dark .checkngo-kpi,
+.dark .checkngo-panel__head h2,
+.dark .checkngo-list__name { color: #F4F4F4; }
+.dark .checkngo-panel__head,
+.dark .checkngo-list li { border-color: #3A3633; }
+.dark .checkngo-kpi__label,
+.dark .checkngo-list__meta,
+.dark .checkngo-panel__empty { color: #B5B0AD; }
+.dark .checkngo-panel__head a { color: var(--cng-lime); }
+
+@media (max-width: 640px) {
+    .checkngo-dash__hero { padding: 1.25rem; }
+    .checkngo-dash__title { font-size: 1.3rem; }
+    .checkngo-btn { width: 100%; justify-content: center; }
+}
+
+/* Sign-in pages: brand mark above the title. */
+.checkngo-auth-mark {
+    width: 44px;
+    height: auto;
+    margin-bottom: 1rem;
 }

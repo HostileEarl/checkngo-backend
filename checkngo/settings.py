@@ -37,6 +37,9 @@ ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="127.0.0.1,localhost").split(","
 # Application definition
 
 INSTALLED_APPS = [
+    # Admin theme. Must come before django.contrib.admin so its templates win.
+    "unfold",
+    "unfold.contrib.filters",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",     # <-- keep this one only
@@ -97,9 +100,8 @@ ROOT_URLCONF = 'checkngo.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        # Project-level template overrides. Listed before APP_DIRS so
-        # templates/admin/base_site.html shadows the one shipped by
-        # django.contrib.admin — the single hook the admin restyle needs.
+        # Project-level template overrides (the admin dashboard and
+        # branding). Listed before APP_DIRS so they shadow Unfold's.
         'DIRS': [BASE_DIR / "templates"],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -374,5 +376,55 @@ SPECTACULAR_SETTINGS = {
     "SWAGGER_UI_SETTINGS": {
         "persistAuthorization": True,
         "displayRequestDuration": True,
+    },
+}
+
+# --- Admin theme (django-unfold) ---------------------------------------------
+# Palette, sidebar hubs and dashboard live in checkngo/admin_theme.py.
+from checkngo.admin_theme import (  # noqa: E402
+    BASE as _ADMIN_BASE,
+    PRIMARY as _ADMIN_PRIMARY,
+    SIDEBAR_NAVIGATION as _ADMIN_SIDEBAR,
+    brand_static as _brand_static,
+)
+
+# Unfold's login form has no hidden "next" field, so signing in straight from
+# /<admin>/login/ would fall back to Django's /accounts/profile/. Send it to
+# the admin dashboard instead. The app itself signs in with JWT, not this.
+LOGIN_REDIRECT_URL = "admin:index"
+
+UNFOLD = {
+    "SITE_TITLE": "CheckN Go Admin",
+    "SITE_HEADER": "CheckN Go",
+    "SITE_SUBHEADER": "Platform administration",
+    "SITE_URL": None,
+    "SITE_SYMBOL": "egg",
+    "SITE_ICON": {
+        "light": _brand_static("admin/img/checkngo-mark.svg"),
+        "dark": _brand_static("admin/img/checkngo-mark-white.svg"),
+    },
+    "SITE_FAVICONS": [
+        {
+            "rel": "icon",
+            "type": "image/svg+xml",
+            "href": _brand_static("admin/img/checkngo-mark.svg"),
+        },
+    ],
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": False,
+    "SHOW_BACK_BUTTON": True,
+    "BORDER_RADIUS": "10px",
+    "COLORS": {
+        "base": _ADMIN_BASE,
+        "primary": _ADMIN_PRIMARY,
+    },
+    "STYLES": [
+        _brand_static("admin/css/checkngo-admin.css"),
+    ],
+    "DASHBOARD_CALLBACK": "checkngo.admin_theme.dashboard_callback",
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": False,
+        "navigation": _ADMIN_SIDEBAR,
     },
 }

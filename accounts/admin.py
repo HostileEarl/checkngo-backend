@@ -1,9 +1,13 @@
 # accounts/admin.py
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import Group
 from django.db.models import Count, Prefetch, Q
 from django.utils.html import format_html
+from unfold.admin import ModelAdmin, TabularInline
+from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
 from farms.models import FarmMembership
 
@@ -11,7 +15,7 @@ from .models import FarmOwnerAccount, Invitation, User
 from .services import issue_owner_account
 
 
-class UserFarmMembershipInline(admin.TabularInline):
+class UserFarmMembershipInline(TabularInline):
     """
     Read-only view of the user's active farm scope.
 
@@ -56,11 +60,16 @@ class NoMembershipFilter(admin.SimpleListFilter):
 
 
 @admin.register(User)
-class UserAdmin(BaseUserAdmin):
+class UserAdmin(BaseUserAdmin, ModelAdmin):
     """
     The stock UserAdmin references 'username' and crashes on this model.
     This one is keyed on phone_number throughout.
     """
+
+    # Unfold's styled versions of Django's auth forms.
+    form = UserChangeForm
+    add_form = UserCreationForm
+    change_password_form = AdminPasswordChangeForm
 
     ordering = ["full_name"]
     list_display = [
@@ -174,7 +183,7 @@ class FarmOwnerCreationForm(forms.ModelForm):
 
 
 @admin.register(FarmOwnerAccount)
-class FarmOwnerAccountAdmin(admin.ModelAdmin):
+class FarmOwnerAccountAdmin(ModelAdmin):
     """
     "Create Farm Owner" — issues the login PIN automatically.
 
@@ -275,7 +284,7 @@ class FarmOwnerAccountAdmin(admin.ModelAdmin):
 
 
 @admin.register(Invitation)
-class InvitationAdmin(admin.ModelAdmin):
+class InvitationAdmin(ModelAdmin):
     """Read-only. An invitation is a credential handoff record, not a form."""
 
     list_display = [
@@ -324,3 +333,37 @@ class InvitationAdmin(admin.ModelAdmin):
             invitation.revoke()
             count += 1
         self.message_user(request, f"{count} invitation(s) revoked.")
+
+
+# --- third-party admins, re-registered with the Unfold theme -------------------
+# Django's Group and the axes / simplejwt models register plain ModelAdmins.
+# Re-register them on Unfold's base so every page in the admin looks the same.
+# Same list columns, filters and permissions — only the base class changes.
+# This file loads after auth, axes and token_blacklist (INSTALLED_APPS order).
+
+from axes.admin import AccessAttemptAdmin, AccessFailureLogAdmin, AccessLogAdmin  # noqa: E402
+from axes.models import AccessAttempt, AccessFailureLog, AccessLog  # noqa: E402
+from rest_framework_simplejwt.token_blacklist.admin import (  # noqa: E402
+    BlacklistedTokenAdmin,
+    OutstandingTokenAdmin,
+)
+from rest_framework_simplejwt.token_blacklist.models import (  # noqa: E402
+    BlacklistedToken,
+    OutstandingToken,
+)
+
+
+def _retheme(model, base_admin):
+    if not admin.site.is_registered(model):
+        return
+    admin.site.unregister(model)
+    themed = type(f"Themed{base_admin.__name__}", (base_admin, ModelAdmin), {})
+    admin.site.register(model, themed)
+
+
+_retheme(Group, BaseGroupAdmin)
+_retheme(AccessAttempt, AccessAttemptAdmin)
+_retheme(AccessLog, AccessLogAdmin)
+_retheme(AccessFailureLog, AccessFailureLogAdmin)
+_retheme(OutstandingToken, OutstandingTokenAdmin)
+_retheme(BlacklistedToken, BlacklistedTokenAdmin)

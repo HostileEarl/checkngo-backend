@@ -1,100 +1,111 @@
-{% extends "admin/index.html" %}
+{% extends "admin/base.html" %}
 {% load i18n %}
 
 {#
-  CheckN Go admin index — hubs from checkngo/admin_hubs.py.
+  CheckN Go admin dashboard (django-unfold).
 
-  Extends Django's own admin/index.html (recursive extends skips this
-  file and finds the contrib one), replacing only `content`. Recent
-  actions (`sidebar`) is Django's, untouched.
+  Shadows unfold's admin/index.html. Numbers and links come from
+  checkngo.admin_theme.dashboard_callback (UNFOLD["DASHBOARD_CALLBACK"]);
+  the sidebar carries the hubs, so the dashboard only shows what an
+  operator checks first: the platform's numbers, the one task they do
+  most (creating a farm owner account) and Django's recent actions.
 
-  Each hub's table is Django's admin/app_list.html markup, repeated here
-  so every hub can carry an id (the sidebar captions link to #hub-<id>)
-  and System can sit in a <details>, collapsed by default.
-
-  can_add_owner_account / can_view_invitations come from admin_hubs'
-  index wrapper: they follow the ModelAdmins' own permission checks.
-
-  Django's admin/app_index.html (/admin/<app_label>/) extends
-  admin/index.html too, so it lands here; with `app_label` set it gets
-  Django's own content via block.super, unchanged.
+  Layout uses checkngo-* classes from static/admin/css/checkngo-admin.css,
+  not Tailwind utilities: Unfold ships a prebuilt stylesheet, so only the
+  classes it already uses exist.
 #}
 
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+  {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
 {% block content %}
-{% if app_label %}
-{{ block.super }}
-{% else %}
-<div id="content-main" class="app-list">
-  {% if can_add_owner_account or can_view_invitations %}
-    <div class="module checkngo-quick-actions">
-      <h2>{% translate "Quick actions" %}</h2>
-      <div class="checkngo-quick-actions__body">
-        {% if can_add_owner_account %}
-          <a class="button default" href="{% url 'admin:accounts_farmowneraccount_add' %}">+ {% translate "Create farm owner account" %}</a>
-        {% endif %}
-        {% if can_view_invitations %}
-          <a class="checkngo-quick-actions__link" href="{% url 'admin:accounts_invitation_changelist' %}?status__exact=PENDING">{% translate "Pending invitations" %}</a>
-        {% endif %}
-      </div>
+<div class="checkngo-dash">
+
+  <section class="checkngo-dash__hero">
+    <div>
+      <p class="checkngo-dash__eyebrow">{% translate "CheckN Go" %}</p>
+      <h1 class="checkngo-dash__title">{% blocktranslate with name=request.user.full_name|default:request.user.get_username %}Welcome back, {{ name }}{% endblocktranslate %}</h1>
+      <p class="checkngo-dash__lead">{% translate "Create farm owner accounts and keep an eye on the platform." %}</p>
     </div>
-  {% endif %}
-
-  {% if app_list %}
-    {% for app in app_list %}
-      {% if app.is_system %}
-        <details class="checkngo-hub-collapsed" id="{{ app.app_label }}">
-          <summary>{{ app.name }}</summary>
+    <div class="checkngo-dash__actions">
+      {% if can_add_owner_account %}
+        <a class="checkngo-btn checkngo-btn--primary" href="{% url 'admin:accounts_farmowneraccount_add' %}">
+          <span class="material-symbols-outlined" aria-hidden="true">person_add</span>
+          {% translate "Create farm owner account" %}
+        </a>
       {% endif %}
-      <div class="app-{{ app.app_label }} module"{% if not app.is_system %} id="{{ app.app_label }}"{% endif %}>
-        <table>
-          <caption{% if app.is_system %} class="visually-hidden"{% endif %}>
-            <a href="{{ app.app_url }}" class="section">{{ app.name }}</a>
-          </caption>
-          <thead class="visually-hidden">
-            <tr>
-              <th scope="col">{% translate 'Model name' %}</th>
-              <th scope="col">{% translate 'Add link' %}</th>
-              <th scope="col">{% translate 'Change or view list link' %}</th>
-            </tr>
-          </thead>
-          {% for model in app.models %}
-            {% with model_name=model.object_name|lower %}
-              <tr class="model-{{ model_name }}">
-                <th scope="row" id="{{ app.app_label }}-{{ model_name }}">
-                  {% if model.admin_url %}
-                    <a href="{{ model.admin_url }}">{{ model.name }}</a>
-                  {% else %}
-                    {{ model.name }}
-                  {% endif %}
-                </th>
+      <a class="checkngo-btn checkngo-btn--secondary" href="{% url 'admin:accounts_invitation_changelist' %}?status__exact=PENDING">
+        <span class="material-symbols-outlined" aria-hidden="true">mail</span>
+        {% translate "Pending invitations" %}
+      </a>
+    </div>
+  </section>
 
-                {% if model.add_url %}
-                  <td><a href="{{ model.add_url }}" class="addlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'Add' %}</a></td>
-                {% else %}
-                  <td></td>
-                {% endif %}
-
-                {% if model.admin_url %}
-                  {% if model.view_only %}
-                    <td><a href="{{ model.admin_url }}" class="viewlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'View' %}</a></td>
-                  {% else %}
-                    <td><a href="{{ model.admin_url }}" class="changelink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'Change' %}</a></td>
-                  {% endif %}
-                {% else %}
-                  <td></td>
-                {% endif %}
-              </tr>
-            {% endwith %}
-          {% endfor %}
-        </table>
-      </div>
-      {% if app.is_system %}
-        </details>
-      {% endif %}
+  <section class="checkngo-dash__kpis" aria-label="{% translate 'Platform at a glance' %}">
+    {% for kpi in kpis %}
+      <a class="checkngo-kpi" href="{{ kpi.link }}">
+        <span class="checkngo-kpi__label">{{ kpi.label }}</span>
+        <span class="checkngo-kpi__value">{{ kpi.value }}</span>
+      </a>
     {% endfor %}
-  {% else %}
-    <p>{% translate 'You don’t have permission to view or edit anything.' %}</p>
-  {% endif %}
+  </section>
+
+  <div class="checkngo-dash__grid">
+    <section class="checkngo-panel">
+      <header class="checkngo-panel__head">
+        <h2>{% translate "Newest farm owners" %}</h2>
+        <a href="{% url 'admin:accounts_farmowneraccount_changelist' %}">{% translate "View all" %}</a>
+      </header>
+      {% if recent_owners %}
+        <ul class="checkngo-list">
+          {% for owner in recent_owners %}
+            <li>
+              <div>
+                <span class="checkngo-list__name">{{ owner.full_name }}</span>
+                <span class="checkngo-list__meta">{{ owner.phone_number }}</span>
+              </div>
+              {% if owner.must_change_credential %}
+                <span class="status-danger">{% translate "PIN not changed yet" %}</span>
+              {% else %}
+                <span class="status-success">{% translate "PIN changed" %}</span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="checkngo-panel__empty">{% translate "No farm owners yet. Create the first one above." %}</p>
+      {% endif %}
+    </section>
+
+    <section class="checkngo-panel">
+      <header class="checkngo-panel__head">
+        <h2>{% translate "Recent actions" %}</h2>
+      </header>
+      {% load log %}
+      {% get_admin_log 6 as admin_log for_user user %}
+      {% if admin_log %}
+        <ul class="checkngo-list">
+          {% for entry in admin_log %}
+            <li>
+              <div>
+                <span class="checkngo-list__name">
+                  {% if entry.is_deletion or not entry.get_admin_url %}{{ entry.object_repr }}{% else %}<a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>{% endif %}
+                </span>
+                <span class="checkngo-list__meta">{% if entry.content_type %}{% filter capfirst %}{{ entry.content_type.name }}{% endfilter %}{% endif %} · {{ entry.action_time|timesince }} {% translate "ago" %}</span>
+              </div>
+              <span class="{% if entry.is_addition %}status-success{% elif entry.is_deletion %}status-danger{% else %}status-muted{% endif %}">
+                {% if entry.is_addition %}{% translate "Added" %}{% elif entry.is_deletion %}{% translate "Deleted" %}{% else %}{% translate "Changed" %}{% endif %}
+              </span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="checkngo-panel__empty">{% translate "Nothing yet." %}</p>
+      {% endif %}
+    </section>
+  </div>
 </div>
-{% endif %}
 {% endblock %}
