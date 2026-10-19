@@ -683,6 +683,26 @@ class SaleEvent(OfflineSyncModel):
                 raise ValidationError({"sale_date": "Cannot record a future date."})
 
 
+def per_sale_mode_batch_ids(sale_events=None):
+    """
+    Batch ids on per-sale buyer tracking: at least one SaleEvent (within
+    the optional `sale_events` scope, else all SaleEvents) carries its own
+    buyer_link. Once true for a batch, Harvest.buyer_link must never be
+    used as a fallback for buyer display or validation on that batch —
+    see SaleEvent.buyer_link and Harvest.buyer_link above. A batch whose
+    sale events are all unlinked (or that has none) is NOT in per-sale
+    mode, even if it has sale events at all — on production, every
+    existing batch already has sale events with no buyer_link, and those
+    buyers must keep seeing their Harvest row exactly as before.
+
+    This is the single source of truth for that rule — used by both the
+    buyer-facing Purchases endpoint and the sales-history report's buyer
+    column, so the two can never disagree.
+    """
+    qs = sale_events if sale_events is not None else SaleEvent.objects.all()
+    return qs.filter(buyer_link__isnull=False).values_list("batch_id", flat=True)
+
+
 class Payment(models.Model):
     """
     One payment received against a sale. Append-only — a row is never

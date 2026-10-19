@@ -270,9 +270,12 @@ class TestPaymentBuyerLinkAgainstSaleAndHarvest:
     """
     Payment.buyer_link is attributed independently of SaleEvent.buyer_link
     and Harvest.buyer_link (see production/models.py) — nothing ties them
-    together at the model layer. The two can disagree today; this is the
-    guard that stops a payment contradicting a buyer already on record for
-    the sale it is against, without ever inventing one that wasn't given.
+    together at the model layer. This is the guard that stops a payment
+    contradicting a buyer already on record for the sale it is against —
+    checked ONLY against the sale's own buyer_link, never against its
+    batch's Harvest.buyer_link (an older batch can carry several buyers
+    across its sales) — without ever inventing an attribution that wasn't
+    given.
     """
 
     def test_payment_naming_the_same_buyer_as_the_sale_is_accepted(
@@ -343,8 +346,9 @@ class TestPaymentBuyerLinkAgainstSaleAndHarvest:
     def test_payment_naming_the_harvests_buyer_when_the_sale_has_none_is_accepted(
         self, auth, owner, staffed_farm, batch, house, link, sale
     ):
-        # `sale` (the module fixture) carries no buyer_link. Close the
-        # batch so its Harvest picks one up, then pay against that sale.
+        # `sale` (the module fixture) carries no buyer_link, so nothing is
+        # checked against Harvest.buyer_link at all — this just confirms
+        # naming the Harvest's buyer anyway is not somehow rejected.
         Harvest.objects.create(
             batch=batch, harvest_date=date(2026, 1, 15),
             birds_harvested=500, total_weight_kg=Decimal("1000.00"),
@@ -357,9 +361,15 @@ class TestPaymentBuyerLinkAgainstSaleAndHarvest:
         )
         assert resp.status_code == 201, resp.data
 
-    def test_payment_contradicting_the_harvests_buyer_is_rejected(
+    def test_payment_for_an_unlinked_sale_naming_a_different_buyer_than_the_harvest_is_accepted(
         self, auth, owner, staffed_farm, batch, house, link, link_b, sale
     ):
+        """
+        `sale` carries no buyer_link of its own, so it is never checked
+        against its batch's Harvest.buyer_link — an older batch can have
+        several different buyers across its sales, and the Harvest's
+        buyer is not necessarily the one who paid for any given sale.
+        """
         Harvest.objects.create(
             batch=batch, harvest_date=date(2026, 1, 15),
             birds_harvested=500, total_weight_kg=Decimal("1000.00"),
@@ -370,8 +380,7 @@ class TestPaymentBuyerLinkAgainstSaleAndHarvest:
             {"amount": "2000.00", "received_date": "2026-01-16", "buyer_link": link_b.pk},
             format="json",
         )
-        assert resp.status_code == 400
-        assert "buyer_link" in resp.data
+        assert resp.status_code == 201, resp.data
 
     def test_payment_with_no_buyer_link_is_accepted_even_when_the_sale_has_one(
         self, auth, owner, staffed_farm, batch, link

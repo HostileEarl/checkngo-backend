@@ -364,8 +364,9 @@ class TestNewRowsBuyerIsolation:
     Isolation specifically for the per-sale buyer_link rows added in this
     change (BuyerSalePurchaseSerializer), and for the "no buyer_link"
     case's only route to a buyer: the legacy Harvest rule — which is
-    itself shut off the moment the batch has any sale events at all (see
-    MyPurchasesView.list's no-double-counting note).
+    shut off only once the batch has a sale event that itself carries a
+    buyer_link (see MyPurchasesView.list's no-double-counting note and
+    production.models.per_sale_mode_batch_ids).
     """
 
     def test_a_buyer_never_sees_another_buyers_linked_sale(
@@ -397,17 +398,17 @@ class TestNewRowsBuyerIsolation:
         )
         assert auth(manager).get(URL).data == []
 
-    def test_a_sale_with_no_buyer_link_reaches_no_one_even_via_the_harvest_rule(
+    def test_a_legacy_batch_with_unlinked_sales_still_reaches_the_harvest_buyer(
         self, auth, buyer, owner, farm, link_buyer
     ):
         """
-        A SaleEvent cannot name a buyer unless buyer_link is set on it
-        directly — there is no fallback from a bare sale row to anyone.
-        The ONLY other route to a buyer for that batch is the legacy
-        Harvest rule, and that rule itself never fires once the batch has
-        any sale events (regardless of whether those carry a buyer_link),
-        per the no-double-counting rule. So a batch with an unlinked sale
-        AND a buyer-linked Harvest must still be invisible.
+        On production, every existing batch already has sale events with
+        no buyer_link. A batch is only in per-sale mode once at least one
+        of its sale events actually carries a buyer_link (see
+        production.models.per_sale_mode_batch_ids) — so an unlinked sale
+        alone must NOT shut off the legacy Harvest fallback. The buyer on
+        Harvest.buyer_link sees the Harvest row exactly as on main today;
+        the Harvest row is never dropped just because sale events exist.
         """
         house = House.objects.create(farm=farm, name="Unlinked sale house", capacity=5000)
         batch = Batch.objects.create(
@@ -420,13 +421,50 @@ class TestNewRowsBuyerIsolation:
             total_weight_kg=Decimal("90.00"), price_per_kg=Decimal("70.00"),
             buyer_link=None, recorded_by=owner,
         )
+        harvest = Harvest.objects.create(
+            batch=batch, harvest_date=date(2026, 3, 1),
+            birds_harvested=900, total_weight_kg=Decimal("1500.00"),
+            revenue=Decimal("200000.00"), buyer_link=link_buyer,
+        )
+
+        rows = auth(buyer).get(URL).data
+
+        assert len(rows) == 1
+        row = rows[0]
+        assert row == {
+            "id": harvest.id,
+            "source": "harvest",
+            "harvest_date": "2026-03-01",
+            "farm": farm.pk,
+            "farm_name": farm.name,
+            "batch_code": "UNLINKED",
+            "birds_harvested": 900,
+            "total_weight_kg": "1500.00",
+            "average_weight_kg": "1.667",
+        }
+
+    def test_sale_linked_to_the_harvest_buyer_shows_the_sale_row_only(
+        self, auth, buyer, owner, farm, link_buyer
+    ):
+        """
+        A batch whose sale IS linked to the same buyer as its Harvest is
+        in per-sale mode: the sale row wins, the Harvest row never
+        surfaces — even though they'd agree on who the buyer is.
+        """
+        batch, _ = _sale_batch(
+            farm, link_buyer, owner=owner, batch_code="SAME-BUYER"
+        )
         Harvest.objects.create(
             batch=batch, harvest_date=date(2026, 3, 1),
             birds_harvested=900, total_weight_kg=Decimal("1500.00"),
             revenue=Decimal("200000.00"), buyer_link=link_buyer,
         )
 
-        assert auth(buyer).get(URL).data == []
+        rows = auth(buyer).get(URL).data
+
+        assert len(rows) == 1
+        assert rows[0]["source"] == "sale"
+        assert rows[0]["batch_code"] == "SAME-BUYER"
 
     def test_a_buyer_without_any_sale_events_still_reaches_the_batch_via_harvest(
         self, auth, buyer, owner, farm, link_buyer

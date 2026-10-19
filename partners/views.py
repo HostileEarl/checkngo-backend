@@ -13,7 +13,7 @@ from accounts.serializers import (
     send_invitation_pin_sms,
 )
 from farms.permissions import HasRotatedCredential, IsFarmManagerOrOwner
-from production.models import Harvest, Payment, SaleEvent
+from production.models import Harvest, Payment, SaleEvent, per_sale_mode_batch_ids
 
 from .models import FarmPartnerLink
 from .serializers import (
@@ -146,13 +146,17 @@ class MyPurchasesView(generics.ListAPIView):
     buyer — see SaleEvent.buyer_link). Each row carries a "source" field
     ("harvest" or "sale") so the two are distinguishable.
 
-    No double counting: a batch that has ANY sale events reports through
-    its SaleEvent rows only — the Harvest row for that batch is dropped
-    entirely, even if its buyer_link is set — the same fallback rule
-    analytics._batch_sale_totals uses (a batch's sale events are the
-    source of truth once they exist; Harvest's own figures are read only
-    for a batch closed before sale events existed). A buyer therefore
-    never sees the same batch counted on both sides.
+    No double counting, without breaking legacy batches: a batch is only
+    in "per-sale" mode — reporting through its SaleEvent rows and
+    dropping the Harvest row entirely — once at least one of its sale
+    events actually carries a buyer_link (see
+    production.models.per_sale_mode_batch_ids, the single source of truth
+    for this rule, shared with the sales-history report's buyer column).
+    A batch whose sale events are all unlinked (every existing production
+    batch, today) is NOT in per-sale mode — its Harvest.buyer_link is
+    shown exactly as before. A buyer therefore never sees the same batch
+    counted on both sides, and never loses a purchase that predates
+    per-sale buyers.
 
     A weight and delivery ledger only: no revenue (see
     BuyerPurchaseSerializer / BuyerSalePurchaseSerializer for why), no farm
@@ -176,12 +180,11 @@ class MyPurchasesView(generics.ListAPIView):
         if farm_id and str(farm_id).isdigit():
             sales = sales.filter(batch__house__farm_id=farm_id)
 
-        # A batch with any sale events at all reports through those sales
-        # only — see the no-double-counting note in the docstring.
-        batches_with_sales = SaleEvent.objects.values_list("batch_id", flat=True)
+        # Only a batch already in per-sale mode (>=1 buyer-linked sale)
+        # drops its Harvest row — see the no-double-counting note above.
         harvests = (
             Harvest.objects.filter(buyer_link__partner=user)
-            .exclude(batch_id__in=batches_with_sales)
+            .exclude(batch_id__in=per_sale_mode_batch_ids())
             .select_related("batch__house__farm", "buyer_link")
         )
         if farm_id and str(farm_id).isdigit():

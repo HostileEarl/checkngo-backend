@@ -3535,13 +3535,17 @@ paths:
         buyer — see SaleEvent.buyer_link). Each row carries a "source" field
         ("harvest" or "sale") so the two are distinguishable.
 
-        No double counting: a batch that has ANY sale events reports through
-        its SaleEvent rows only — the Harvest row for that batch is dropped
-        entirely, even if its buyer_link is set — the same fallback rule
-        analytics._batch_sale_totals uses (a batch's sale events are the
-        source of truth once they exist; Harvest's own figures are read only
-        for a batch closed before sale events existed). A buyer therefore
-        never sees the same batch counted on both sides.
+        No double counting, without breaking legacy batches: a batch is only
+        in "per-sale" mode — reporting through its SaleEvent rows and
+        dropping the Harvest row entirely — once at least one of its sale
+        events actually carries a buyer_link (see
+        production.models.per_sale_mode_batch_ids, the single source of truth
+        for this rule, shared with the sales-history report's buyer column).
+        A batch whose sale events are all unlinked (every existing production
+        batch, today) is NOT in per-sale mode — its Harvest.buyer_link is
+        shown exactly as before. A buyer therefore never sees the same batch
+        counted on both sides, and never loses a purchase that predates
+        per-sale buyers.
 
         A weight and delivery ledger only: no revenue (see
         BuyerPurchaseSerializer / BuyerSalePurchaseSerializer for why), no farm

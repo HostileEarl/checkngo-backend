@@ -31,6 +31,7 @@ from production.models import (
     SaleEvent,
     TaskCompletion,
     TaskTemplate,
+    per_sale_mode_batch_ids,
 )
 
 from .services import _pct, fcr_by_batch, profitability_by_batch
@@ -488,11 +489,11 @@ def sales_history_rows(farm, date_from=None, date_to=None):
 
     # Batches where at least one sale already carries its own buyer_link —
     # those are on the new per-sale tracking, so the Harvest-wide fallback
-    # below must never apply to any sale on them, blank or not.
+    # below must never apply to any sale on them, blank or not. Shared
+    # rule with the buyer-facing Purchases endpoint — see
+    # production.models.per_sale_mode_batch_ids.
     batches_with_sale_buyer = set(
-        SaleEvent.objects.filter(
-            batch__house__farm=farm, buyer_link__isnull=False
-        ).values_list("batch_id", flat=True)
+        per_sale_mode_batch_ids(SaleEvent.objects.filter(batch__house__farm=farm))
     )
 
     # Harvest-wide buyer, for the legacy fallback only (batches above are

@@ -959,19 +959,18 @@ class PaymentSerializer(serializers.ModelSerializer):
                     }
                 )
 
-        # A sale carries no buyer of its own by default; its batch's
-        # closing Harvest may. When either already names a buyer, a
-        # payment naming a different one is a contradiction — same farm,
-        # same partner, not just the same FarmPartnerLink row (a buyer can
-        # be linked more than once across farms). A payment that names no
-        # buyer at all is left alone: we never invent an attribution the
-        # caller didn't supply.
+        # Checked only against the sale's OWN buyer_link — never against
+        # its batch's Harvest.buyer_link. A sale with no buyer_link of its
+        # own may be a legacy/older batch with several different buyers
+        # across its sales, so there is nothing to contradict. When the
+        # sale does name a buyer, a payment naming a different one is a
+        # contradiction — same farm, same partner, not just the same
+        # FarmPartnerLink row (a buyer can be linked more than once across
+        # farms). A payment that names no buyer at all is left alone: we
+        # never invent an attribution the caller didn't supply.
         if buyer_link is not None:
             sale = self.context["sale"]
             expected = sale.buyer_link
-            if expected is None:
-                harvest = getattr(sale.batch, "harvest", None)
-                expected = harvest.buyer_link if harvest else None
             if expected is not None and (
                 buyer_link.farm_id != expected.farm_id
                 or buyer_link.partner_id != expected.partner_id
