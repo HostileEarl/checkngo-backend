@@ -373,6 +373,7 @@ class TestReportContent:
             "house",
             "sale_type",
             "bird_count",
+            "part_name",
             "total_weight_kg",
             "revenue",
             "buyer",
@@ -384,7 +385,10 @@ class TestReportContent:
         harvested = next(r for r in body if r[1] == "B-2026-01")
         assert harvested[header.index("sale_type")] == "Dressed"
         assert harvested[header.index("bird_count")] == "985"
+        assert harvested[header.index("part_name")] == ""
         assert harvested[header.index("revenue")] == "250000.00"
+        # No sale on this batch carries its own buyer_link, so the legacy
+        # fallback to the batch's Harvest.buyer_link applies.
         assert harvested[header.index("buyer")] == "Bautista Dealers"
 
         active = next(r for r in body if r[1] == "B-2026-02")
@@ -408,7 +412,7 @@ class TestReportContent:
         text = _text(auth(owner).get(_url("report-sales-history", populated_farm)))
         assert "not a margin" in text
         assert "feed-margin report's methodology" in text
-        assert "batch's overall buyer" in text
+        assert "own buyer" in text
 
     def test_routine_completion_is_a_completed_or_not_grid(
         self, auth, owner, populated_farm

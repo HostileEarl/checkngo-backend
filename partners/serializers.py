@@ -2,7 +2,7 @@
 from rest_framework import serializers
 
 from accounts.models import Invitation, User, UserManager
-from production.models import Harvest, Payment
+from production.models import Harvest, Payment, SaleEvent
 
 from .models import FarmPartnerLink
 
@@ -143,11 +143,13 @@ class BuyerPurchaseSerializer(serializers.ModelSerializer):
     )
     batch_code = serializers.CharField(source="batch.batch_code", read_only=True)
     average_weight_kg = serializers.SerializerMethodField()
+    source = serializers.SerializerMethodField()
 
     class Meta:
         model = Harvest
         fields = [
             "id",
+            "source",
             "harvest_date",
             "farm",
             "farm_name",
@@ -158,9 +160,57 @@ class BuyerPurchaseSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_average_weight_kg(self, obj):
+    def get_average_weight_kg(self, obj) -> str | None:
         val = obj.average_weight_kg
         return str(val) if val is not None else None
+
+    def get_source(self, obj) -> str:
+        return "harvest"
+
+
+class BuyerSalePurchaseSerializer(serializers.ModelSerializer):
+    """
+    A buyer's read-only view of one SaleEvent recorded against them
+    directly (see SaleEvent.buyer_link) — the per-sale counterpart to
+    BuyerPurchaseSerializer, same withholding policy: no revenue (the
+    farm's figure, not an invoice — see BuyerPurchaseSerializer's
+    docstring), no notes, no recorded_by, nothing about mortality, feed,
+    or FCR.
+    """
+
+    farm = serializers.IntegerField(source="batch.house.farm_id", read_only=True)
+    farm_name = serializers.CharField(
+        source="batch.house.farm.name", read_only=True
+    )
+    batch_code = serializers.CharField(source="batch.batch_code", read_only=True)
+    harvest_date = serializers.DateField(source="sale_date", read_only=True)
+    birds_harvested = serializers.IntegerField(source="bird_count", read_only=True)
+    average_weight_kg = serializers.SerializerMethodField()
+    source = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SaleEvent
+        fields = [
+            "id",
+            "source",
+            "harvest_date",
+            "farm",
+            "farm_name",
+            "batch_code",
+            "birds_harvested",
+            "total_weight_kg",
+            "average_weight_kg",
+            "sale_type",
+            "part_name",
+        ]
+        read_only_fields = fields
+
+    def get_average_weight_kg(self, obj) -> str | None:
+        val = obj.average_weight_kg
+        return str(val) if val is not None else None
+
+    def get_source(self, obj) -> str:
+        return "sale"
 
 
 class BuyerPaymentSerializer(serializers.ModelSerializer):

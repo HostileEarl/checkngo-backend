@@ -131,6 +131,7 @@ REPORT_SPECS = {
             ColumnSpec("House", "text"),
             ColumnSpec("Sale type", "text"),
             ColumnSpec("Birds sold", "count"),
+            ColumnSpec("Part name", "text"),
             ColumnSpec("Total weight (kg)", "kg"),
             ColumnSpec("Sale value (PHP)", "money"),
             ColumnSpec("Buyer", "text"),

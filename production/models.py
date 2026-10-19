@@ -278,7 +278,9 @@ class Batch(models.Model):
         Falls back to the Harvest's own total for a batch closed before
         sale events existed (migrated history) so historical FCR is stable.
         """
-        agg = self.sale_events.aggregate(w=models.Sum("total_weight_kg"))
+        agg = self.sale_events.exclude(
+            sale_type=SaleEvent.SaleType.OTHERS
+        ).aggregate(w=models.Sum("total_weight_kg"))
         if agg["w"]:
             return agg["w"]
         harvest = getattr(self, "harvest", None)
@@ -329,13 +331,20 @@ class Batch(models.Model):
         Full recalculation, not an increment — the 24-hour edit window
         means a sale's count or weight can change after the fact, and an
         incremental update would drift. Mirrors recalculate_totals().
+
+        An OTHERS sale (parts, not whole birds) never contributes to
+        total_birds_sold — that figure drives current_bird_count (birds
+        alive) and the "more than flock" check, and an OTHERS sale was
+        never part of the flock count to begin with. Its weight still
+        counts here: total_weight_sold_kg is a sales total, not the FCR
+        denominator (see total_sale_weight_kg for that exclusion).
         """
-        agg = self.sale_events.aggregate(
-            birds=models.Sum("bird_count"),
-            weight=models.Sum("total_weight_kg"),
-        )
-        self.total_birds_sold = agg["birds"] or 0
-        self.total_weight_sold_kg = agg["weight"] or Decimal("0")
+        birds_agg = self.sale_events.exclude(
+            sale_type=SaleEvent.SaleType.OTHERS
+        ).aggregate(birds=models.Sum("bird_count"))
+        weight_agg = self.sale_events.aggregate(weight=models.Sum("total_weight_kg"))
+        self.total_birds_sold = birds_agg["birds"] or 0
+        self.total_weight_sold_kg = weight_agg["weight"] or Decimal("0")
         self.save(update_fields=["total_birds_sold", "total_weight_sold_kg"])
 
 
@@ -552,13 +561,26 @@ class SaleEvent(OfflineSyncModel):
     class SaleType(models.TextChoices):
         DRESSED = "DRESSED", "Dressed"
         LIVE = "LIVE", "Live"
+        # Parts (feet, gizzards, necks...) rather than whole birds. Carries
+        # no bird count — see part_name/bird_count below and
+        # Batch.recalculate_sales() for how this is kept out of every
+        # bird-count-based figure.
+        OTHERS = "OTHERS", "Others"
 
     batch = models.ForeignKey(
         Batch, on_delete=models.CASCADE, related_name="sale_events"
     )
     sale_date = models.DateField(db_index=True)
     sale_type = models.CharField(max_length=20, choices=SaleType.choices)
-    bird_count = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    # Required for DRESSED/LIVE (enforced at the serializer layer, where
+    # sale_type is visible alongside it); an OTHERS sale is not a bird
+    # count at all, so it defaults to 0 and is excluded from every
+    # bird-count-based figure regardless of what is submitted.
+    bird_count = models.PositiveIntegerField(default=0)
+    # Required, trimmed, when sale_type is OTHERS; blank otherwise. What
+    # the "other" sale actually was — feet, gizzards, a culled runt sold
+    # whole. See SaleEventSerializer.validate().
+    part_name = models.CharField(max_length=60, blank=True)
     total_weight_kg = models.DecimalField(
         max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0"))]
     )
@@ -579,6 +601,22 @@ class SaleEvent(OfflineSyncModel):
         help_text="Sale value. Derived from price_per_kg; null only on legacy rows.",
     )
     notes = models.CharField(max_length=255, blank=True)
+
+    # Per-sale buyer. Distinct from (and independent of) Harvest.buyer_link,
+    # the batch's overall buyer recorded once at closing — a batch can now
+    # carry both, e.g. most of its sales tagged to the buyer who took most
+    # of the cohort, one gate sale tagged to someone else. PROTECT: a buyer
+    # record is never silently detached from the sale history that cites
+    # it. Validated in SaleEventSerializer: same farm as the batch, active,
+    # and a registered CONSUMER link.
+    buyer_link = models.ForeignKey(
+        "partners.FarmPartnerLink",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="sales_purchased",
+        help_text="Optional per-sale buyer.",
+    )
 
     class Meta:
         db_table = "production_sale_event"
@@ -643,6 +681,26 @@ class SaleEvent(OfflineSyncModel):
                 )
             if self.sale_date > timezone.localdate():
                 raise ValidationError({"sale_date": "Cannot record a future date."})
+
+
+def per_sale_mode_batch_ids(sale_events=None):
+    """
+    Batch ids on per-sale buyer tracking: at least one SaleEvent (within
+    the optional `sale_events` scope, else all SaleEvents) carries its own
+    buyer_link. Once true for a batch, Harvest.buyer_link must never be
+    used as a fallback for buyer display or validation on that batch —
+    see SaleEvent.buyer_link and Harvest.buyer_link above. A batch whose
+    sale events are all unlinked (or that has none) is NOT in per-sale
+    mode, even if it has sale events at all — on production, every
+    existing batch already has sale events with no buyer_link, and those
+    buyers must keep seeing their Harvest row exactly as before.
+
+    This is the single source of truth for that rule — used by both the
+    buyer-facing Purchases endpoint and the sales-history report's buyer
+    column, so the two can never disagree.
+    """
+    qs = sale_events if sale_events is not None else SaleEvent.objects.all()
+    return qs.filter(buyer_link__isnull=False).values_list("batch_id", flat=True)
 
 
 class Payment(models.Model):
@@ -719,9 +777,21 @@ class FeedDelivery(OfflineSyncModel):
 
     class FeedType(models.TextChoices):
         STARTER = "STARTER", "Starter"
-        GROWER = "GROWER", "Grower"
+        BOOSTER = "BOOSTER", "Booster"
         FINISHER = "FINISHER", "Finisher"
+        # Legacy only — a GROWER→BOOSTER data migration renamed every stored
+        # row, and OTHER is no longer offered for a new delivery, but both
+        # labels must stay valid choices so rows written before this change
+        # keep passing validation on any future full_clean().
         OTHER = "OTHER", "Other"
+
+    # What a new delivery may declare. The live frontend (pre feed-type
+    # rename) still offers GROWER and OTHER in its picker; GROWER is
+    # aliased to BOOSTER before it ever reaches here (see
+    # FeedDeliverySerializer.to_internal_value), so only OTHER needs to
+    # stay accepted at this layer. Drop OTHER from this set once that
+    # frontend ships its STARTER/BOOSTER/FINISHER-only picker.
+    NEW_DELIVERY_FEED_TYPES = {"STARTER", "BOOSTER", "FINISHER", "OTHER"}
 
     farm = models.ForeignKey(
         "farms.Farm", on_delete=models.CASCADE, related_name="feed_deliveries"
@@ -780,6 +850,7 @@ class FeedDelivery(OfflineSyncModel):
                 raise ValidationError(
                     {"inventory_item": "Select which feed item this delivery restocks."}
                 )
+            self._validate_new_delivery_feed_type()
             return
         if self.inventory_item.farm_id != self.farm_id:
             raise ValidationError(
@@ -798,6 +869,34 @@ class FeedDelivery(OfflineSyncModel):
                         "unit. Set the sack weight on the item first."
                     )
                 }
+            )
+        # The item's own feed type wins — the server sets it, the client's
+        # submitted value is ignored — so one feed item cannot be tagged
+        # Starter on one delivery and Finisher on the next.
+        if self.inventory_item.feed_type:
+            self.feed_type = self.inventory_item.feed_type
+        else:
+            self._validate_new_delivery_feed_type()
+
+    def _validate_new_delivery_feed_type(self):
+        """
+        A brand-new delivery (no item, or an item with no feed_type of its
+        own to inherit) must pick one of NEW_DELIVERY_FEED_TYPES. GROWER no
+        longer exists as a model-level choice — it is aliased to BOOSTER by
+        the serializer before this runs. OTHER stays accepted here too,
+        temporarily, because the live frontend still sends it; a
+        pre-existing row's own feed_type is exempt regardless, since a row
+        already in the database (`_state.adding` False) never reaches this
+        check. Note `self.pk` can't tell new from existing here: the UUID
+        primary key inherited from OfflineSyncModel gets its default at
+        construction time, not at save, so it is truthy even on a
+        brand-new instance.
+        """
+        if not self._state.adding:
+            return
+        if self.feed_type not in self.NEW_DELIVERY_FEED_TYPES:
+            raise ValidationError(
+                {"feed_type": "Choose Starter, Booster, or Finisher."}
             )
 
     def save(self, *args, **kwargs):
@@ -1024,10 +1123,23 @@ class InventoryItemQuerySet(models.QuerySet):
 
 
 class InventoryItem(models.Model):
+    class FeedType(models.TextChoices):
+        STARTER = "STARTER", "Starter"
+        BOOSTER = "BOOSTER", "Booster"
+        FINISHER = "FINISHER", "Finisher"
+
     farm = models.ForeignKey(
         "farms.Farm", on_delete=models.CASCADE, related_name="inventory_items"
     )
     name = models.CharField(max_length=100)
+    # Meaningful only when is_feed is True — a feed item's stage. Nullable:
+    # a non-feed item (vaccine, disinfectant) has no feed type, and an
+    # existing feed item predates this field. When set, a FeedDelivery
+    # against this item takes its feed_type from here (see
+    # FeedDelivery.clean()) rather than from whatever the client submits.
+    feed_type = models.CharField(
+        max_length=20, choices=FeedType.choices, null=True, blank=True
+    )
     unit = models.CharField(
         max_length=20, help_text="How it is counted: kg, litre, sack, dose."
     )
@@ -1086,6 +1198,10 @@ class InventoryItem(models.Model):
         if self.is_feed and not self.kg_per_unit:
             raise ValidationError(
                 {"kg_per_unit": "Feed items must have kilograms per unit set."}
+            )
+        if self.feed_type and not self.is_feed:
+            raise ValidationError(
+                {"feed_type": "Only a feed item can have a feed type."}
             )
         # kg_per_unit stays editable even with history — feed_kg is computed
         # and stored at write time, so correcting a sack weight later (e.g.
