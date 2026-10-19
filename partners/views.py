@@ -1,6 +1,7 @@
 # partners/views.py
 from django.conf import settings
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import PolymorphicProxySerializer, extend_schema
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -12,12 +13,13 @@ from accounts.serializers import (
     send_invitation_pin_sms,
 )
 from farms.permissions import HasRotatedCredential, IsFarmManagerOrOwner
-from production.models import Harvest, Payment
+from production.models import Harvest, Payment, SaleEvent
 
 from .models import FarmPartnerLink
 from .serializers import (
     BuyerPaymentSerializer,
     BuyerPurchaseSerializer,
+    BuyerSalePurchaseSerializer,
     FarmPartnerLinkSerializer,
     PartnerInvitationCreateSerializer,
 )
@@ -125,36 +127,72 @@ class MyPartnerFarmsView(generics.ListAPIView):
         ).select_related("farm", "partner", "linked_by")
 
 
+@extend_schema(
+    responses=PolymorphicProxySerializer(
+        component_name="BuyerPurchaseRow",
+        serializers=[BuyerPurchaseSerializer, BuyerSalePurchaseSerializer],
+        resource_type_field_name="source",
+        many=True,
+    ),
+)
 class MyPurchasesView(generics.ListAPIView):
     """
     GET /api/partners/my-purchases/ — a buyer's view of what farms recorded
     selling them.
 
-    Scoped to Harvest rows whose buyer_link points at the requesting user.
-    A weight and delivery ledger only: no revenue (see BuyerPurchaseSerializer
-    for why), no farm annotations, nothing about mortality, feed, or FCR, and
-    never another buyer's rows. Internal staff have no buyer identity here, so
-    they get an empty list rather than a 403.
+    Two sources, merged: Harvest rows whose buyer_link points at the
+    requesting user (the batch's overall buyer, recorded once at closing),
+    and SaleEvent rows whose own buyer_link points at them (a per-sale
+    buyer — see SaleEvent.buyer_link). Each row carries a "source" field
+    ("harvest" or "sale") so the two are distinguishable.
+
+    No double counting: a batch that has ANY sale events reports through
+    its SaleEvent rows only — the Harvest row for that batch is dropped
+    entirely, even if its buyer_link is set — the same fallback rule
+    analytics._batch_sale_totals uses (a batch's sale events are the
+    source of truth once they exist; Harvest's own figures are read only
+    for a batch closed before sale events existed). A buyer therefore
+    never sees the same batch counted on both sides.
+
+    A weight and delivery ledger only: no revenue (see
+    BuyerPurchaseSerializer / BuyerSalePurchaseSerializer for why), no farm
+    annotations, nothing about mortality, feed, or FCR, and never another
+    buyer's rows. Internal staff have no buyer identity here, so they get
+    an empty list rather than a 403.
     """
 
-    serializer_class = BuyerPurchaseSerializer
     permission_classes = [IsAuthenticated, HasRotatedCredential]
 
-    def get_queryset(self):
-        user = self.request.user
+    def list(self, request, *args, **kwargs):
+        user = request.user
         if user.is_internal:
-            return Harvest.objects.none()
+            return Response([])
 
-        qs = (
-            Harvest.objects.filter(buyer_link__partner=user)
-            .select_related("batch__house__farm", "buyer_link")
-            .order_by("-harvest_date")
+        farm_id = request.query_params.get("farm")
+
+        sales = SaleEvent.objects.filter(buyer_link__partner=user).select_related(
+            "batch__house__farm", "buyer_link"
         )
-
-        farm_id = self.request.query_params.get("farm")
         if farm_id and str(farm_id).isdigit():
-            qs = qs.filter(batch__house__farm_id=farm_id)
-        return qs
+            sales = sales.filter(batch__house__farm_id=farm_id)
+
+        # A batch with any sale events at all reports through those sales
+        # only — see the no-double-counting note in the docstring.
+        batches_with_sales = SaleEvent.objects.values_list("batch_id", flat=True)
+        harvests = (
+            Harvest.objects.filter(buyer_link__partner=user)
+            .exclude(batch_id__in=batches_with_sales)
+            .select_related("batch__house__farm", "buyer_link")
+        )
+        if farm_id and str(farm_id).isdigit():
+            harvests = harvests.filter(batch__house__farm_id=farm_id)
+
+        rows = [
+            *BuyerPurchaseSerializer(harvests, many=True).data,
+            *BuyerSalePurchaseSerializer(sales, many=True).data,
+        ]
+        rows.sort(key=lambda r: r["harvest_date"], reverse=True)
+        return Response(rows)
 
 
 class MyPaymentsView(generics.ListAPIView):

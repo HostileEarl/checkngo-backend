@@ -25,10 +25,30 @@ from decimal import Decimal
 # conversion path (delivery entry, daily-record entry) until someone sets
 # the weight by editing the item.
 STARTER_FEED_CATALOGUE = [
-    {"name": "Titanium Chick Booster Crumble", "unit": "sack", "kg_per_unit": Decimal("25")},
-    {"name": "Broiler Starter Crumble", "unit": "sack", "kg_per_unit": Decimal("50")},
-    {"name": "Broiler Finisher Crumble", "unit": "sack", "kg_per_unit": Decimal("50")},
-    {"name": "Chick Booster Mash", "unit": "sack", "kg_per_unit": None},
+    {
+        "name": "Titanium Chick Booster Crumble",
+        "unit": "sack",
+        "kg_per_unit": Decimal("25"),
+        "feed_type": "BOOSTER",
+    },
+    {
+        "name": "Broiler Starter Crumble",
+        "unit": "sack",
+        "kg_per_unit": Decimal("50"),
+        "feed_type": "STARTER",
+    },
+    {
+        "name": "Broiler Finisher Crumble",
+        "unit": "sack",
+        "kg_per_unit": Decimal("50"),
+        "feed_type": "FINISHER",
+    },
+    {
+        "name": "Chick Booster Mash",
+        "unit": "sack",
+        "kg_per_unit": None,
+        "feed_type": "BOOSTER",
+    },
 ]
 
 
@@ -49,6 +69,7 @@ def seed_starter_feed_catalogue(farm):
                 "unit": item["unit"],
                 "kg_per_unit": item["kg_per_unit"],
                 "is_feed": True,
+                "feed_type": item["feed_type"],
                 "created_by_id": farm.owner_id,
             },
         )

@@ -305,7 +305,7 @@ class Command(BaseCommand):
                 recorded_by=owner,
                 inventory_item=feed,
                 delivery_date=timezone.localdate() - timedelta(days=20),
-                feed_type=FeedDelivery.FeedType.OTHER,
+                feed_type=FeedDelivery.FeedType.STARTER,
                 quantity_kg=Decimal("400") * feed.kg_per_unit,
                 notes="Opening stock",
                 invoice_ref=f"{DEMO_PREFIX}OPENING",
@@ -345,7 +345,7 @@ class Command(BaseCommand):
         today = timezone.localdate()
         types = [
             (FeedDelivery.FeedType.STARTER, Decimal("32.50")),
-            (FeedDelivery.FeedType.GROWER, Decimal("30.00")),
+            (FeedDelivery.FeedType.BOOSTER, Decimal("30.00")),
             (FeedDelivery.FeedType.FINISHER, Decimal("28.75")),
         ]
 

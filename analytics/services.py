@@ -28,14 +28,23 @@ def _batch_sale_totals(batch):
     events. Falls back to the Harvest's own figures for a batch closed
     before sale events existed, so historical FCR and feed margin are
     unchanged. `revenue` is None when no sale carried a value.
+
+    An OTHERS sale (parts, not whole birds) never contributes to `birds`
+    or `weight` — those feed FCR's live-weight denominator and the
+    survival rate, neither of which an OTHERS sale represents. It still
+    contributes to `revenue`: a parts sale is real sale value, counted in
+    feed margin exactly like any other.
     """
-    agg = SaleEvent.objects.filter(batch=batch).aggregate(
-        birds=Sum("bird_count"),
-        weight=Sum("total_weight_kg"),
+    live_agg = (
+        SaleEvent.objects.filter(batch=batch)
+        .exclude(sale_type=SaleEvent.SaleType.OTHERS)
+        .aggregate(birds=Sum("bird_count"), weight=Sum("total_weight_kg"))
+    )
+    revenue_agg = SaleEvent.objects.filter(batch=batch).aggregate(
         revenue=Sum("revenue"),
     )
-    if agg["birds"]:
-        return agg["birds"], agg["weight"], agg["revenue"]
+    if live_agg["birds"]:
+        return live_agg["birds"], live_agg["weight"], revenue_agg["revenue"]
 
     harvest = getattr(batch, "harvest", None)
     if harvest is None:

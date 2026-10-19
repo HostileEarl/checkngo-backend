@@ -717,9 +717,11 @@ class SaleEventSerializer(serializers.ModelSerializer):
             "sale_date",
             "sale_type",
             "bird_count",
+            "part_name",
             "total_weight_kg",
             "price_per_kg",
             "revenue",
+            "buyer_link",
             "notes",
             "average_weight_kg",
             "revenue_per_kg",
@@ -734,6 +736,11 @@ class SaleEventSerializer(serializers.ModelSerializer):
             "sync_delay_seconds",
         ]
         read_only_fields = ["batch", "recorded_by", "created_at", "revenue"]
+        extra_kwargs = {
+            "bird_count": {"required": False},
+            "part_name": {"required": False, "allow_blank": True},
+            "buyer_link": {"required": False, "allow_null": True},
+        }
 
     def get_average_weight_kg(self, obj) -> str | None:
         val = obj.average_weight_kg
@@ -763,9 +770,21 @@ class SaleEventSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Cannot record a future date.")
         return value
 
-    def validate_bird_count(self, value):
-        if value < 1:
-            raise serializers.ValidationError("A sale is at least one bird.")
+    def validate_buyer_link(self, value):
+        if value is None:
+            return value
+        batch = self.context["batch"]
+        farm = batch.house.farm
+        if value.farm_id != farm.pk:
+            raise serializers.ValidationError("That buyer is not linked to this farm.")
+        if value.link_type != FarmPartnerLink.LinkType.CONSUMER:
+            raise serializers.ValidationError(
+                "That partner is not registered as a buyer."
+            )
+        if not value.is_active:
+            raise serializers.ValidationError(
+                "That buyer's link to this farm is no longer active."
+            )
         return value
 
     def validate(self, attrs):
@@ -786,26 +805,50 @@ class SaleEventSerializer(serializers.ModelSerializer):
                 "This batch is closed and accepts no further sales."
             )
 
-        # Birds available to sell today: what is left after mortality and
-        # every earlier sale. When editing, add this row's own current
-        # count back first, or a correction reads as an addition.
+        sale_type = attrs.get(
+            "sale_type", getattr(self.instance, "sale_type", None)
+        )
         count = attrs.get(
             "bird_count", getattr(self.instance, "bird_count", 0)
         )
-        available = batch.current_bird_count
-        if self.instance:
-            available += self.instance.bird_count
-        if count > available:
-            raise serializers.ValidationError(
-                {
-                    "bird_count": (
-                        f"Only {available} birds remain in this batch "
-                        f"({batch.initial_bird_count} placed, "
-                        f"{batch.total_mortality} lost, "
-                        f"{batch.total_birds_sold} already sold)."
-                    )
-                }
-            )
+        part_name = (attrs.get("part_name") or "").strip()
+
+        if sale_type == SaleEvent.SaleType.OTHERS:
+            if not part_name:
+                raise serializers.ValidationError(
+                    {"part_name": "Part name is required for an Others sale."}
+                )
+            attrs["part_name"] = part_name
+        else:
+            if attrs.get("part_name"):
+                raise serializers.ValidationError(
+                    {"part_name": "Part name only applies to an Others sale."}
+                )
+            attrs["part_name"] = ""
+            if count < 1:
+                raise serializers.ValidationError(
+                    {"bird_count": "A sale is at least one bird."}
+                )
+
+            # Birds available to sell today: what is left after mortality
+            # and every earlier sale. When editing, add this row's own
+            # current count back first, or a correction reads as an
+            # addition. An OTHERS sale (parts, not whole birds) never
+            # draws down the flock, so it is exempt from this check.
+            available = batch.current_bird_count
+            if self.instance:
+                available += self.instance.bird_count
+            if count > available:
+                raise serializers.ValidationError(
+                    {
+                        "bird_count": (
+                            f"Only {available} birds remain in this batch "
+                            f"({batch.initial_bird_count} placed, "
+                            f"{batch.total_mortality} lost, "
+                            f"{batch.total_birds_sold} already sold)."
+                        )
+                    }
+                )
 
         return attrs
 
@@ -1110,14 +1153,17 @@ class BatchCloseSerializer(serializers.Serializer):
         batch = self.context["batch"]
         user = self.context["request"].user
 
-        agg = batch.sale_events.aggregate(
-            birds=Sum("bird_count"),
-            weight=Sum("total_weight_kg"),
-            revenue=Sum("revenue"),
-        )
-        birds = agg["birds"] or 0
-        weight = agg["weight"] or Decimal("0")
-        revenue = agg["revenue"]  # None when no sale carried a value
+        # OTHERS sales (parts, not whole birds) are excluded from the
+        # birds/weight that become Harvest.birds_harvested and
+        # total_weight_kg — the FCR live-weight denominator — but still
+        # count toward revenue, same split as analytics._batch_sale_totals.
+        live_agg = batch.sale_events.exclude(
+            sale_type=SaleEvent.SaleType.OTHERS
+        ).aggregate(birds=Sum("bird_count"), weight=Sum("total_weight_kg"))
+        revenue_agg = batch.sale_events.aggregate(revenue=Sum("revenue"))
+        birds = live_agg["birds"] or 0
+        weight = live_agg["weight"] or Decimal("0")
+        revenue = revenue_agg["revenue"]  # None when no sale carried a value
 
         remaining = batch.current_bird_count
         closing_notes = self.validated_data.get("closing_notes", "").strip()
@@ -1153,6 +1199,10 @@ class FeedDeliverySerializer(serializers.ModelSerializer):
     recorded_by_name = serializers.CharField(
         source="recorded_by.full_name", read_only=True, default=None
     )
+    # OTHER is no longer offered for a new delivery (see
+    # FeedDelivery.clean()) — this tells a read whether the stored value is
+    # one of those pre-existing rows rather than a current choice.
+    legacy_feed_type = serializers.SerializerMethodField()
 
     class Meta:
         model = FeedDelivery
@@ -1163,6 +1213,7 @@ class FeedDeliverySerializer(serializers.ModelSerializer):
             "other_source",
             "delivery_date",
             "feed_type",
+            "legacy_feed_type",
             "quantity_kg",
             "unit_cost",
             "total_cost",
@@ -1176,6 +1227,9 @@ class FeedDeliverySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["farm", "recorded_by", "created_at"]
         extra_kwargs = {"id": {"required": False}, "inventory_item": {"required": False}}
+
+    def get_legacy_feed_type(self, obj) -> bool:
+        return obj.feed_type == FeedDelivery.FeedType.OTHER
 
     def validate_inventory_item(self, value):
         if value is None:
@@ -1441,6 +1495,7 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             "unit",
             "kg_per_unit",
             "is_feed",
+            "feed_type",
             "low_stock_threshold",
             "is_active",
             "current_quantity",
@@ -1501,6 +1556,11 @@ class InventoryItemSerializer(serializers.ModelSerializer):
         if is_feed and not kg_per_unit:
             raise serializers.ValidationError(
                 {"kg_per_unit": "Feed items must have kilograms per unit set."}
+            )
+        feed_type = attrs.get("feed_type", getattr(self.instance, "feed_type", None))
+        if feed_type and not is_feed:
+            raise serializers.ValidationError(
+                {"feed_type": "Only a feed item can have a feed type."}
             )
         return attrs
 

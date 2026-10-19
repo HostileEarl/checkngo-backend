@@ -13,7 +13,7 @@ from django.urls import reverse
 
 from accounts.models import User
 from partners.models import FarmPartnerLink
-from production.models import Batch, Harvest, House
+from production.models import Batch, Harvest, House, SaleEvent
 
 pytestmark = pytest.mark.django_db
 
@@ -194,6 +194,7 @@ class TestMyPurchases:
 
         assert set(row) == {
             "id",
+            "source",
             "harvest_date",
             "farm",
             "farm_name",
@@ -202,6 +203,111 @@ class TestMyPurchases:
             "total_weight_kg",
             "average_weight_kg",
         }
+        assert row["source"] == "harvest"
+
+    def _batch_with_sale(self, target_farm, link, *, owner, batch_code, bird_count=80):
+        """A farm -> house -> active batch -> one buyer-linked SaleEvent."""
+        global _seq
+        _seq += 1
+        house = House.objects.create(
+            farm=target_farm, name=f"House {_seq}", capacity=10000
+        )
+        batch = Batch.objects.create(
+            house=house,
+            batch_code=batch_code,
+            initial_bird_count=1000,
+            start_date=date(2026, 1, 1),
+            created_by=owner,
+        )
+        sale = SaleEvent.objects.create(
+            batch=batch,
+            sale_date=date(2026, 2, 1),
+            sale_type=SaleEvent.SaleType.DRESSED,
+            bird_count=bird_count,
+            total_weight_kg=Decimal("160.00"),
+            price_per_kg=Decimal("75.00"),
+            buyer_link=link,
+            recorded_by=owner,
+        )
+        return batch, sale
+
+    def test_buyer_linked_sale_appears_tagged_as_sale(
+        self, auth, buyer, owner, farm, link_buyer
+    ):
+        self._batch_with_sale(farm, link_buyer, owner=owner, batch_code="SALE-1")
+
+        rows = auth(buyer).get(URL).data
+
+        assert len(rows) == 1
+        assert rows[0]["source"] == "sale"
+        assert rows[0]["batch_code"] == "SALE-1"
+        assert rows[0]["birds_harvested"] == 80
+
+    def test_sale_linked_purchase_hides_revenue_and_internals(
+        self, auth, buyer, owner, farm, link_buyer
+    ):
+        self._batch_with_sale(farm, link_buyer, owner=owner, batch_code="SALE-HIDE")
+
+        row = auth(buyer).get(URL).data[0]
+
+        for hidden in ("revenue", "revenue_per_kg", "notes", "recorded_by", "price_per_kg"):
+            assert hidden not in row
+
+    def test_sale_with_no_buyer_is_invisible_to_everyone(
+        self, auth, buyer, owner, farm, link_buyer
+    ):
+        house = House.objects.create(farm=farm, name="No buyer house", capacity=5000)
+        batch = Batch.objects.create(
+            house=house, batch_code="NOBUYER", initial_bird_count=500,
+            start_date=date(2026, 1, 1), created_by=owner,
+        )
+        SaleEvent.objects.create(
+            batch=batch, sale_date=date(2026, 2, 1),
+            sale_type=SaleEvent.SaleType.DRESSED, bird_count=50,
+            total_weight_kg=Decimal("90.00"), price_per_kg=Decimal("70.00"),
+            buyer_link=None, recorded_by=owner,
+        )
+
+        assert auth(buyer).get(URL).data == []
+
+    def test_no_double_counting_when_batch_has_both_harvest_and_sale_buyer(
+        self, auth, buyer, buyer_b, owner, farm, link_buyer, link_buyer_b
+    ):
+        """
+        A batch with sale events reports through its sales only — even a
+        Harvest row with its own buyer_link on the SAME batch is dropped,
+        per the "sale events are the source of truth once they exist"
+        rule _batch_sale_totals already uses elsewhere.
+        """
+        batch, _ = self._batch_with_sale(
+            farm, link_buyer, owner=owner, batch_code="MIXED"
+        )
+        Harvest.objects.create(
+            batch=batch, harvest_date=date(2026, 3, 1),
+            birds_harvested=900, total_weight_kg=Decimal("1500.00"),
+            revenue=Decimal("200000.00"), buyer_link=link_buyer_b,
+        )
+
+        buyer_rows = auth(buyer).get(URL).data
+        buyer_b_rows = auth(buyer_b).get(URL).data
+
+        assert len(buyer_rows) == 1
+        assert buyer_rows[0]["source"] == "sale"
+        # buyer_b is the Harvest's buyer on this same batch, but the batch
+        # has sale events, so that Harvest row never surfaces for anyone.
+        assert buyer_b_rows == []
+
+    def test_cross_buyer_isolation_for_sale_linked_purchases(
+        self, auth, buyer, buyer_b, owner, farm, link_buyer, link_buyer_b
+    ):
+        self._batch_with_sale(farm, link_buyer, owner=owner, batch_code="MINE-SALE")
+        self._batch_with_sale(
+            farm, link_buyer_b, owner=owner, batch_code="THEIRS-SALE"
+        )
+
+        codes = {row["batch_code"] for row in auth(buyer).get(URL).data}
+
+        assert codes == {"MINE-SALE"}
 
     def test_payload_shape(self, auth, buyer, owner, farm, link_buyer):
         _harvest(

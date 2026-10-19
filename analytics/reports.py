@@ -452,11 +452,17 @@ def sales_history_rows(farm, date_from=None, date_to=None):
     feed margin per kg) does not apply to this export at all. Said plainly
     in the NOTE block below, inside the file, not just on screen.
 
-    `buyer` is the batch's overall buyer, recorded once at closing on
-    Harvest — SaleEvent itself deliberately carries no per-sale buyer (see
-    the model docstring). Blank for any sale on a batch not yet harvested,
-    and the same value repeats across every sale row for one batch; it is
-    not specific to the individual transaction on that row.
+    `part_name` is blank except on an OTHERS sale, where it names what was
+    actually sold (feet, gizzards, a culled runt).
+
+    `buyer` prefers the sale's own buyer_link. A batch can carry both a
+    per-sale buyer and the batch-level Harvest.buyer_link recorded once at
+    closing (see both model docstrings) — once ANY sale on a batch carries
+    its own buyer_link, that batch is on the new per-sale tracking, and a
+    sale on it with no buyer stays blank rather than borrowing the
+    Harvest's. The Harvest-wide fallback only fires for a batch where NO
+    sale has ever carried a buyer_link — a legacy batch, or one closed
+    before this field existed.
     """
     yield [
         "sale_date",
@@ -464,6 +470,7 @@ def sales_history_rows(farm, date_from=None, date_to=None):
         "house",
         "sale_type",
         "bird_count",
+        "part_name",
         "total_weight_kg",
         "revenue",
         "buyer",
@@ -471,7 +478,7 @@ def sales_history_rows(farm, date_from=None, date_to=None):
 
     sales = (
         SaleEvent.objects.filter(batch__house__farm=farm)
-        .select_related("batch", "batch__house")
+        .select_related("batch", "batch__house", "buyer_link", "buyer_link__partner")
         .order_by("sale_date", "batch__batch_code")
     )
     if date_from:
@@ -479,10 +486,18 @@ def sales_history_rows(farm, date_from=None, date_to=None):
     if date_to:
         sales = sales.filter(sale_date__lte=date_to)
 
-    # One query for every batch's buyer, same source feed_margin_rows uses
-    # (Harvest.buyer_link) — not a per-sale field, so looked up once per
-    # batch rather than re-derived per row.
-    buyers = {
+    # Batches where at least one sale already carries its own buyer_link —
+    # those are on the new per-sale tracking, so the Harvest-wide fallback
+    # below must never apply to any sale on them, blank or not.
+    batches_with_sale_buyer = set(
+        SaleEvent.objects.filter(
+            batch__house__farm=farm, buyer_link__isnull=False
+        ).values_list("batch_id", flat=True)
+    )
+
+    # Harvest-wide buyer, for the legacy fallback only (batches above are
+    # excluded from this lookup's use, not from the query itself).
+    harvest_buyers = {
         h.batch_id: (
             h.buyer_link.business_name or h.buyer_link.partner.full_name
         )
@@ -491,6 +506,13 @@ def sales_history_rows(farm, date_from=None, date_to=None):
         ).select_related("buyer_link__partner")
     }
 
+    def _buyer_for(sale):
+        if sale.buyer_link_id:
+            return sale.buyer_link.business_name or sale.buyer_link.partner.full_name
+        if sale.batch_id in batches_with_sale_buyer:
+            return ""
+        return harvest_buyers.get(sale.batch_id, "")
+
     for s in sales.iterator():
         yield [
             s.sale_date.isoformat(),
@@ -498,9 +520,10 @@ def sales_history_rows(farm, date_from=None, date_to=None):
             s.batch.house.display_name,
             s.get_sale_type_display(),
             s.bird_count,
+            s.part_name,
             _s(s.total_weight_kg),
             _s(s.revenue),
-            buyers.get(s.batch_id, ""),
+            _buyer_for(s),
         ]
 
     yield []
@@ -515,8 +538,14 @@ def sales_history_rows(farm, date_from=None, date_to=None):
     yield [
         "NOTE",
         (
-            "buyer is the batch's overall buyer, recorded once when the "
-            "batch was closed — not specific to the individual sale on "
-            "each row. Blank for a batch not yet harvested."
+            "buyer is that sale's own buyer when one is recorded. For a "
+            "batch where no sale carries its own buyer, it falls back to "
+            "the batch's overall buyer recorded once at closing; once any "
+            "sale on a batch has its own buyer, a sale with none stays "
+            "blank rather than borrowing the batch's."
         ),
+    ]
+    yield [
+        "NOTE",
+        "part_name is blank except on an OTHERS sale (parts, not whole birds).",
     ]
