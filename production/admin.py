@@ -2,6 +2,7 @@
 from django.contrib import admin
 from django.db.models import Prefetch
 from django.utils.html import format_html
+from unfold.admin import ModelAdmin, TabularInline
 
 from .models import (
     Batch,
@@ -30,7 +31,7 @@ def _editable_badge(obj):
 
 
 @admin.register(House)
-class HouseAdmin(admin.ModelAdmin):
+class HouseAdmin(ModelAdmin):
     list_display = ["name", "farm", "capacity", "occupancy", "is_active"]
     list_filter = ["farm", "is_active"]
     search_fields = ["name", "farm__name"]
@@ -61,7 +62,7 @@ class HouseAdmin(admin.ModelAdmin):
         return format_html('<span class="{}">{}</span>', "status-success", "Empty")
 
 
-class DailyRecordInline(admin.TabularInline):
+class DailyRecordInline(TabularInline):
     model = DailyRecord
     extra = 0
     max_num = 0  # view-only; entry belongs in the app
@@ -81,7 +82,7 @@ class DailyRecordInline(admin.TabularInline):
         return False
 
 
-class SaleEventInline(admin.TabularInline):
+class SaleEventInline(TabularInline):
     """Read-only. Sales are terminal field records, entered in the app."""
 
     model = SaleEvent
@@ -105,7 +106,7 @@ class SaleEventInline(admin.TabularInline):
 
 
 @admin.register(Batch)
-class BatchAdmin(admin.ModelAdmin):
+class BatchAdmin(ModelAdmin):
     list_display = [
         "batch_code",
         "house",
@@ -194,7 +195,7 @@ class BatchAdmin(admin.ModelAdmin):
 
 
 @admin.register(DailyRecord)
-class DailyRecordAdmin(admin.ModelAdmin):
+class DailyRecordAdmin(ModelAdmin):
     """
     Editable only inside the 24-hour window, matching the API.
 
@@ -241,7 +242,7 @@ class DailyRecordAdmin(admin.ModelAdmin):
 
 
 @admin.register(WeightSample)
-class WeightSampleAdmin(admin.ModelAdmin):
+class WeightSampleAdmin(ModelAdmin):
     list_display = ["sample_date", "batch", "average_grams", "birds_weighed", "recorded_by"]
     list_filter = ["batch__house__farm", "batch"]
     date_hierarchy = "sample_date"
@@ -258,7 +259,7 @@ class WeightSampleAdmin(admin.ModelAdmin):
 
 
 @admin.register(Harvest)
-class HarvestAdmin(admin.ModelAdmin):
+class HarvestAdmin(ModelAdmin):
     """Read-only. A harvest closes a batch and fixes its FCR permanently."""
 
     list_display = [
@@ -290,7 +291,7 @@ class HarvestAdmin(admin.ModelAdmin):
 
 
 @admin.register(SaleEvent)
-class SaleEventAdmin(admin.ModelAdmin):
+class SaleEventAdmin(ModelAdmin):
     """
     Editable only inside the 24-hour window, matching the API and
     DailyRecordAdmin. A sale event draws the batch's live bird count down
@@ -330,7 +331,7 @@ class SaleEventAdmin(admin.ModelAdmin):
 
 
 @admin.register(FeedDelivery)
-class FeedDeliveryAdmin(admin.ModelAdmin):
+class FeedDeliveryAdmin(ModelAdmin):
     """
     FeedDelivery.clean() (run by the form on save) rejects a delivery with
     no inventory_item on a farm that has feed items — same rule the API
@@ -374,7 +375,7 @@ class FeedDeliveryAdmin(admin.ModelAdmin):
             _feed_stock_in_for_delivery(obj, request.user, quantity_in_units)
 
 
-class InventoryStockInInline(admin.TabularInline):
+class InventoryStockInInline(TabularInline):
     model = InventoryStockIn
     extra = 0
     fields = ["stock_in_date", "quantity", "note", "recorded_by"]
@@ -383,7 +384,7 @@ class InventoryStockInInline(admin.TabularInline):
 
 
 @admin.register(InventoryItem)
-class InventoryItemAdmin(admin.ModelAdmin):
+class InventoryItemAdmin(ModelAdmin):
     """Configuration — the consumables a farm tracks. Fully editable."""
 
     list_display = [
@@ -434,7 +435,7 @@ class InventoryItemAdmin(admin.ModelAdmin):
 
 
 @admin.register(InventoryStockIn)
-class InventoryStockInAdmin(admin.ModelAdmin):
+class InventoryStockInAdmin(ModelAdmin):
     list_display = ["stock_in_date", "item", "quantity", "recorded_by"]
     list_filter = ["item__farm", "item", "stock_in_date"]
     date_hierarchy = "stock_in_date"
@@ -443,7 +444,7 @@ class InventoryStockInAdmin(admin.ModelAdmin):
 
 
 @admin.register(InventoryUsageLog)
-class InventoryUsageLogAdmin(admin.ModelAdmin):
+class InventoryUsageLogAdmin(ModelAdmin):
     """Editable only inside the 24-hour window, matching the API and DailyRecordAdmin."""
 
     list_display = ["usage_date", "item", "quantity_used", "recorded_by", "lock_state"]
@@ -467,7 +468,7 @@ class InventoryUsageLogAdmin(admin.ModelAdmin):
 
 
 @admin.register(RecordCorrection)
-class RecordCorrectionAdmin(admin.ModelAdmin):
+class RecordCorrectionAdmin(ModelAdmin):
     """Fully read-only. The model's save() raises on update."""
 
     list_display = [
@@ -498,7 +499,7 @@ class RecordCorrectionAdmin(admin.ModelAdmin):
 
 
 @admin.register(TaskTemplate)
-class TaskTemplateAdmin(admin.ModelAdmin):
+class TaskTemplateAdmin(ModelAdmin):
     """Configuration — one item in a farm's daily routine. Fully editable."""
 
     list_display = ["name", "farm", "suggested_time", "order", "is_active"]
@@ -509,7 +510,7 @@ class TaskTemplateAdmin(admin.ModelAdmin):
 
 
 @admin.register(TaskCompletion)
-class TaskCompletionAdmin(admin.ModelAdmin):
+class TaskCompletionAdmin(ModelAdmin):
     """Read-only. A completion records that a routine item was done — a record, not a form."""
 
     list_display = ["completion_date", "template", "house", "recorded_by"]

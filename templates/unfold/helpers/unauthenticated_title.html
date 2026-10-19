@@ -1,0 +1,13 @@
+{% load i18n static %}
+{# Unfold's sign-in title with the CheckN Go mark above it (login and password pages). #}
+<div class="border-b border-base-200 mb-8 pb-6 dark:border-base-800">
+    <img src="{% static 'admin/img/checkngo-mark.svg' %}" alt="" width="44" height="40" class="checkngo-auth-mark dark:hidden">
+    <img src="{% static 'admin/img/checkngo-mark-white.svg' %}" alt="" width="44" height="40" class="checkngo-auth-mark hidden dark:block">
+    <h1 class="font-semibold">
+        {% if subtitle %}
+            <span class="block text-font-important-light dark:text-font-important-dark">{{ subtitle }} </span>
+        {% endif %}
+
+        <span class="block font-semibold text-primary-600 tracking-tight text-xl dark:text-primary-500">{{ title }}</span>
+    </h1>
+</div>

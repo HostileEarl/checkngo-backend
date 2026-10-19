@@ -8,7 +8,6 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
-from checkngo import admin_hubs
 
 # The admin lives at an unguessable path in every real environment. Read it
 # from the environment so the value differs between local and deployment
@@ -16,15 +15,11 @@ from checkngo import admin_hubs
 # only for a bare checkout; production MUST override it (see docs).
 ADMIN_URL = config("ADMIN_URL", default="admin/")
 
-admin.site.site_header = "CheckN Go Administration"
-admin.site.site_title = "CheckN Go"
 # The operator interface, separate from the farm-facing application; there
-# is no in-app admin role.
-admin.site.index_title = "Platform administration"
-
-# Group the index and nav sidebar into hubs (People, Farms, …). Must run
-# before `admin.site.urls` is read below, which binds `admin.site.index`.
-admin_hubs.install(admin.site)
+# is no in-app admin role. Branding, sidebar hubs (People, Farms, …) and the
+# dashboard come from django-unfold — see UNFOLD in settings.py and
+# checkngo/admin_theme.py.
+admin.site.index_title = "Dashboard"
 
 urlpatterns = [
     path(ADMIN_URL, admin.site.urls),

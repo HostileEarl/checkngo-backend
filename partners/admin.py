@@ -1,11 +1,12 @@
 # partners/admin.py
 from django.contrib import admin
+from unfold.admin import ModelAdmin
 
 from .models import FarmPartnerLink
 
 
 @admin.register(FarmPartnerLink)
-class FarmPartnerLinkAdmin(admin.ModelAdmin):
+class FarmPartnerLinkAdmin(ModelAdmin):
     list_display = [
         "display_name",
         "farm",
