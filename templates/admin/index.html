@@ -1,0 +1,100 @@
+{% extends "admin/index.html" %}
+{% load i18n %}
+
+{#
+  CheckN Go admin index — hubs from checkngo/admin_hubs.py.
+
+  Extends Django's own admin/index.html (recursive extends skips this
+  file and finds the contrib one), replacing only `content`. Recent
+  actions (`sidebar`) is Django's, untouched.
+
+  Each hub's table is Django's admin/app_list.html markup, repeated here
+  so every hub can carry an id (the sidebar captions link to #hub-<id>)
+  and System can sit in a <details>, collapsed by default.
+
+  can_add_owner_account / can_view_invitations come from admin_hubs'
+  index wrapper: they follow the ModelAdmins' own permission checks.
+
+  Django's admin/app_index.html (/admin/<app_label>/) extends
+  admin/index.html too, so it lands here; with `app_label` set it gets
+  Django's own content via block.super, unchanged.
+#}
+
+{% block content %}
+{% if app_label %}
+{{ block.super }}
+{% else %}
+<div id="content-main" class="app-list">
+  {% if can_add_owner_account or can_view_invitations %}
+    <div class="module checkngo-quick-actions">
+      <h2>{% translate "Quick actions" %}</h2>
+      <div class="checkngo-quick-actions__body">
+        {% if can_add_owner_account %}
+          <a class="button default" href="{% url 'admin:accounts_farmowneraccount_add' %}">+ {% translate "Create farm owner account" %}</a>
+        {% endif %}
+        {% if can_view_invitations %}
+          <a class="checkngo-quick-actions__link" href="{% url 'admin:accounts_invitation_changelist' %}?status__exact=PENDING">{% translate "Pending invitations" %}</a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if app_list %}
+    {% for app in app_list %}
+      {% if app.is_system %}
+        <details class="checkngo-hub-collapsed" id="{{ app.app_label }}">
+          <summary>{{ app.name }}</summary>
+      {% endif %}
+      <div class="app-{{ app.app_label }} module"{% if not app.is_system %} id="{{ app.app_label }}"{% endif %}>
+        <table>
+          <caption{% if app.is_system %} class="visually-hidden"{% endif %}>
+            <a href="{{ app.app_url }}" class="section">{{ app.name }}</a>
+          </caption>
+          <thead class="visually-hidden">
+            <tr>
+              <th scope="col">{% translate 'Model name' %}</th>
+              <th scope="col">{% translate 'Add link' %}</th>
+              <th scope="col">{% translate 'Change or view list link' %}</th>
+            </tr>
+          </thead>
+          {% for model in app.models %}
+            {% with model_name=model.object_name|lower %}
+              <tr class="model-{{ model_name }}">
+                <th scope="row" id="{{ app.app_label }}-{{ model_name }}">
+                  {% if model.admin_url %}
+                    <a href="{{ model.admin_url }}">{{ model.name }}</a>
+                  {% else %}
+                    {{ model.name }}
+                  {% endif %}
+                </th>
+
+                {% if model.add_url %}
+                  <td><a href="{{ model.add_url }}" class="addlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'Add' %}</a></td>
+                {% else %}
+                  <td></td>
+                {% endif %}
+
+                {% if model.admin_url %}
+                  {% if model.view_only %}
+                    <td><a href="{{ model.admin_url }}" class="viewlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'View' %}</a></td>
+                  {% else %}
+                    <td><a href="{{ model.admin_url }}" class="changelink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'Change' %}</a></td>
+                  {% endif %}
+                {% else %}
+                  <td></td>
+                {% endif %}
+              </tr>
+            {% endwith %}
+          {% endfor %}
+        </table>
+      </div>
+      {% if app.is_system %}
+        </details>
+      {% endif %}
+    {% endfor %}
+  {% else %}
+    <p>{% translate 'You don’t have permission to view or edit anything.' %}</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
