@@ -1,0 +1,5898 @@
+openapi: 3.0.3
+info:
+  title: CheckN Go API
+  version: 1.0.0
+  description: |-
+    Backend for CheckN Go — a cross-platform poultry management system for distributed farm coordination and descriptive analytics.
+
+    **Authentication:** phone number (E.164) + PIN, returning JWT access and refresh tokens. Send `Authorization: Bearer <access>`.
+
+    **Forced rotation:** a newly onboarded user has `must_change_credential = true` and is blocked from every endpoint except `/auth/me/` and `/auth/credential/change/` until they rotate their PIN.
+
+    **Farm scoping:** operational endpoints are nested under `/farms/<farm_id>/`. Access is resolved from the caller's active membership on that farm; a member of one farm cannot read another's data.
+paths:
+  /api/auth/credential/change/:
+    post:
+      operationId: auth_credential_change_create
+      description: |-
+        POST /api/auth/credential/change/
+
+        The only way through the rotation gate, so it must stay reachable by
+        gated users. Throttled because it verifies the current PIN.
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/auth/login/:
+    post:
+      operationId: auth_login_create
+      description: |-
+        POST /api/auth/login/
+
+        Two throttle layers: per-phone stops brute-forcing one account,
+        per-IP stops spraying one PIN across many accounts.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhonePinTokenRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PhonePinTokenRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PhonePinTokenRequest'
+        required: true
+      responses:
+        '200':
+          description: No response body
+  /api/auth/logout/:
+    post:
+      operationId: auth_logout_create
+      description: POST /api/auth/logout/ — revoke a single device's refresh token.
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/auth/me/:
+    get:
+      operationId: auth_me_retrieve
+      description: |-
+        GET /api/auth/me/ — current user plus farm scope.
+
+        Memberships are included because the client needs to know which farms
+        it may address before it can call any farm-scoped endpoint. Without
+        them a restored session knows who it is but not where it works.
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/auth/refresh/:
+    post:
+      operationId: auth_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/auth/verify/:
+    post:
+      operationId: auth_verify_create
+      description: |-
+        Takes a token and indicates if it is valid.  This view provides no
+        information about a token's fitness for a particular use.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenVerifyRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenVerifyRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenVerifyRequest'
+        required: true
+      responses:
+        '200':
+          description: No response body
+  /api/farms/:
+    get:
+      operationId: farms_list
+      description: |-
+        GET  /api/farms/ — farms this user belongs to, archived ones included
+        POST /api/farms/ — create a farm; the signal grants OWNER membership
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Farm'
+          description: ''
+    post:
+      operationId: farms_create
+      description: |-
+        GET  /api/farms/ — farms this user belongs to, archived ones included
+        POST /api/farms/ — create a farm; the signal grants OWNER membership
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FarmRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FarmRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FarmRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Farm'
+          description: ''
+  /api/farms/{farm_pk}/alerts/:
+    get:
+      operationId: farms_alerts_retrieve
+      description: |-
+        Standing conditions derived from live data — high mortality, an unbalanced feed ledger, a day not yet recorded, an approaching harvest, an expiring invitation, a recent correction.
+
+        Nothing is persisted. Each alert carries a stable `id` so the client can remember dismissals, and an `audience` — the list is already filtered to the caller's role before it is returned. `link` omits the role prefix; the client prepends it.
+      summary: Computed alerts for the notification bell
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Analytics
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/analytics/batches/{batch_pk}/growth/:
+    get:
+      operationId: farms_analytics_batches_growth_retrieve
+      description: GET /api/farms/<farm_pk>/analytics/batches/<batch_pk>/growth/
+      summary: Growth curve — weight samples over time
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Analytics
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/analytics/batches/{batch_pk}/mortality/:
+    get:
+      operationId: farms_analytics_batches_mortality_retrieve
+      description: |-
+        Daily deaths for one batch, split by cause, with a running cumulative rate.
+
+        **Gaps are real.** A day with no record is absent from `points` — it is not filled with zero, because 'nobody recorded' is a different claim from 'no birds died'. Render the gap.
+
+        **`was_corrected`** marks days a manager amended after the 24-hour lock. Flag these visually.
+      summary: CHART 1 — mortality over time
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Analytics
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/analytics/dashboard/:
+    get:
+      operationId: farms_analytics_dashboard_retrieve
+      description: Single call for the landing screen — active batches, bird counts,
+        feed balance, and lifetime FCR. Avoids four round trips on mobile.
+      summary: Farm dashboard rollup
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Analytics
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/analytics/fcr/:
+    get:
+      operationId: farms_analytics_fcr_retrieve
+      description: |-
+        FCR = feed consumed (kg) / live weight produced (kg). Lower is better; 1.5–1.8 is typical for well-run broilers.
+
+        **Harvested batches only.** Active batches have no weight denominator and terminated batches never reached a production outcome. The `excluded` block reports how many were left out and why — surface this so the chart never silently under-reports.
+      summary: CHART 2 — feed conversion ratio by batch
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Analytics
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/analytics/mortality-comparison/:
+    get:
+      operationId: farms_analytics_mortality_comparison_retrieve
+      description: GET /api/farms/<farm_pk>/analytics/mortality-comparison/?status=ACTIVE
+      summary: Mortality rates across batches
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: 'Filter: ACTIVE, HARVESTED, or TERMINATED.'
+      tags:
+      - Analytics
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/analytics/profitability/:
+    get:
+      operationId: farms_analytics_profitability_retrieve
+      description: |-
+        Revenue against apportioned feed cost.
+
+        **This is feed margin, not net profit.** Feed cost is allocated using the farm's average cost per kg — it is not a traced expense. Chicks, labour, utilities, medication, and depreciation are excluded. The `methodology` block in the response states this; display it.
+
+        **`null` is not zero.** A batch with no recorded sale price returns `revenue: null` and `feed_margin: null`. Render as 'not recorded', never as ₱0.
+      summary: CHART 3 — feed margin by batch (owner/manager only)
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Analytics
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/archive/:
+    post:
+      operationId: farms_archive_create
+      description: POST /api/farms/<farm_pk>/archive/ — close to new data, keep history.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/batches/:
+    get:
+      operationId: farms_batches_list
+      description: |-
+        GET  /api/farms/<farm_pk>/batches/?status=ACTIVE&house=<id>
+        POST /api/farms/<farm_pk>/batches/  — placement, owner/manager only
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Batch'
+          description: ''
+    post:
+      operationId: farms_batches_create
+      description: |-
+        GET  /api/farms/<farm_pk>/batches/?status=ACTIVE&house=<id>
+        POST /api/farms/<farm_pk>/batches/  — placement, owner/manager only
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BatchCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BatchCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchCreate'
+          description: ''
+  /api/farms/{farm_pk}/batches/{batch_pk}/close/:
+    post:
+      operationId: farms_batches_close_create
+      description: |-
+        POST /api/farms/<farm_pk>/batches/<batch_pk>/close/
+
+        Marks the batch HARVESTED, frees the house, and writes the Harvest
+        record with totals summed from every sale event. Takes only
+        closing_notes and an optional principal buyer_link. Refuses a batch
+        with no sale events.
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/batches/{batch_pk}/corrections/:
+    get:
+      operationId: farms_batches_corrections_list
+      description: |-
+        GET /api/farms/<farm_pk>/batches/<batch_pk>/corrections/
+
+        Readable by every member — a worker should know when their entry was
+        overwritten, and by whom.
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecordCorrection'
+          description: ''
+  /api/farms/{farm_pk}/batches/{batch_pk}/daily-records/:
+    get:
+      operationId: farms_batches_daily_records_list
+      description: |-
+        GET  /api/farms/<farm_pk>/batches/<batch_pk>/daily-records/
+        POST /api/farms/<farm_pk>/batches/<batch_pk>/daily-records/
+
+        The worker's primary write path.
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DailyRecord'
+          description: ''
+    post:
+      operationId: farms_batches_daily_records_create
+      description: |-
+        GET  /api/farms/<farm_pk>/batches/<batch_pk>/daily-records/
+        POST /api/farms/<farm_pk>/batches/<batch_pk>/daily-records/
+
+        The worker's primary write path.
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyRecordRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DailyRecordRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DailyRecordRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyRecord'
+          description: ''
+  /api/farms/{farm_pk}/batches/{batch_pk}/daily-records/{id}/:
+    get:
+      operationId: farms_batches_daily_records_retrieve
+      description: |-
+        GET / PATCH /api/farms/<farm_pk>/batches/<batch_pk>/daily-records/<pk>/
+
+        PATCH is refused by the serializer once the 24-hour window closes.
+        No DELETE — a recorded day is not removable.
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyRecord'
+          description: ''
+    put:
+      operationId: farms_batches_daily_records_update
+      description: |-
+        GET / PATCH /api/farms/<farm_pk>/batches/<batch_pk>/daily-records/<pk>/
+
+        PATCH is refused by the serializer once the 24-hour window closes.
+        No DELETE — a recorded day is not removable.
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyRecordRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DailyRecordRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DailyRecordRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyRecord'
+          description: ''
+    patch:
+      operationId: farms_batches_daily_records_partial_update
+      description: |-
+        GET / PATCH /api/farms/<farm_pk>/batches/<batch_pk>/daily-records/<pk>/
+
+        PATCH is refused by the serializer once the 24-hour window closes.
+        No DELETE — a recorded day is not removable.
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDailyRecordRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDailyRecordRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDailyRecordRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyRecord'
+          description: ''
+  /api/farms/{farm_pk}/batches/{batch_pk}/daily-records/{id}/correct/:
+    post:
+      operationId: farms_batches_daily_records_correct_create
+      description: |-
+        POST /api/farms/<farm_pk>/batches/<batch_pk>/daily-records/<pk>/correct/
+
+        The legitimate front door around the 24-hour lock. Every use writes a
+        permanent, immutable log entry naming who, what, and why.
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/batches/{batch_pk}/daily-records/bulk-sync/:
+    post:
+      operationId: farms_batches_daily_records_bulk_sync_create
+      description: |-
+        Upload a backlog of daily records in one request, for devices returning from a dead zone.
+
+        **Idempotent.** Supply the client-generated UUID as `id`. Re-syncing a day that already exists overwrites it, provided it is still inside the 24-hour window.
+
+        **Partial success is normal.** Each record is written in its own savepoint, so one bad row does not reject the rest. A `207 Multi-Status` means some records failed — read `failed[]` for which and why, and retry only those. `200` means all landed.
+
+        **Limits.** Maximum 60 records per request. Duplicate dates within one payload are rejected outright with a 400.
+      summary: Offline bulk sync — daily records
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Production
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyRecordBulkSyncRequest'
+            examples:
+              ThreeDaysOfBacklog:
+                value:
+                  records:
+                  - id: 9f1c2e4a-1b3d-4f5a-8c9e-0a1b2c3d4e5f
+                    record_date: '2026-08-19'
+                    mortality_disease: 4
+                    mortality_heat: 0
+                    mortality_culled: 2
+                    mortality_unknown: 0
+                    feed_kg: '312.50'
+                    recorded_at: '2026-08-19T06:15:00+08:00'
+                summary: Three days of backlog
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DailyRecordBulkSyncRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DailyRecordBulkSyncRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/batches/{batch_pk}/harvest/detail/:
+    get:
+      operationId: farms_batches_harvest_detail_retrieve
+      description: GET /api/farms/<farm_pk>/batches/<batch_pk>/harvest/detail/
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Harvest'
+          description: ''
+  /api/farms/{farm_pk}/batches/{batch_pk}/sales/:
+    get:
+      operationId: farms_batches_sales_list
+      description: |-
+        GET  /api/farms/<farm_pk>/batches/<batch_pk>/sales/
+        POST /api/farms/<farm_pk>/batches/<batch_pk>/sales/
+
+        Owner and manager write; every member reads. A worker records mortality
+        and feed, not sales. Idempotent: a POST whose client-generated `id`
+        already exists is a retry, routed through the serializer's update()
+        (which enforces the 24-hour lock) and returns 200 — mirroring
+        DailyRecordListCreateView. No same-date conflict branch: a sale is an
+        event, and several sales in one day are legitimate.
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SaleEvent'
+          description: ''
+    post:
+      operationId: farms_batches_sales_create
+      description: |-
+        GET  /api/farms/<farm_pk>/batches/<batch_pk>/sales/
+        POST /api/farms/<farm_pk>/batches/<batch_pk>/sales/
+
+        Owner and manager write; every member reads. A worker records mortality
+        and feed, not sales. Idempotent: a POST whose client-generated `id`
+        already exists is a retry, routed through the serializer's update()
+        (which enforces the 24-hour lock) and returns 200 — mirroring
+        DailyRecordListCreateView. No same-date conflict branch: a sale is an
+        event, and several sales in one day are legitimate.
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaleEventRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SaleEventRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SaleEventRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaleEvent'
+          description: ''
+  /api/farms/{farm_pk}/batches/{batch_pk}/sales/{id}/:
+    get:
+      operationId: farms_batches_sales_retrieve
+      description: |-
+        GET / PATCH /api/farms/<farm_pk>/batches/<batch_pk>/sales/<pk>/
+
+        PATCH is refused by the serializer once the 24-hour window closes.
+        No DELETE — a recorded sale is not removable.
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaleEvent'
+          description: ''
+    put:
+      operationId: farms_batches_sales_update
+      description: |-
+        GET / PATCH /api/farms/<farm_pk>/batches/<batch_pk>/sales/<pk>/
+
+        PATCH is refused by the serializer once the 24-hour window closes.
+        No DELETE — a recorded sale is not removable.
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaleEventRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SaleEventRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SaleEventRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaleEvent'
+          description: ''
+    patch:
+      operationId: farms_batches_sales_partial_update
+      description: |-
+        GET / PATCH /api/farms/<farm_pk>/batches/<batch_pk>/sales/<pk>/
+
+        PATCH is refused by the serializer once the 24-hour window closes.
+        No DELETE — a recorded sale is not removable.
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSaleEventRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSaleEventRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSaleEventRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaleEvent'
+          description: ''
+  /api/farms/{farm_pk}/batches/{batch_pk}/sales/{sale_pk}/payments/:
+    get:
+      operationId: farms_batches_sales_payments_list
+      description: |-
+        GET  /api/farms/<farm_pk>/batches/<batch_pk>/sales/<sale_pk>/payments/
+        POST /api/farms/<farm_pk>/batches/<batch_pk>/sales/<sale_pk>/payments/
+
+        Owner and manager write — the owner was explicit that confirming a
+        payment is the owner/manager's job, not the buyer's. Every farm member
+        reads, same split as the sale itself. No update or delete view exists
+        for this model anywhere: a payment row is permanent once written, and
+        a mistake is corrected with a reversing entry instead.
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: sale_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Payment'
+          description: ''
+    post:
+      operationId: farms_batches_sales_payments_create
+      description: |-
+        GET  /api/farms/<farm_pk>/batches/<batch_pk>/sales/<sale_pk>/payments/
+        POST /api/farms/<farm_pk>/batches/<batch_pk>/sales/<sale_pk>/payments/
+
+        Owner and manager write — the owner was explicit that confirming a
+        payment is the owner/manager's job, not the buyer's. Every farm member
+        reads, same split as the sale itself. No update or delete view exists
+        for this model anywhere: a payment row is permanent once written, and
+        a mistake is corrected with a reversing entry instead.
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: sale_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+          description: ''
+  /api/farms/{farm_pk}/batches/{batch_pk}/sales/bulk-sync/:
+    post:
+      operationId: farms_batches_sales_bulk_sync_create
+      description: |-
+        Upload a backlog of sale events in one request, for a phone returning from the yard.
+
+        **Idempotent.** Supply the client-generated UUID as `id`. Re-syncing a sale that already exists overwrites it, provided it is still inside the 24-hour window.
+
+        **An event, not a daily record.** Several sales on one date are fine — each row is keyed only by `id`.
+
+        **Partial success is normal.** `207 Multi-Status` means some rows failed — read `failed[]` (each carries its `id`) and retry only those. Maximum 60 records per request.
+      summary: Offline bulk sync — sale events
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Production
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaleEventBulkSyncRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SaleEventBulkSyncRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SaleEventBulkSyncRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/batches/{batch_pk}/weights/:
+    get:
+      operationId: farms_batches_weights_list
+      description: GET / POST /api/farms/<farm_pk>/batches/<batch_pk>/weights/
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WeightSample'
+          description: ''
+    post:
+      operationId: farms_batches_weights_create
+      description: GET / POST /api/farms/<farm_pk>/batches/<batch_pk>/weights/
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WeightSampleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/WeightSampleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/WeightSampleRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeightSample'
+          description: ''
+  /api/farms/{farm_pk}/batches/{batch_pk}/weights/{id}/:
+    get:
+      operationId: farms_batches_weights_retrieve
+      description: GET / PATCH /api/farms/<farm_pk>/batches/<batch_pk>/weights/<pk>/
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeightSample'
+          description: ''
+    put:
+      operationId: farms_batches_weights_update
+      description: GET / PATCH /api/farms/<farm_pk>/batches/<batch_pk>/weights/<pk>/
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WeightSampleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/WeightSampleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/WeightSampleRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeightSample'
+          description: ''
+    patch:
+      operationId: farms_batches_weights_partial_update
+      description: GET / PATCH /api/farms/<farm_pk>/batches/<batch_pk>/weights/<pk>/
+      parameters:
+      - in: path
+        name: batch_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedWeightSampleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedWeightSampleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedWeightSampleRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeightSample'
+          description: ''
+  /api/farms/{farm_pk}/batches/{id}/:
+    get:
+      operationId: farms_batches_retrieve
+      description: GET /api/farms/<farm_pk>/batches/<pk>/ — readable by any member.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Batch'
+          description: ''
+  /api/farms/{farm_pk}/batches/{id}/terminate/:
+    post:
+      operationId: farms_batches_terminate_create
+      description: |-
+        POST /api/farms/<farm_pk>/batches/<pk>/terminate/
+
+        Closes a batch without a harvest — disease wipeout, or a batch that
+        should never have existed. Distinct from HARVESTED so the analytics can
+        exclude it from FCR averages, and documented so that exclusion is
+        always accountable.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/corrections/:
+    get:
+      operationId: farms_corrections_list
+      description: GET /api/farms/<farm_pk>/corrections/ — farm-wide audit view.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecordCorrection'
+          description: ''
+  /api/farms/{farm_pk}/feed-deliveries/:
+    get:
+      operationId: farms_feed_deliveries_list
+      description: |-
+        GET  /api/farms/<farm_pk>/feed-deliveries/
+        POST /api/farms/<farm_pk>/feed-deliveries/  — owner/manager only
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeedDelivery'
+          description: ''
+    post:
+      operationId: farms_feed_deliveries_create
+      description: |-
+        GET  /api/farms/<farm_pk>/feed-deliveries/
+        POST /api/farms/<farm_pk>/feed-deliveries/  — owner/manager only
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedDeliveryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FeedDeliveryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FeedDeliveryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedDelivery'
+          description: ''
+  /api/farms/{farm_pk}/feed-deliveries/with-stock/:
+    post:
+      operationId: farms_feed_deliveries_with_stock_create
+      description: |-
+        POST /api/farms/<farm_pk>/feed-deliveries/with-stock/
+
+        One delivery, two records. A feed delivery is a FeedDelivery (per farm,
+        feeds cost analysis and feed margin) and — when it names a tracked feed
+        item — also an InventoryStockIn (per item, feeds the balance).
+        FeedDeliverySerializer.create() (via record_feed_delivery) does both
+        writes in one transaction: if the stock-in fails, the delivery rolls
+        back with it and a resubmit cannot double-count the cost.
+
+        Equivalent to a plain POST /feed-deliveries/ with an inventory_item —
+        kept as its own endpoint so the response can echo back the stock-in
+        that was created alongside it.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/feed-stock/:
+    get:
+      operationId: farms_feed_stock_retrieve
+      description: |-
+        GET /api/farms/<farm_pk>/feed-stock/
+
+        Farm-level balance: everything delivered minus everything consumed
+        across all batches. Per the earlier ruling we do not trace individual
+        sacks to individual houses, so this is a running total, not a ledger.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/houses/:
+    get:
+      operationId: farms_houses_list
+      description: |-
+        GET  /api/farms/<farm_pk>/houses/?include_archived=true
+        POST /api/farms/<farm_pk>/houses/  — owner/manager only
+
+        Archived houses are left out by default — the house picker, the daily
+        recording flow and staff assignment all go through this same list, so
+        excluding them here is what keeps an archived house out of all three
+        at once. The frontend's "Show archived houses" toggle is what sends
+        ?include_archived=true to see them again (for restoring one, or just
+        reviewing what used to be there).
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/House'
+          description: ''
+    post:
+      operationId: farms_houses_create
+      description: |-
+        GET  /api/farms/<farm_pk>/houses/?include_archived=true
+        POST /api/farms/<farm_pk>/houses/  — owner/manager only
+
+        Archived houses are left out by default — the house picker, the daily
+        recording flow and staff assignment all go through this same list, so
+        excluding them here is what keeps an archived house out of all three
+        at once. The frontend's "Show archived houses" toggle is what sends
+        ?include_archived=true to see them again (for restoring one, or just
+        reviewing what used to be there).
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/HouseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/HouseRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/House'
+          description: ''
+  /api/farms/{farm_pk}/houses/{id}/:
+    get:
+      operationId: farms_houses_retrieve
+      description: GET / PATCH /api/farms/<farm_pk>/houses/<pk>/
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/House'
+          description: ''
+    put:
+      operationId: farms_houses_update
+      description: GET / PATCH /api/farms/<farm_pk>/houses/<pk>/
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/HouseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/HouseRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/House'
+          description: ''
+    patch:
+      operationId: farms_houses_partial_update
+      description: GET / PATCH /api/farms/<farm_pk>/houses/<pk>/
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedHouseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedHouseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedHouseRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/House'
+          description: ''
+  /api/farms/{farm_pk}/houses/{id}/archive/:
+    post:
+      operationId: farms_houses_archive_create
+      description: |-
+        POST /api/farms/<farm_pk>/houses/<pk>/archive/ — owner only.
+
+        Refuses a house with an active (not closed) batch: the farm's current
+        occupancy picture would otherwise lose a house mid-cycle. Harvest the
+        batch first, then archive.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/houses/{id}/restore/:
+    post:
+      operationId: farms_houses_restore_create
+      description: POST /api/farms/<farm_pk>/houses/<pk>/restore/ — owner only.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/inventory/items/:
+    get:
+      operationId: farms_inventory_items_list
+      description: |-
+        GET  /api/farms/<farm_pk>/inventory/items/   — any active member
+        POST /api/farms/<farm_pk>/inventory/items/   — owner/manager only
+
+        CanManageInventory leaves reads open (empty read_roles), so a worker
+        can still fetch the list to pick an item to log usage against.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InventoryItem'
+          description: ''
+    post:
+      operationId: farms_inventory_items_create
+      description: |-
+        GET  /api/farms/<farm_pk>/inventory/items/   — any active member
+        POST /api/farms/<farm_pk>/inventory/items/   — owner/manager only
+
+        CanManageInventory leaves reads open (empty read_roles), so a worker
+        can still fetch the list to pick an item to log usage against.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryItemRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InventoryItemRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InventoryItemRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+          description: ''
+  /api/farms/{farm_pk}/inventory/items/{item_pk}/stock-ins/:
+    get:
+      operationId: farms_inventory_items_stock_ins_list
+      description: |-
+        GET  /api/farms/<farm_pk>/inventory/items/<item_pk>/stock-ins/
+        POST /api/farms/<farm_pk>/inventory/items/<item_pk>/stock-ins/  — owner/manager
+
+        Stock-in is the in-flow the balance is computed from. Without it the
+        balance only ever falls, goes negative, and the low-stock alert sticks.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: item_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InventoryStockIn'
+          description: ''
+    post:
+      operationId: farms_inventory_items_stock_ins_create
+      description: |-
+        GET  /api/farms/<farm_pk>/inventory/items/<item_pk>/stock-ins/
+        POST /api/farms/<farm_pk>/inventory/items/<item_pk>/stock-ins/  — owner/manager
+
+        Stock-in is the in-flow the balance is computed from. Without it the
+        balance only ever falls, goes negative, and the low-stock alert sticks.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: item_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryStockInRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InventoryStockInRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InventoryStockInRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryStockIn'
+          description: ''
+  /api/farms/{farm_pk}/inventory/items/{id}/:
+    get:
+      operationId: farms_inventory_items_retrieve
+      description: GET / PATCH /api/farms/<farm_pk>/inventory/items/<pk>/ — owner/manager
+        to write.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+          description: ''
+    put:
+      operationId: farms_inventory_items_update
+      description: GET / PATCH /api/farms/<farm_pk>/inventory/items/<pk>/ — owner/manager
+        to write.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryItemRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InventoryItemRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InventoryItemRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+          description: ''
+    patch:
+      operationId: farms_inventory_items_partial_update
+      description: GET / PATCH /api/farms/<farm_pk>/inventory/items/<pk>/ — owner/manager
+        to write.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedInventoryItemRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedInventoryItemRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedInventoryItemRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+          description: ''
+  /api/farms/{farm_pk}/inventory/usage/:
+    get:
+      operationId: farms_inventory_usage_list
+      description: |-
+        GET  /api/farms/<farm_pk>/inventory/usage/            — any active member
+        POST /api/farms/<farm_pk>/inventory/usage/            — workers included
+
+        The worker's write path. Idempotent: a POST whose client-generated `id`
+        already exists is a retry, not a new event — it is routed through the
+        serializer's update() (which enforces the 24-hour lock) and returns
+        200, mirroring DailyRecordListCreateView. There is no same-date
+        conflict branch — a usage log is an event, and two events on one day
+        are legitimate.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InventoryUsageLog'
+          description: ''
+    post:
+      operationId: farms_inventory_usage_create
+      description: |-
+        GET  /api/farms/<farm_pk>/inventory/usage/            — any active member
+        POST /api/farms/<farm_pk>/inventory/usage/            — workers included
+
+        The worker's write path. Idempotent: a POST whose client-generated `id`
+        already exists is a retry, not a new event — it is routed through the
+        serializer's update() (which enforces the 24-hour lock) and returns
+        200, mirroring DailyRecordListCreateView. There is no same-date
+        conflict branch — a usage log is an event, and two events on one day
+        are legitimate.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryUsageLogRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InventoryUsageLogRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InventoryUsageLogRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryUsageLog'
+          description: ''
+  /api/farms/{farm_pk}/inventory/usage/{id}/:
+    get:
+      operationId: farms_inventory_usage_retrieve
+      description: |-
+        GET / PATCH /api/farms/<farm_pk>/inventory/usage/<pk>/
+
+        PATCH is refused by the serializer once the 24-hour window closes.
+        No DELETE — a recorded event is not removable.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryUsageLog'
+          description: ''
+    put:
+      operationId: farms_inventory_usage_update
+      description: |-
+        GET / PATCH /api/farms/<farm_pk>/inventory/usage/<pk>/
+
+        PATCH is refused by the serializer once the 24-hour window closes.
+        No DELETE — a recorded event is not removable.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryUsageLogRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InventoryUsageLogRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InventoryUsageLogRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryUsageLog'
+          description: ''
+    patch:
+      operationId: farms_inventory_usage_partial_update
+      description: |-
+        GET / PATCH /api/farms/<farm_pk>/inventory/usage/<pk>/
+
+        PATCH is refused by the serializer once the 24-hour window closes.
+        No DELETE — a recorded event is not removable.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedInventoryUsageLogRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedInventoryUsageLogRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedInventoryUsageLogRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryUsageLog'
+          description: ''
+  /api/farms/{farm_pk}/inventory/usage/bulk-sync/:
+    post:
+      operationId: farms_inventory_usage_bulk_sync_create
+      description: |-
+        Upload a backlog of usage events in one request.
+
+        **Idempotent.** Supply the client-generated UUID as `id`. Re-syncing an event that already exists overwrites it, provided it is still inside the 24-hour window.
+
+        **An event, not a daily record.** The same item may appear more than once — each row is its own event, keyed only by `id`. There is no per-day uniqueness.
+
+        **Partial success is normal.** `207 Multi-Status` means some rows failed — read `failed[]` (each carries the offending `id`) and retry only those. Maximum 60 records per request.
+      summary: Offline bulk sync — inventory usage logs
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Production
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryUsageBulkSyncRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InventoryUsageBulkSyncRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InventoryUsageBulkSyncRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/invitations/:
+    get:
+      operationId: farms_invitations_list
+      description: |-
+        GET  /api/farms/<farm_pk>/invitations/  — list this farm's invitations
+        POST /api/farms/<farm_pk>/invitations/  — issue one
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InvitationRead'
+          description: ''
+    post:
+      operationId: farms_invitations_create
+      description: |-
+        GET  /api/farms/<farm_pk>/invitations/  — list this farm's invitations
+        POST /api/farms/<farm_pk>/invitations/  — issue one
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InvitationCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InvitationCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationCreateResponse'
+          description: ''
+  /api/farms/{farm_pk}/invitations/{id}/revoke/:
+    post:
+      operationId: farms_invitations_revoke_create
+      description: |-
+        POST /api/farms/<farm_pk>/invitations/<pk>/revoke/
+
+        Undo a mistyped or misdirected invitation. The partial unique
+        constraint on (phone_number, farm) WHERE status='PENDING' blocks
+        re-inviting the correct number until the bad row leaves PENDING, so
+        without this the fix is a seven-day wait for it to expire.
+
+        Same authority as issuing one: a manager can revoke a worker
+        invitation but not a manager-level one; the owner can revoke any.
+
+        That distinction is enforced here against the invitation's stored
+        membership_role, not against anything in the request body. The old
+        approach reused CanInviteRole, which reads membership_role from the
+        body — so a manager could revoke a MANAGER-level invitation by
+        sending {"membership_role": "WORKER"}, since the check never looked
+        at the invitation being targeted.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/members/:
+    get:
+      operationId: farms_members_list
+      description: GET /api/farms/<farm_pk>/members/ — the farm's roster.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FarmMembership'
+          description: ''
+  /api/farms/{farm_pk}/members/{id}/houses/:
+    patch:
+      operationId: farms_members_houses_partial_update
+      description: |-
+        PATCH /api/farms/<farm_pk>/members/<pk>/houses/
+
+        Set which houses a member may record against. Owner/manager only — a
+        worker must not be able to assign themselves houses, which is why this
+        is a dedicated endpoint rather than general membership editing.
+
+        Body: {"houses": [<house id>, ...]}. An empty list clears the
+        restriction (the member may then record against any house).
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/members/{id}/revoke/:
+    post:
+      operationId: farms_members_revoke_create
+      description: |-
+        POST /api/farms/<farm_pk>/members/<pk>/revoke/
+
+        Soft revocation — the row survives so historical records still resolve
+        to a person who demonstrably had access at the time.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/ownership-history/:
+    get:
+      operationId: farms_ownership_history_list
+      description: |-
+        GET /api/farms/<farm_pk>/ownership-history/
+
+        Owner-only: the ledger names prior owners, which is not roster
+        information a worker needs.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FarmOwnershipHistory'
+          description: ''
+  /api/farms/{farm_pk}/partners/:
+    get:
+      operationId: farms_partners_list
+      description: |-
+        GET  /api/farms/<farm_pk>/partners/ — this farm's consumer directory
+        POST /api/farms/<farm_pk>/partners/ — invite a new partner
+
+        Owner and manager both permitted: unlike manager promotion, adding a
+        consumer grants no authority over the farm, so it needs no owner gate.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FarmPartnerLink'
+          description: ''
+    post:
+      operationId: farms_partners_create
+      description: |-
+        GET  /api/farms/<farm_pk>/partners/ — this farm's consumer directory
+        POST /api/farms/<farm_pk>/partners/ — invite a new partner
+
+        Owner and manager both permitted: unlike manager promotion, adding a
+        consumer grants no authority over the farm, so it needs no owner gate.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerInvitationCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PartnerInvitationCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PartnerInvitationCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerInvitationCreate'
+          description: ''
+  /api/farms/{farm_pk}/partners/{id}/unlink/:
+    post:
+      operationId: farms_partners_unlink_create
+      description: |-
+        POST /api/farms/<farm_pk>/partners/<pk>/unlink/
+
+        Soft — the relationship ends, the record of it having existed does not.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/reactivate/:
+    post:
+      operationId: farms_reactivate_create
+      description: |-
+        POST /api/farms/<farm_pk>/reactivate/
+
+        Deliberately NOT farm-scoped: FarmScopedPermission blocks writes to
+        archived farms, so a scoped permission could never let an owner
+        un-archive one. Ownership is verified directly here instead.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/reports/daily-records.csv:
+    get:
+      operationId: farms_reports_daily_records.csv_retrieve
+      description: GET /api/farms/<farm_pk>/reports/daily-records.csv?from=&to=&batch=
+      summary: Daily records — CSV export
+      parameters:
+      - in: query
+        name: batch
+        schema:
+          type: string
+          format: uuid
+        description: Restrict to one batch.
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: from
+        schema:
+          type: string
+          format: date
+        description: Inclusive start date (YYYY-MM-DD).
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date
+        description: Inclusive end date (YYYY-MM-DD).
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/farms/{farm_pk}/reports/daily-records.xlsx:
+    get:
+      operationId: farms_reports_daily_records.xlsx_retrieve
+      description: GET /api/farms/<farm_pk>/reports/daily-records.xlsx?from=&to=&batch=
+      summary: Daily records — XLSX export
+      parameters:
+      - in: query
+        name: batch
+        schema:
+          type: string
+          format: uuid
+        description: Restrict to one batch.
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: from
+        schema:
+          type: string
+          format: date
+        description: Inclusive start date (YYYY-MM-DD).
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date
+        description: Inclusive end date (YYYY-MM-DD).
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/farms/{farm_pk}/reports/fcr.csv:
+    get:
+      operationId: farms_reports_fcr.csv_retrieve
+      description: GET /api/farms/<farm_pk>/reports/fcr.csv
+      summary: Feed conversion ratio — CSV export
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/farms/{farm_pk}/reports/fcr.xlsx:
+    get:
+      operationId: farms_reports_fcr.xlsx_retrieve
+      description: GET /api/farms/<farm_pk>/reports/fcr.xlsx
+      summary: Feed conversion ratio — XLSX export
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/farms/{farm_pk}/reports/feed-margin.csv:
+    get:
+      operationId: farms_reports_feed_margin.csv_retrieve
+      description: GET /api/farms/<farm_pk>/reports/feed-margin.csv
+      summary: Feed margin by batch — CSV export
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/farms/{farm_pk}/reports/feed-margin.xlsx:
+    get:
+      operationId: farms_reports_feed_margin.xlsx_retrieve
+      description: GET /api/farms/<farm_pk>/reports/feed-margin.xlsx
+      summary: Feed margin by batch — XLSX export
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/farms/{farm_pk}/reports/inventory-usage.csv:
+    get:
+      operationId: farms_reports_inventory_usage.csv_retrieve
+      description: GET /api/farms/<farm_pk>/reports/inventory-usage.csv?from=&to=&item=
+      summary: Inventory usage — CSV export
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: from
+        schema:
+          type: string
+          format: date
+        description: Inclusive start date (YYYY-MM-DD).
+      - in: query
+        name: item
+        schema:
+          type: integer
+        description: Restrict to one inventory item (its id).
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date
+        description: Inclusive end date (YYYY-MM-DD).
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/farms/{farm_pk}/reports/inventory-usage.xlsx:
+    get:
+      operationId: farms_reports_inventory_usage.xlsx_retrieve
+      description: GET /api/farms/<farm_pk>/reports/inventory-usage.xlsx?from=&to=&item=
+      summary: Inventory usage — XLSX export
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: from
+        schema:
+          type: string
+          format: date
+        description: Inclusive start date (YYYY-MM-DD).
+      - in: query
+        name: item
+        schema:
+          type: integer
+        description: Restrict to one inventory item (its id).
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date
+        description: Inclusive end date (YYYY-MM-DD).
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/farms/{farm_pk}/reports/mortality-summary.csv:
+    get:
+      operationId: farms_reports_mortality_summary.csv_retrieve
+      description: GET /api/farms/<farm_pk>/reports/mortality-summary.csv?from=&to=
+      summary: Mortality summary by batch — CSV export
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: from
+        schema:
+          type: string
+          format: date
+        description: Inclusive start date (YYYY-MM-DD).
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date
+        description: Inclusive end date (YYYY-MM-DD).
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/farms/{farm_pk}/reports/mortality-summary.xlsx:
+    get:
+      operationId: farms_reports_mortality_summary.xlsx_retrieve
+      description: GET /api/farms/<farm_pk>/reports/mortality-summary.xlsx?from=&to=
+      summary: Mortality summary by batch — XLSX export
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: from
+        schema:
+          type: string
+          format: date
+        description: Inclusive start date (YYYY-MM-DD).
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date
+        description: Inclusive end date (YYYY-MM-DD).
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/farms/{farm_pk}/reports/routine-completion.csv:
+    get:
+      operationId: farms_reports_routine_completion.csv_retrieve
+      description: GET /api/farms/<farm_pk>/reports/routine-completion.csv?from=&to=&house=
+      summary: Routine completion — CSV export
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: from
+        schema:
+          type: string
+          format: date
+        description: Inclusive start date (YYYY-MM-DD).
+      - in: query
+        name: house
+        schema:
+          type: integer
+        description: Restrict to one house (its id).
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date
+        description: Inclusive end date (YYYY-MM-DD).
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/farms/{farm_pk}/reports/routine-completion.xlsx:
+    get:
+      operationId: farms_reports_routine_completion.xlsx_retrieve
+      description: GET /api/farms/<farm_pk>/reports/routine-completion.xlsx?from=&to=&house=
+      summary: Routine completion — XLSX export
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: from
+        schema:
+          type: string
+          format: date
+        description: Inclusive start date (YYYY-MM-DD).
+      - in: query
+        name: house
+        schema:
+          type: integer
+        description: Restrict to one house (its id).
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date
+        description: Inclusive end date (YYYY-MM-DD).
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/farms/{farm_pk}/reports/sales-history.csv:
+    get:
+      operationId: farms_reports_sales_history.csv_retrieve
+      description: GET /api/farms/<farm_pk>/reports/sales-history.csv?from=&to=
+      summary: Sales history — CSV export
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: from
+        schema:
+          type: string
+          format: date
+        description: Inclusive start date (YYYY-MM-DD).
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date
+        description: Inclusive end date (YYYY-MM-DD).
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/farms/{farm_pk}/reports/sales-history.xlsx:
+    get:
+      operationId: farms_reports_sales_history.xlsx_retrieve
+      description: GET /api/farms/<farm_pk>/reports/sales-history.xlsx?from=&to=
+      summary: Sales history — XLSX export
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: from
+        schema:
+          type: string
+          format: date
+        description: Inclusive start date (YYYY-MM-DD).
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date
+        description: Inclusive end date (YYYY-MM-DD).
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/farms/{farm_pk}/tasks/completions/:
+    get:
+      operationId: farms_tasks_completions_list
+      description: |-
+        GET  /api/farms/<farm_pk>/tasks/completions/?date=YYYY-MM-DD  — defaults to today
+        POST /api/farms/<farm_pk>/tasks/completions/                  — workers included
+
+        Idempotent, mirroring InventoryUsageListCreateView: a POST whose
+        client-generated `id` already exists routes through the serializer's
+        update() and returns 200. Unlike the daily-record path, a POST whose
+        id is new but whose (template, date, house) is already taken is
+        ABSORBED — the existing completion is returned with a 200 — because a
+        completion has no content to merge and a shed's routine item is simply
+        done.
+
+        A worker may only tick for a house they may write to
+        (FarmMembership.may_write_to_house — the same rule as daily records).
+        That check is here on the single-POST path; the bulk-sync serializer
+        does it per record so a lost assignment lands in failed[] instead of
+        403-ing the whole backlog.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskCompletion'
+          description: ''
+    post:
+      operationId: farms_tasks_completions_create
+      description: |-
+        GET  /api/farms/<farm_pk>/tasks/completions/?date=YYYY-MM-DD  — defaults to today
+        POST /api/farms/<farm_pk>/tasks/completions/                  — workers included
+
+        Idempotent, mirroring InventoryUsageListCreateView: a POST whose
+        client-generated `id` already exists routes through the serializer's
+        update() and returns 200. Unlike the daily-record path, a POST whose
+        id is new but whose (template, date, house) is already taken is
+        ABSORBED — the existing completion is returned with a 200 — because a
+        completion has no content to merge and a shed's routine item is simply
+        done.
+
+        A worker may only tick for a house they may write to
+        (FarmMembership.may_write_to_house — the same rule as daily records).
+        That check is here on the single-POST path; the bulk-sync serializer
+        does it per record so a lost assignment lands in failed[] instead of
+        403-ing the whole backlog.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCompletionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TaskCompletionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TaskCompletionRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskCompletion'
+          description: ''
+  /api/farms/{farm_pk}/tasks/completions/{id}/:
+    get:
+      operationId: farms_tasks_completions_retrieve
+      description: |-
+        GET / DELETE /api/farms/<farm_pk>/tasks/completions/<pk>/
+
+        DELETE is the un-tick. Subject to the same 24-hour rule as editing any
+        field record: a worker who ticks the wrong item can undo it within the
+        day, after which it is locked and the response is a clean 400.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskCompletion'
+          description: ''
+    delete:
+      operationId: farms_tasks_completions_destroy
+      description: |-
+        GET / DELETE /api/farms/<farm_pk>/tasks/completions/<pk>/
+
+        DELETE is the un-tick. Subject to the same 24-hour rule as editing any
+        field record: a worker who ticks the wrong item can undo it within the
+        day, after which it is locked and the response is a clean 400.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/farms/{farm_pk}/tasks/completions/bulk-sync/:
+    post:
+      operationId: farms_tasks_completions_bulk_sync_create
+      description: |-
+        POST /api/farms/<farm_pk>/tasks/completions/bulk-sync/
+
+        Per-record outcomes in the same 207/failed[] shape as the daily-record
+        and inventory-usage bulk-sync paths.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/tasks/templates/:
+    get:
+      operationId: farms_tasks_templates_list
+      description: |-
+        GET  /api/farms/<farm_pk>/tasks/templates/         — any active member
+        POST /api/farms/<farm_pk>/tasks/templates/         — owner/manager only
+
+        CanManageRoutine leaves reads open, so a worker can fetch the routine
+        to know what to tick off.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskTemplate'
+          description: ''
+    post:
+      operationId: farms_tasks_templates_create
+      description: |-
+        GET  /api/farms/<farm_pk>/tasks/templates/         — any active member
+        POST /api/farms/<farm_pk>/tasks/templates/         — owner/manager only
+
+        CanManageRoutine leaves reads open, so a worker can fetch the routine
+        to know what to tick off.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskTemplateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TaskTemplateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TaskTemplateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskTemplate'
+          description: ''
+  /api/farms/{farm_pk}/tasks/templates/{id}/:
+    get:
+      operationId: farms_tasks_templates_retrieve
+      description: |-
+        GET / PATCH /api/farms/<farm_pk>/tasks/templates/<pk>/ — owner/manager to write.
+
+        No DELETE: TaskCompletion.template is PROTECT, and retiring an item is
+        what is_active is for — deactivating it hides it from tomorrow's
+        checklist without touching past completions.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskTemplate'
+          description: ''
+    put:
+      operationId: farms_tasks_templates_update
+      description: |-
+        GET / PATCH /api/farms/<farm_pk>/tasks/templates/<pk>/ — owner/manager to write.
+
+        No DELETE: TaskCompletion.template is PROTECT, and retiring an item is
+        what is_active is for — deactivating it hides it from tomorrow's
+        checklist without touching past completions.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskTemplateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TaskTemplateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TaskTemplateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskTemplate'
+          description: ''
+    patch:
+      operationId: farms_tasks_templates_partial_update
+      description: |-
+        GET / PATCH /api/farms/<farm_pk>/tasks/templates/<pk>/ — owner/manager to write.
+
+        No DELETE: TaskCompletion.template is PROTECT, and retiring an item is
+        what is_active is for — deactivating it hides it from tomorrow's
+        checklist without touching past completions.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTaskTemplateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTaskTemplateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTaskTemplateRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskTemplate'
+          description: ''
+  /api/farms/{farm_pk}/transfer-ownership/:
+    post:
+      operationId: farms_transfer_ownership_create
+      description: POST /api/farms/<farm_pk>/transfer-ownership/ — owner only.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{id}/:
+    get:
+      operationId: farms_retrieve
+      description: GET / PATCH /api/farms/<pk>/ — archived farms are read-only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Farm'
+          description: ''
+    put:
+      operationId: farms_update
+      description: GET / PATCH /api/farms/<pk>/ — archived farms are read-only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FarmRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FarmRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FarmRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Farm'
+          description: ''
+    patch:
+      operationId: farms_partial_update
+      description: GET / PATCH /api/farms/<pk>/ — archived farms are read-only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedFarmRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedFarmRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedFarmRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Farm'
+          description: ''
+  /api/invitations/accept/:
+    post:
+      operationId: invitations_accept_create
+      description: |-
+        POST /api/invitations/accept/
+
+        Public by necessity — the invitee has no account yet. The most exposed
+        surface in the system, hence the tightest anonymous throttle.
+      tags:
+      - invitations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationAcceptRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InvitationAcceptRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InvitationAcceptRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/partners/my-farms/:
+    get:
+      operationId: partners_my_farms_list
+      description: |-
+        GET /api/partners/my-farms/ — the partner's own view of who they work with.
+
+        Returns only the link records, never the farms' operational data.
+      tags:
+      - partners
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FarmPartnerLink'
+          description: ''
+  /api/partners/my-payments/:
+    get:
+      operationId: partners_my_payments_list
+      description: |-
+        GET /api/partners/my-payments/ — a buyer's view of payments they made.
+
+        Scoped to Payment rows whose buyer_link points at the requesting user.
+        A buyer sees only their own payments, never another buyer's, and
+        nothing about the sale's revenue or outstanding balance (that's the
+        farm's side of the ledger — see BuyerPaymentSerializer). Internal
+        staff have no buyer identity here, so they get an empty list rather
+        than a 403, same as MyPurchasesView and MyDeliveriesView.
+      tags:
+      - partners
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BuyerPayment'
+          description: ''
+  /api/partners/my-purchases/:
+    get:
+      operationId: partners_my_purchases_list
+      description: |-
+        GET /api/partners/my-purchases/ — a buyer's view of what farms recorded
+        selling them.
+
+        Scoped to Harvest rows whose buyer_link points at the requesting user.
+        A weight and delivery ledger only: no revenue (see BuyerPurchaseSerializer
+        for why), no farm annotations, nothing about mortality, feed, or FCR, and
+        never another buyer's rows. Internal staff have no buyer identity here, so
+        they get an empty list rather than a 403.
+      tags:
+      - partners
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BuyerPurchase'
+          description: ''
+components:
+  schemas:
+    AccountRoleEnum:
+      enum:
+      - OWNER
+      - MANAGER
+      - WORKER
+      - CONSUMER
+      type: string
+      description: |-
+        * `OWNER` - Farm Owner
+        * `MANAGER` - Farm Manager
+        * `WORKER` - Farm Worker
+        * `CONSUMER` - Consumer
+    Batch:
+      type: object
+      description: Read view. All derived metrics are computed, never stored.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        house:
+          type: integer
+        house_name:
+          type: string
+          readOnly: true
+        batch_code:
+          type: string
+          description: Human-facing, e.g. B-2026-03
+          maxLength: 50
+        breed:
+          type: string
+          maxLength: 100
+        initial_bird_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+        current_bird_count:
+          type: integer
+          readOnly: true
+        start_date:
+          type: string
+          format: date
+        expected_harvest_date:
+          type: string
+          format: date
+          nullable: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/BatchStatusEnum'
+          readOnly: true
+        termination_reason:
+          type: string
+          readOnly: true
+        terminated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        terminated_by_name:
+          type: string
+          readOnly: true
+        total_mortality:
+          type: integer
+          readOnly: true
+        total_feed_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+        total_birds_sold:
+          type: integer
+          readOnly: true
+        total_weight_sold_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        mortality_rate_pct:
+          type: string
+          readOnly: true
+        feed_conversion_ratio:
+          type: string
+          nullable: true
+          readOnly: true
+        age_days:
+          type: integer
+          readOnly: true
+        latest_weight_grams:
+          type: string
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - age_days
+      - batch_code
+      - created_at
+      - current_bird_count
+      - feed_conversion_ratio
+      - house
+      - house_name
+      - id
+      - initial_bird_count
+      - latest_weight_grams
+      - mortality_rate_pct
+      - start_date
+      - status
+      - terminated_at
+      - terminated_by_name
+      - termination_reason
+      - total_birds_sold
+      - total_feed_kg
+      - total_mortality
+      - total_weight_sold_kg
+    BatchCreate:
+      type: object
+      description: |-
+        Placement of a new cohort. Owner/manager only — bird counts and
+        expected revenue are business decisions, not data entry.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        house:
+          type: integer
+        batch_code:
+          type: string
+          description: Human-facing, e.g. B-2026-03
+          maxLength: 50
+        breed:
+          type: string
+          maxLength: 100
+        initial_bird_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+        start_date:
+          type: string
+          format: date
+        expected_harvest_date:
+          type: string
+          format: date
+          nullable: true
+      required:
+      - batch_code
+      - house
+      - id
+      - initial_bird_count
+      - start_date
+    BatchCreateRequest:
+      type: object
+      description: |-
+        Placement of a new cohort. Owner/manager only — bird counts and
+        expected revenue are business decisions, not data entry.
+      properties:
+        house:
+          type: integer
+        batch_code:
+          type: string
+          minLength: 1
+          description: Human-facing, e.g. B-2026-03
+          maxLength: 50
+        breed:
+          type: string
+          maxLength: 100
+        initial_bird_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+        start_date:
+          type: string
+          format: date
+        expected_harvest_date:
+          type: string
+          format: date
+          nullable: true
+      required:
+      - batch_code
+      - house
+      - initial_bird_count
+      - start_date
+    BatchStatusEnum:
+      enum:
+      - ACTIVE
+      - HARVESTED
+      - TERMINATED
+      type: string
+      description: |-
+        * `ACTIVE` - Active
+        * `HARVESTED` - Harvested
+        * `TERMINATED` - Terminated
+    BuyerPayment:
+      type: object
+      description: |-
+        A buyer's read-only view of one payment they made against a sale.
+
+        This is the buyer's own record of money they paid — not a figure the
+        farm entered about them — so, unlike BuyerPurchaseSerializer, there is
+        no dispute risk in showing it back. What stays withheld is the sale's
+        side of the ledger: no revenue, no outstanding balance, no other
+        buyer's payments, nothing about mortality, feed, or FCR.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        farm:
+          type: integer
+          readOnly: true
+        farm_name:
+          type: string
+          readOnly: true
+        batch_code:
+          type: string
+          readOnly: true
+        sale_date:
+          type: string
+          format: date
+          readOnly: true
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        received_date:
+          type: string
+          format: date
+          readOnly: true
+          description: The day the payment was received.
+        is_reversal:
+          type: boolean
+          readOnly: true
+      required:
+      - amount
+      - batch_code
+      - farm
+      - farm_name
+      - id
+      - is_reversal
+      - received_date
+      - sale_date
+    BuyerPurchase:
+      type: object
+      description: |-
+        A buyer's read-only view of one harvest a farm sold them: what arrived
+        and how much it weighed.
+
+        Revenue and revenue_per_kg are deliberately withheld. Revenue is the
+        FARM'S figure — entered by the farm after the sale — and showing it back
+        to the buyer means showing them what the farm recorded them as paying,
+        which may not match their own books. This endpoint is a delivery and
+        weight ledger, not an invoice; surfacing revenue here would manufacture
+        disputes the system has no business creating.
+
+        Also withheld: `notes` and `recorded_by` (the farm's internal
+        annotations), and anything about mortality, feed, or FCR (production
+        performance is the farm's business, not the buyer's).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        harvest_date:
+          type: string
+          format: date
+          readOnly: true
+        farm:
+          type: integer
+          readOnly: true
+        farm_name:
+          type: string
+          readOnly: true
+        batch_code:
+          type: string
+          readOnly: true
+        birds_harvested:
+          type: integer
+          readOnly: true
+          nullable: true
+        total_weight_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        average_weight_kg:
+          type: string
+          readOnly: true
+      required:
+      - average_weight_kg
+      - batch_code
+      - birds_harvested
+      - farm
+      - farm_name
+      - harvest_date
+      - id
+      - total_weight_kg
+    DailyRecord:
+      type: object
+      description: |-
+        One entry per batch per day.
+
+        The UUID primary key is client-supplied so an offline device can generate
+        it before syncing — that is what makes a retry idempotent rather than
+        duplicating the day's data.
+      properties:
+        id:
+          type: string
+          format: uuid
+        batch:
+          type: string
+          format: uuid
+          readOnly: true
+        record_date:
+          type: string
+          format: date
+        mortality:
+          type: integer
+          readOnly: true
+        mortality_disease:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        mortality_heat:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        mortality_culled:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        mortality_unknown:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        feed_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+        feed_sacks:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          nullable: true
+        feed_item:
+          type: integer
+          nullable: true
+          description: The feed item the sacks were counted against.
+        feed_item_name:
+          type: string
+          readOnly: true
+        notes:
+          type: string
+          maxLength: 255
+        recorded_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        recorded_by_name:
+          type: string
+          readOnly: true
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        is_editable:
+          type: boolean
+          readOnly: true
+        sync_delay_seconds:
+          type: number
+          format: double
+          readOnly: true
+        was_corrected:
+          type: string
+          readOnly: true
+      required:
+      - batch
+      - created_at
+      - feed_item_name
+      - is_editable
+      - mortality
+      - record_date
+      - recorded_by
+      - recorded_by_name
+      - sync_delay_seconds
+      - was_corrected
+    DailyRecordBulkSyncRequest:
+      type: object
+      description: |-
+        Offline sync: a week of backlog in one round trip.
+
+        Per-record outcomes rather than all-or-nothing — one bad row from a
+        field device should not reject six good days. Each record is written in
+        its own savepoint so a failure rolls back only itself.
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyRecordRequest'
+      required:
+      - records
+    DailyRecordRequest:
+      type: object
+      description: |-
+        One entry per batch per day.
+
+        The UUID primary key is client-supplied so an offline device can generate
+        it before syncing — that is what makes a retry idempotent rather than
+        duplicating the day's data.
+      properties:
+        id:
+          type: string
+          format: uuid
+        record_date:
+          type: string
+          format: date
+        mortality_disease:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        mortality_heat:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        mortality_culled:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        mortality_unknown:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        feed_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+        feed_sacks:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          nullable: true
+        feed_item:
+          type: integer
+          nullable: true
+          description: The feed item the sacks were counted against.
+        notes:
+          type: string
+          maxLength: 255
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+      required:
+      - record_date
+    Farm:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 150
+        owner:
+          type: integer
+          readOnly: true
+        owner_name:
+          type: string
+          readOnly: true
+        address:
+          type: string
+          maxLength: 255
+        municipality:
+          type: string
+          maxLength: 100
+        province:
+          type: string
+          maxLength: 100
+        is_active:
+          type: boolean
+          readOnly: true
+        member_count:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - is_active
+      - member_count
+      - name
+      - owner
+      - owner_name
+    FarmMembership:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        user:
+          type: integer
+          readOnly: true
+        user_name:
+          type: string
+          readOnly: true
+        phone_number:
+          type: string
+          readOnly: true
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        is_active:
+          type: boolean
+        joined_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deactivated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        invited_by_name:
+          type: string
+          readOnly: true
+        houses:
+          type: array
+          items:
+            type: integer
+          description: Houses this member may record against. Empty means all.
+        house_names:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - deactivated_at
+      - house_names
+      - id
+      - invited_by_name
+      - joined_at
+      - phone_number
+      - role
+      - user
+      - user_name
+    FarmOwnershipHistory:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        from_owner_name:
+          type: string
+          maxLength: 150
+        to_owner_name:
+          type: string
+          maxLength: 150
+        transferred_at:
+          type: string
+          format: date-time
+        performed_by_name:
+          type: string
+          readOnly: true
+        note:
+          type: string
+          maxLength: 255
+      required:
+      - id
+      - performed_by_name
+    FarmPartnerLink:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        farm:
+          type: integer
+          readOnly: true
+        farm_name:
+          type: string
+          readOnly: true
+        partner:
+          type: integer
+          readOnly: true
+        partner_name:
+          type: string
+          readOnly: true
+        phone_number:
+          type: string
+          readOnly: true
+        business_name:
+          type: string
+          maxLength: 150
+        link_type:
+          $ref: '#/components/schemas/LinkTypeEnum'
+        notes:
+          type: string
+          maxLength: 255
+        is_active:
+          type: boolean
+        linked_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deactivated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        linked_by_name:
+          type: string
+          readOnly: true
+      required:
+      - deactivated_at
+      - farm
+      - farm_name
+      - id
+      - link_type
+      - linked_at
+      - linked_by_name
+      - partner
+      - partner_name
+      - phone_number
+    FarmRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        address:
+          type: string
+          maxLength: 255
+        municipality:
+          type: string
+          maxLength: 100
+        province:
+          type: string
+          maxLength: 100
+      required:
+      - name
+    FeedDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        farm:
+          type: integer
+          readOnly: true
+        supplier_name:
+          type: string
+          readOnly: true
+        other_source:
+          type: string
+          maxLength: 100
+        delivery_date:
+          type: string
+          format: date
+        feed_type:
+          $ref: '#/components/schemas/FeedTypeEnum'
+        quantity_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        unit_cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+          description: Cost per kg.
+        total_cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
+        invoice_ref:
+          type: string
+          maxLength: 100
+        notes:
+          type: string
+          maxLength: 255
+        inventory_item:
+          type: integer
+          nullable: true
+        recorded_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        recorded_by_name:
+          type: string
+          readOnly: true
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - delivery_date
+      - farm
+      - feed_type
+      - id
+      - quantity_kg
+      - recorded_by
+      - recorded_by_name
+      - supplier_name
+    FeedDeliveryRequest:
+      type: object
+      properties:
+        other_source:
+          type: string
+          maxLength: 100
+        delivery_date:
+          type: string
+          format: date
+        feed_type:
+          $ref: '#/components/schemas/FeedTypeEnum'
+        quantity_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        unit_cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+          description: Cost per kg.
+        total_cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
+        invoice_ref:
+          type: string
+          maxLength: 100
+        notes:
+          type: string
+          maxLength: 255
+        inventory_item:
+          type: integer
+          nullable: true
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+      required:
+      - delivery_date
+      - feed_type
+      - quantity_kg
+    FeedTypeEnum:
+      enum:
+      - STARTER
+      - GROWER
+      - FINISHER
+      - OTHER
+      type: string
+      description: |-
+        * `STARTER` - Starter
+        * `GROWER` - Grower
+        * `FINISHER` - Finisher
+        * `OTHER` - Other
+    Harvest:
+      type: object
+      description: |-
+        Read view of a batch's closing record. Its totals were summed from the
+        batch's sale events at closing time, not typed in.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        batch:
+          type: string
+          format: uuid
+          readOnly: true
+        batch_code:
+          type: string
+          readOnly: true
+        harvest_date:
+          type: string
+          format: date
+          readOnly: true
+        birds_harvested:
+          type: integer
+          readOnly: true
+          nullable: true
+        total_weight_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        revenue:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: Summed from the batch's sale events at closing time.
+        buyer_link:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Optional principal buyer for the batch overall. Individual
+            sales carry no buyer.
+        notes:
+          type: string
+          readOnly: true
+        closing_notes:
+          type: string
+          readOnly: true
+        average_weight_kg:
+          type: string
+          readOnly: true
+        revenue_per_kg:
+          type: string
+          readOnly: true
+        feed_conversion_ratio:
+          type: string
+          readOnly: true
+        recorded_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - average_weight_kg
+      - batch
+      - batch_code
+      - birds_harvested
+      - buyer_link
+      - closing_notes
+      - created_at
+      - feed_conversion_ratio
+      - harvest_date
+      - id
+      - notes
+      - recorded_by
+      - revenue
+      - revenue_per_kg
+      - total_weight_kg
+    House:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        capacity:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          description: Maximum birds this house can hold.
+        notes:
+          type: string
+          maxLength: 255
+        is_active:
+          type: boolean
+        is_occupied:
+          type: boolean
+          readOnly: true
+        current_batch_code:
+          type: string
+          readOnly: true
+        current_batch_placed:
+          type: string
+          readOnly: true
+        archived_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - archived_at
+      - capacity
+      - created_at
+      - current_batch_code
+      - current_batch_placed
+      - id
+      - is_occupied
+      - name
+    HouseRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        capacity:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          description: Maximum birds this house can hold.
+        notes:
+          type: string
+          maxLength: 255
+        is_active:
+          type: boolean
+      required:
+      - capacity
+      - name
+    InventoryItem:
+      type: object
+      description: |-
+        Read + write for an item. The balance fields are derived, never stored —
+        read from the queryset annotation `with_levels()` adds, falling back to
+        the model properties for a bare instance (e.g. straight after create).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        unit:
+          type: string
+          description: 'How it is counted: kg, litre, sack, dose.'
+          maxLength: 20
+        kg_per_unit:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          nullable: true
+          description: Kilograms per unit, for feed items. Leave blank for items not
+            measured by weight.
+        is_feed:
+          type: boolean
+          description: Feed stock arrives via deliveries and leaves via daily records,
+            not manual entries.
+        low_stock_threshold:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Warn once the balance falls to or below this.
+        is_active:
+          type: boolean
+        current_quantity:
+          type: string
+          readOnly: true
+        stocked_in:
+          type: string
+          readOnly: true
+        used_total:
+          type: string
+          readOnly: true
+        is_low:
+          type: boolean
+          readOnly: true
+        never_stocked:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - current_quantity
+      - id
+      - is_low
+      - name
+      - never_stocked
+      - stocked_in
+      - unit
+      - used_total
+    InventoryItemRequest:
+      type: object
+      description: |-
+        Read + write for an item. The balance fields are derived, never stored —
+        read from the queryset annotation `with_levels()` adds, falling back to
+        the model properties for a bare instance (e.g. straight after create).
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        unit:
+          type: string
+          minLength: 1
+          description: 'How it is counted: kg, litre, sack, dose.'
+          maxLength: 20
+        kg_per_unit:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          nullable: true
+          description: Kilograms per unit, for feed items. Leave blank for items not
+            measured by weight.
+        is_feed:
+          type: boolean
+          description: Feed stock arrives via deliveries and leaves via daily records,
+            not manual entries.
+        low_stock_threshold:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Warn once the balance falls to or below this.
+        is_active:
+          type: boolean
+      required:
+      - name
+      - unit
+    InventoryStockIn:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        item:
+          type: integer
+          readOnly: true
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        stock_in_date:
+          type: string
+          format: date
+        note:
+          type: string
+          maxLength: 255
+        recorded_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        recorded_by_name:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - item
+      - quantity
+      - recorded_by
+      - recorded_by_name
+      - stock_in_date
+    InventoryStockInRequest:
+      type: object
+      properties:
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        stock_in_date:
+          type: string
+          format: date
+        note:
+          type: string
+          maxLength: 255
+      required:
+      - quantity
+      - stock_in_date
+    InventoryUsageBulkSyncRequest:
+      type: object
+      description: |-
+        Offline sync for usage logs — a backlog of events in one round trip.
+
+        Simpler than the daily-record equivalent: identity is purely the
+        client UUID, so there is no (batch, date) fallback and no
+        same-date-different-id conflict to resolve. Each record is written in
+        its own savepoint; one bad row does not reject the rest.
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryUsageLogRequest'
+      required:
+      - records
+    InventoryUsageLog:
+      type: object
+      description: |-
+        One worker drawing an item down.
+
+        `id` is declared explicitly for the same reason DailyRecordSerializer
+        does it: ModelSerializer forces a primary-key field to read_only, which
+        would discard the client-generated UUID and break idempotency. The
+        identity of a usage log is that UUID alone — it is an event, not a
+        one-per-day record, so there is no date fallback and a worker may log
+        the same item any number of times in a day.
+      properties:
+        id:
+          type: string
+          format: uuid
+        item:
+          type: integer
+        item_name:
+          type: string
+          readOnly: true
+        unit:
+          type: string
+          readOnly: true
+        quantity_used:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        usage_date:
+          type: string
+          format: date
+        notes:
+          type: string
+          maxLength: 255
+        recorded_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        recorded_by_name:
+          type: string
+          readOnly: true
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        is_editable:
+          type: boolean
+          readOnly: true
+        sync_delay_seconds:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - created_at
+      - is_editable
+      - item
+      - item_name
+      - quantity_used
+      - recorded_by
+      - recorded_by_name
+      - sync_delay_seconds
+      - unit
+      - usage_date
+    InventoryUsageLogRequest:
+      type: object
+      description: |-
+        One worker drawing an item down.
+
+        `id` is declared explicitly for the same reason DailyRecordSerializer
+        does it: ModelSerializer forces a primary-key field to read_only, which
+        would discard the client-generated UUID and break idempotency. The
+        identity of a usage log is that UUID alone — it is an event, not a
+        one-per-day record, so there is no date fallback and a worker may log
+        the same item any number of times in a day.
+      properties:
+        id:
+          type: string
+          format: uuid
+        item:
+          type: integer
+        quantity_used:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        usage_date:
+          type: string
+          format: date
+        notes:
+          type: string
+          maxLength: 255
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+      required:
+      - item
+      - quantity_used
+      - usage_date
+    InvitationAcceptRequest:
+      type: object
+      description: |-
+        Public endpoint — the invitee is not authenticated yet.
+
+        A brand-new invitee can also set their personal PIN here, in the same
+        call that redeems the one-time one — pass `new_pin`/`confirm_pin` and
+        the response hands back tokens directly, so the invitee never has to
+        log in a second time just to rotate it. Both fields are optional, not
+        required: a request that omits them still creates the account exactly
+        as before (must_change_credential stays True, no tokens), so an older
+        client that predates this field — mid-deploy or otherwise — never
+        breaks. An existing user (joining an additional farm) keeps their own
+        PIN regardless; there is nothing to rotate and no tokens are issued
+        here — they already have a session or can log in with their existing
+        credential.
+      properties:
+        token:
+          type: string
+          writeOnly: true
+          minLength: 1
+        pin:
+          type: string
+          writeOnly: true
+          minLength: 1
+        new_pin:
+          type: string
+          writeOnly: true
+          minLength: 6
+        confirm_pin:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - token
+    InvitationCreateRequest:
+      type: object
+      description: |-
+        Issue an invitation. For a brand-new person a PIN is generated here and
+        returned exactly once. For someone who already has an account, no PIN is
+        issued — they keep the credential they already use elsewhere.
+      properties:
+        phone_number:
+          type: string
+          minLength: 1
+          pattern: ^\+[1-9]\d{7,14}$
+          maxLength: 16
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        email:
+          nullable: true
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        account_role:
+          $ref: '#/components/schemas/AccountRoleEnum'
+        membership_role:
+          type: string
+          description: Operational role at the farm. Blank for external partners.
+          maxLength: 20
+      required:
+      - account_role
+      - full_name
+      - phone_number
+    InvitationCreateResponse:
+      type: object
+      description: |-
+        Documents the actual POST /invitations/ response, which hand-builds
+        its payload (see FarmInvitationListCreateView.create) instead of
+        serializing a model instance. Never instantiated — @extend_schema
+        reads its field declarations only, to describe the two mutually
+        exclusive branches: a freshly issued PIN (new invitee) vs. an
+        existing user being added straight to the farm.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        phone_number:
+          type: string
+          pattern: ^\+[1-9]\d{7,14}$
+          maxLength: 16
+        full_name:
+          type: string
+          maxLength: 150
+        membership_role:
+          type: string
+          description: Operational role at the farm. Blank for external partners.
+          maxLength: 20
+        farm_name:
+          type: string
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/StatusE59Enum'
+        is_expired:
+          type: boolean
+          readOnly: true
+        invited_by_name:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+        accepted_at:
+          type: string
+          format: date-time
+          nullable: true
+        detail:
+          type: string
+          readOnly: true
+        pin:
+          type: string
+          readOnly: true
+        token:
+          type: string
+          readOnly: true
+        accept_url:
+          type: string
+          readOnly: true
+        sms_sent:
+          type: boolean
+          readOnly: true
+          description: Whether the invitation PIN was successfully texted to the invitee.
+        existing_user:
+          type: string
+          readOnly: true
+        name_mismatch:
+          type: boolean
+          readOnly: true
+      required:
+      - accept_url
+      - created_at
+      - detail
+      - existing_user
+      - expires_at
+      - farm_name
+      - full_name
+      - id
+      - invited_by_name
+      - is_expired
+      - name_mismatch
+      - phone_number
+      - pin
+      - sms_sent
+      - token
+    InvitationRead:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        phone_number:
+          type: string
+          pattern: ^\+[1-9]\d{7,14}$
+          maxLength: 16
+        full_name:
+          type: string
+          maxLength: 150
+        membership_role:
+          type: string
+          description: Operational role at the farm. Blank for external partners.
+          maxLength: 20
+        farm_name:
+          type: string
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/StatusE59Enum'
+        is_expired:
+          type: boolean
+          readOnly: true
+        invited_by_name:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+        accepted_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - created_at
+      - expires_at
+      - farm_name
+      - full_name
+      - id
+      - invited_by_name
+      - is_expired
+      - phone_number
+    LinkTypeEnum:
+      enum:
+      - CONSUMER
+      type: string
+      description: '* `CONSUMER` - Consumer'
+    PartnerInvitationCreate:
+      type: object
+      description: |-
+        Invite a consumer (buyer). Identical credential mechanics to staff
+        invitations — one-time PIN, forced rotation — but the acceptance produces
+        a FarmPartnerLink rather than farm authority.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        phone_number:
+          type: string
+          pattern: ^\+[1-9]\d{7,14}$
+          maxLength: 16
+        full_name:
+          type: string
+          maxLength: 150
+        email:
+          nullable: true
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        business_name:
+          type: string
+          description: External partners only. Carried onto the FarmPartnerLink.
+          maxLength: 150
+        account_role:
+          $ref: '#/components/schemas/AccountRoleEnum'
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusE59Enum'
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - account_role
+      - created_at
+      - expires_at
+      - full_name
+      - id
+      - phone_number
+      - status
+    PartnerInvitationCreateRequest:
+      type: object
+      description: |-
+        Invite a consumer (buyer). Identical credential mechanics to staff
+        invitations — one-time PIN, forced rotation — but the acceptance produces
+        a FarmPartnerLink rather than farm authority.
+      properties:
+        phone_number:
+          type: string
+          minLength: 1
+          pattern: ^\+[1-9]\d{7,14}$
+          maxLength: 16
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        email:
+          nullable: true
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        business_name:
+          type: string
+          description: External partners only. Carried onto the FarmPartnerLink.
+          maxLength: 150
+        account_role:
+          $ref: '#/components/schemas/AccountRoleEnum'
+      required:
+      - account_role
+      - full_name
+      - phone_number
+    PatchedDailyRecordRequest:
+      type: object
+      description: |-
+        One entry per batch per day.
+
+        The UUID primary key is client-supplied so an offline device can generate
+        it before syncing — that is what makes a retry idempotent rather than
+        duplicating the day's data.
+      properties:
+        id:
+          type: string
+          format: uuid
+        record_date:
+          type: string
+          format: date
+        mortality_disease:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        mortality_heat:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        mortality_culled:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        mortality_unknown:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        feed_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+        feed_sacks:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          nullable: true
+        feed_item:
+          type: integer
+          nullable: true
+          description: The feed item the sacks were counted against.
+        notes:
+          type: string
+          maxLength: 255
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+    PatchedFarmRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        address:
+          type: string
+          maxLength: 255
+        municipality:
+          type: string
+          maxLength: 100
+        province:
+          type: string
+          maxLength: 100
+    PatchedHouseRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        capacity:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          description: Maximum birds this house can hold.
+        notes:
+          type: string
+          maxLength: 255
+        is_active:
+          type: boolean
+    PatchedInventoryItemRequest:
+      type: object
+      description: |-
+        Read + write for an item. The balance fields are derived, never stored —
+        read from the queryset annotation `with_levels()` adds, falling back to
+        the model properties for a bare instance (e.g. straight after create).
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        unit:
+          type: string
+          minLength: 1
+          description: 'How it is counted: kg, litre, sack, dose.'
+          maxLength: 20
+        kg_per_unit:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          nullable: true
+          description: Kilograms per unit, for feed items. Leave blank for items not
+            measured by weight.
+        is_feed:
+          type: boolean
+          description: Feed stock arrives via deliveries and leaves via daily records,
+            not manual entries.
+        low_stock_threshold:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Warn once the balance falls to or below this.
+        is_active:
+          type: boolean
+    PatchedInventoryUsageLogRequest:
+      type: object
+      description: |-
+        One worker drawing an item down.
+
+        `id` is declared explicitly for the same reason DailyRecordSerializer
+        does it: ModelSerializer forces a primary-key field to read_only, which
+        would discard the client-generated UUID and break idempotency. The
+        identity of a usage log is that UUID alone — it is an event, not a
+        one-per-day record, so there is no date fallback and a worker may log
+        the same item any number of times in a day.
+      properties:
+        id:
+          type: string
+          format: uuid
+        item:
+          type: integer
+        quantity_used:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        usage_date:
+          type: string
+          format: date
+        notes:
+          type: string
+          maxLength: 255
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+    PatchedSaleEventRequest:
+      type: object
+      description: |-
+        One transaction in which some of a batch's birds left.
+
+        Same offline shape as DailyRecordSerializer: the UUID primary key is
+        client-supplied so a retry is idempotent, and an edit outside the
+        24-hour window is refused. Identity is the UUID alone — there is no
+        per-day uniqueness, several sales happen in a day.
+      properties:
+        id:
+          type: string
+          format: uuid
+        sale_date:
+          type: string
+          format: date
+        sale_type:
+          $ref: '#/components/schemas/SaleTypeEnum'
+        bird_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+        total_weight_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        price_per_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+          description: Price per kilogram. Revenue is derived from this x total_weight_kg.
+        notes:
+          type: string
+          maxLength: 255
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+    PatchedTaskTemplateRequest:
+      type: object
+      description: One item in the farm's daily routine. Owner/manager writes.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        suggested_time:
+          type: string
+          description: Free text — "6:00 AM", or "after morning rounds".
+          maxLength: 50
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Display sequence.
+        is_active:
+          type: boolean
+    PatchedWeightSampleRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sample_date:
+          type: string
+          format: date
+        birds_weighed:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+        average_grams:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+        notes:
+          type: string
+          maxLength: 255
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+    Payment:
+      type: object
+      description: |-
+        Append-only — see the view: no update, no delete. Attribution
+        (`recorded_by`, `recorded_at`) is never writable and never edited.
+
+        A plain payment (no `reverses`) must be positive. A reversal must name
+        the exact payment it corrects and carry the exact negative of that
+        payment's amount — a partial reversal would leave the ledger implying
+        a correction that doesn't fully undo the mistake it names.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        sale:
+          type: string
+          format: uuid
+          readOnly: true
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        received_date:
+          type: string
+          format: date
+          description: The day the payment was received.
+        note:
+          type: string
+          maxLength: 255
+        buyer_link:
+          type: integer
+          nullable: true
+          description: Who paid, if they are a registered buyer.
+        buyer_name:
+          type: string
+          nullable: true
+          readOnly: true
+        reverses:
+          type: integer
+          nullable: true
+          description: The payment this row corrects, if this is a reversal.
+        recorded_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        recorded_by_name:
+          type: string
+          readOnly: true
+        recorded_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - amount
+      - buyer_name
+      - id
+      - received_date
+      - recorded_at
+      - recorded_by
+      - recorded_by_name
+      - sale
+    PaymentRequest:
+      type: object
+      description: |-
+        Append-only — see the view: no update, no delete. Attribution
+        (`recorded_by`, `recorded_at`) is never writable and never edited.
+
+        A plain payment (no `reverses`) must be positive. A reversal must name
+        the exact payment it corrects and carry the exact negative of that
+        payment's amount — a partial reversal would leave the ledger implying
+        a correction that doesn't fully undo the mistake it names.
+      properties:
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        received_date:
+          type: string
+          format: date
+          description: The day the payment was received.
+        note:
+          type: string
+          maxLength: 255
+        buyer_link:
+          type: integer
+          nullable: true
+          description: Who paid, if they are a registered buyer.
+        reverses:
+          type: integer
+          nullable: true
+          description: The payment this row corrects, if this is a reversal.
+      required:
+      - amount
+      - received_date
+    PhonePinTokenRequest:
+      type: object
+      description: |-
+        Login with phone number + PIN.
+
+        SimpleJWT hardcodes 'password' in its parent serializer. We expose 'pin'
+        to the client and remap it internally, so the API vocabulary matches the
+        domain and the Flutter client never sees the word 'password'.
+      properties:
+        phone_number:
+          type: string
+          writeOnly: true
+          minLength: 1
+        pin:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - phone_number
+      - pin
+    RecordCorrection:
+      type: object
+      description: Read view of the correction log.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        batch:
+          type: string
+          format: uuid
+          readOnly: true
+        batch_code:
+          type: string
+          readOnly: true
+        record_date:
+          type: string
+          format: date
+          readOnly: true
+        target_type:
+          type: string
+          readOnly: true
+        object_id:
+          type: string
+          format: uuid
+          readOnly: true
+        previous_values:
+          readOnly: true
+          description: Full snapshot before the change.
+        new_values:
+          readOnly: true
+        changed_fields:
+          readOnly: true
+        reason:
+          type: string
+          readOnly: true
+        corrected_by_name:
+          type: string
+          readOnly: true
+        corrected_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - batch
+      - batch_code
+      - changed_fields
+      - corrected_at
+      - corrected_by_name
+      - id
+      - new_values
+      - object_id
+      - previous_values
+      - reason
+      - record_date
+      - target_type
+    RoleEnum:
+      enum:
+      - OWNER
+      - MANAGER
+      - WORKER
+      type: string
+      description: |-
+        * `OWNER` - Farm Owner
+        * `MANAGER` - Farm Manager
+        * `WORKER` - Farm Worker
+    SaleEvent:
+      type: object
+      description: |-
+        One transaction in which some of a batch's birds left.
+
+        Same offline shape as DailyRecordSerializer: the UUID primary key is
+        client-supplied so a retry is idempotent, and an edit outside the
+        24-hour window is refused. Identity is the UUID alone — there is no
+        per-day uniqueness, several sales happen in a day.
+      properties:
+        id:
+          type: string
+          format: uuid
+        batch:
+          type: string
+          format: uuid
+          readOnly: true
+        sale_date:
+          type: string
+          format: date
+        sale_type:
+          $ref: '#/components/schemas/SaleTypeEnum'
+        bird_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+        total_weight_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        price_per_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+          description: Price per kilogram. Revenue is derived from this x total_weight_kg.
+        revenue:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: Sale value. Derived from price_per_kg; null only on legacy
+            rows.
+        notes:
+          type: string
+          maxLength: 255
+        average_weight_kg:
+          type: string
+          nullable: true
+          readOnly: true
+        revenue_per_kg:
+          type: string
+          nullable: true
+          readOnly: true
+        total_paid:
+          type: string
+          readOnly: true
+        outstanding:
+          type: string
+          nullable: true
+          readOnly: true
+        is_fully_paid:
+          type: boolean
+          readOnly: true
+        recorded_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        recorded_by_name:
+          type: string
+          readOnly: true
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        is_editable:
+          type: boolean
+          readOnly: true
+        sync_delay_seconds:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - average_weight_kg
+      - batch
+      - bird_count
+      - created_at
+      - is_editable
+      - is_fully_paid
+      - outstanding
+      - recorded_by
+      - recorded_by_name
+      - revenue
+      - revenue_per_kg
+      - sale_date
+      - sale_type
+      - sync_delay_seconds
+      - total_paid
+      - total_weight_kg
+    SaleEventBulkSyncRequest:
+      type: object
+      description: |-
+        Offline sync for sale events — a yard's backlog in one round trip.
+
+        Identity is purely the client UUID (a sale is an event, not a
+        one-per-day record), so this is the InventoryUsageLog pattern, not the
+        DailyRecord one: no (batch, date) fallback and no same-date conflict.
+        Each row is written in its own savepoint; one bad row does not reject
+        the rest.
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/SaleEventRequest'
+      required:
+      - records
+    SaleEventRequest:
+      type: object
+      description: |-
+        One transaction in which some of a batch's birds left.
+
+        Same offline shape as DailyRecordSerializer: the UUID primary key is
+        client-supplied so a retry is idempotent, and an edit outside the
+        24-hour window is refused. Identity is the UUID alone — there is no
+        per-day uniqueness, several sales happen in a day.
+      properties:
+        id:
+          type: string
+          format: uuid
+        sale_date:
+          type: string
+          format: date
+        sale_type:
+          $ref: '#/components/schemas/SaleTypeEnum'
+        bird_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+        total_weight_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        price_per_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+          description: Price per kilogram. Revenue is derived from this x total_weight_kg.
+        notes:
+          type: string
+          maxLength: 255
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+      required:
+      - bird_count
+      - sale_date
+      - sale_type
+      - total_weight_kg
+    SaleTypeEnum:
+      enum:
+      - DRESSED
+      - LIVE
+      type: string
+      description: |-
+        * `DRESSED` - Dressed
+        * `LIVE` - Live
+    StatusE59Enum:
+      enum:
+      - PENDING
+      - ACCEPTED
+      - REVOKED
+      - EXPIRED
+      type: string
+      description: |-
+        * `PENDING` - Pending
+        * `ACCEPTED` - Accepted
+        * `REVOKED` - Revoked
+        * `EXPIRED` - Expired
+    TaskCompletion:
+      type: object
+      description: |-
+        A routine item ticked off for a day.
+
+        `id` is declared explicitly for the same reason DailyRecordSerializer
+        does it: ModelSerializer forces a primary-key field to read_only, which
+        would discard the client-generated UUID and break offline idempotency.
+        A completion has no editable content — it exists or it does not — so
+        the only write after creation is the 24-hour-locked delete (un-tick).
+      properties:
+        id:
+          type: string
+          format: uuid
+        template:
+          type: integer
+        template_name:
+          type: string
+          readOnly: true
+        suggested_time:
+          type: string
+          readOnly: true
+        house:
+          type: integer
+        house_name:
+          type: string
+          readOnly: true
+        completion_date:
+          type: string
+          format: date
+        recorded_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        recorded_by_name:
+          type: string
+          readOnly: true
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        is_editable:
+          type: boolean
+          readOnly: true
+      required:
+      - completion_date
+      - created_at
+      - house
+      - house_name
+      - is_editable
+      - recorded_by
+      - recorded_by_name
+      - suggested_time
+      - template
+      - template_name
+    TaskCompletionRequest:
+      type: object
+      description: |-
+        A routine item ticked off for a day.
+
+        `id` is declared explicitly for the same reason DailyRecordSerializer
+        does it: ModelSerializer forces a primary-key field to read_only, which
+        would discard the client-generated UUID and break offline idempotency.
+        A completion has no editable content — it exists or it does not — so
+        the only write after creation is the 24-hour-locked delete (un-tick).
+      properties:
+        id:
+          type: string
+          format: uuid
+        template:
+          type: integer
+        house:
+          type: integer
+        completion_date:
+          type: string
+          format: date
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+      required:
+      - completion_date
+      - house
+      - template
+    TaskTemplate:
+      type: object
+      description: One item in the farm's daily routine. Owner/manager writes.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 150
+        suggested_time:
+          type: string
+          description: Free text — "6:00 AM", or "after morning rounds".
+          maxLength: 50
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Display sequence.
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - name
+    TaskTemplateRequest:
+      type: object
+      description: One item in the farm's daily routine. Owner/manager writes.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        suggested_time:
+          type: string
+          description: Free text — "6:00 AM", or "after morning rounds".
+          maxLength: 50
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Display sequence.
+        is_active:
+          type: boolean
+      required:
+      - name
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+      required:
+      - refresh
+    TokenVerifyRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - token
+    WeightSample:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        batch:
+          type: string
+          format: uuid
+          readOnly: true
+        sample_date:
+          type: string
+          format: date
+        birds_weighed:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+        average_grams:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+        age_days:
+          type: integer
+          readOnly: true
+        notes:
+          type: string
+          maxLength: 255
+        recorded_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        recorded_by_name:
+          type: string
+          readOnly: true
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        is_editable:
+          type: boolean
+          readOnly: true
+      required:
+      - age_days
+      - average_grams
+      - batch
+      - birds_weighed
+      - created_at
+      - is_editable
+      - recorded_by
+      - recorded_by_name
+      - sample_date
+    WeightSampleRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sample_date:
+          type: string
+          format: date
+        birds_weighed:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+        average_grams:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+        notes:
+          type: string
+          maxLength: 255
+        recorded_at:
+          type: string
+          format: date-time
+          description: Client-supplied. When the worker actually entered this.
+      required:
+      - average_grams
+      - birds_weighed
+      - sample_date
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+tags:
+- name: Authentication
+  description: Login, logout, PIN rotation.
+- name: Invitations
+  description: Staff and partner onboarding.
+- name: Farms
+  description: Farms, membership, ownership.
+- name: Partners
+  description: Buyers (consumer partners).
+- name: Production
+  description: Houses, batches, daily records.
+- name: Analytics
+  description: Charts and aggregations.

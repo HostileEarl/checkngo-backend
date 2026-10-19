@@ -235,6 +235,7 @@ class InvitationAcceptView(APIView):
     authentication_classes = []
     throttle_classes = [InvitationAcceptThrottle]
 
+    @extend_schema(request=InvitationAcceptSerializer)
     def post(self, request):
         serializer = InvitationAcceptSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
