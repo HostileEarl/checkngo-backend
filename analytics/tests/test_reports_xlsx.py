@@ -73,7 +73,7 @@ EXPECTED_HEADER = {
     ],
     "report-sales-history-xlsx": [
         "Date", "Batch code", "House", "Sale type", "Birds sold",
-        "Total weight (kg)", "Sale value (PHP)", "Buyer",
+        "Part name", "Total weight (kg)", "Sale value (PHP)", "Buyer",
     ],
 }
 

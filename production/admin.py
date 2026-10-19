@@ -91,8 +91,10 @@ class SaleEventInline(admin.TabularInline):
         "sale_date",
         "sale_type",
         "bird_count",
+        "part_name",
         "total_weight_kg",
         "revenue",
+        "buyer_link",
         "recorded_by",
     ]
     readonly_fields = fields
@@ -303,13 +305,14 @@ class SaleEventAdmin(admin.ModelAdmin):
         "bird_count",
         "total_weight_kg",
         "revenue",
+        "buyer_link",
         "recorded_by",
         "lock_state",
     ]
     list_filter = ["sale_type", "batch__house__farm", "batch", "sale_date"]
-    search_fields = ["batch__batch_code"]
+    search_fields = ["batch__batch_code", "part_name"]
     date_hierarchy = "sale_date"
-    list_select_related = ["batch", "batch__house", "recorded_by"]
+    list_select_related = ["batch", "batch__house", "recorded_by", "buyer_link"]
     readonly_fields = ["id", "created_at", "updated_at", "sync_delay_seconds"]
     ordering = ["-sale_date"]
 
@@ -389,11 +392,12 @@ class InventoryItemAdmin(admin.ModelAdmin):
         "unit",
         "kg_per_unit",
         "is_feed",
+        "feed_type",
         "low_stock_threshold",
         "level",
         "is_active",
     ]
-    list_filter = ["farm", "is_feed", "is_active"]
+    list_filter = ["farm", "is_feed", "feed_type", "is_active"]
     search_fields = ["name", "farm__name"]
     readonly_fields = ["created_by", "created_at"]
     inlines = [InventoryStockInInline]

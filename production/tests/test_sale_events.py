@@ -19,6 +19,7 @@ import pytest
 from django.utils import timezone
 
 from analytics.services import fcr_by_batch
+from partners.models import FarmPartnerLink
 from production.models import Batch, DailyRecord, Harvest, House, SaleEvent
 
 pytestmark = pytest.mark.django_db
@@ -450,3 +451,350 @@ class TestFcrEquivalence:
 
         old_rows = {r["batch_code"]: r for r in fcr_by_batch(staffed_farm)["rows"]}
         assert old_rows["OLD-1"]["fcr"] == new_rows["S-1"]["fcr"] == "0.500"
+
+
+# ─────────────────────────────────────────────────────────────
+# Part B: buyer_link on SaleEvent
+# ─────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def link(db, staffed_farm, consumer, owner):
+    return FarmPartnerLink.objects.create(
+        farm=staffed_farm,
+        partner=consumer,
+        link_type=FarmPartnerLink.LinkType.CONSUMER,
+        linked_by=owner,
+    )
+
+
+@pytest.fixture
+def rival_link(db, rival_farm, consumer, rival_owner):
+    """Same buyer, but linked to a different farm."""
+    return FarmPartnerLink.objects.create(
+        farm=rival_farm,
+        partner=consumer,
+        link_type=FarmPartnerLink.LinkType.CONSUMER,
+        linked_by=rival_owner,
+    )
+
+
+class TestSaleBuyerLink:
+    def test_owner_can_assign_a_buyer(self, auth, owner, staffed_farm, batch, link):
+        resp = auth(owner).post(
+            _sales_url(staffed_farm, batch), _payload(buyer_link=link.pk), format="json"
+        )
+        assert resp.status_code == 201, resp.data
+        assert resp.data["buyer_link"] == link.pk
+
+    def test_manager_can_assign_a_buyer(
+        self, auth, manager, staffed_farm, batch, link
+    ):
+        resp = auth(manager).post(
+            _sales_url(staffed_farm, batch), _payload(buyer_link=link.pk), format="json"
+        )
+        assert resp.status_code == 201, resp.data
+
+    def test_worker_cannot_assign_a_buyer(
+        self, auth, worker, staffed_farm, batch, link
+    ):
+        # A worker cannot record a sale at all (CanManageBatches), so this
+        # is refused before buyer_link is ever considered.
+        resp = auth(worker).post(
+            _sales_url(staffed_farm, batch), _payload(buyer_link=link.pk), format="json"
+        )
+        assert resp.status_code == 403
+
+    def test_a_sale_with_no_buyer_is_accepted(
+        self, auth, owner, staffed_farm, batch
+    ):
+        resp = auth(owner).post(
+            _sales_url(staffed_farm, batch), _payload(), format="json"
+        )
+        assert resp.status_code == 201, resp.data
+        assert resp.data["buyer_link"] is None
+
+    def test_a_buyer_linked_to_another_farm_is_rejected(
+        self, auth, owner, staffed_farm, batch, rival_link
+    ):
+        resp = auth(owner).post(
+            _sales_url(staffed_farm, batch),
+            _payload(buyer_link=rival_link.pk),
+            format="json",
+        )
+        assert resp.status_code == 400
+        assert "buyer_link" in resp.data
+
+    def test_an_inactive_link_is_rejected(
+        self, auth, owner, staffed_farm, batch, link
+    ):
+        link.deactivate()
+        resp = auth(owner).post(
+            _sales_url(staffed_farm, batch), _payload(buyer_link=link.pk), format="json"
+        )
+        assert resp.status_code == 400
+        assert "buyer_link" in resp.data
+
+    def test_owner_can_change_buyer_link_within_the_24_hour_window(
+        self, auth, owner, staffed_farm, batch, link
+    ):
+        created = auth(owner).post(
+            _sales_url(staffed_farm, batch), _payload(), format="json"
+        )
+        assert created.data["buyer_link"] is None
+
+        resp = auth(owner).patch(
+            f"{_sales_url(staffed_farm, batch)}{created.data['id']}/",
+            {"buyer_link": link.pk},
+            format="json",
+        )
+        assert resp.status_code == 200, resp.data
+        assert resp.data["buyer_link"] == link.pk
+
+    def test_changing_buyer_link_past_24_hours_is_locked_same_as_any_other_edit(
+        self, auth, owner, staffed_farm, batch, link
+    ):
+        created = auth(owner).post(
+            _sales_url(staffed_farm, batch), _payload(), format="json"
+        )
+        sale = SaleEvent.objects.get(pk=created.data["id"])
+        _age_out(sale)
+
+        resp = auth(owner).patch(
+            f"{_sales_url(staffed_farm, batch)}{sale.pk}/",
+            {"buyer_link": link.pk},
+            format="json",
+        )
+        assert resp.status_code == 400
+        assert "locked" in str(resp.data).lower()
+        sale.refresh_from_db()
+        assert sale.buyer_link is None
+
+    def test_a_worker_cannot_set_buyer_link_via_bulk_sync(
+        self, auth, worker, staffed_farm, batch, link
+    ):
+        """
+        A worker's offline sale payload is the bulk-sync endpoint — same
+        CanManageBatches permission as the plain create/update views, so a
+        buyer_link in that payload is refused along with the entire
+        request, never silently dropped and never written.
+        """
+        rid = str(uuid.uuid4())
+        resp = auth(worker).post(
+            _bulk_url(staffed_farm, batch),
+            {"records": [{"id": rid, **_payload(buyer_link=link.pk)}]},
+            format="json",
+        )
+        assert resp.status_code == 403
+        assert not SaleEvent.objects.filter(pk=rid).exists()
+
+    def test_owner_can_set_buyer_link_via_bulk_sync(
+        self, auth, owner, staffed_farm, batch, link
+    ):
+        rid = str(uuid.uuid4())
+        resp = auth(owner).post(
+            _bulk_url(staffed_farm, batch),
+            {"records": [{"id": rid, **_payload(buyer_link=link.pk)}]},
+            format="json",
+        )
+        assert resp.status_code == 200, resp.data
+        assert resp.data["created"] == [rid]
+        assert SaleEvent.objects.get(pk=rid).buyer_link_id == link.pk
+
+    def test_bulk_sync_cannot_change_buyer_link_on_a_locked_row(
+        self, auth, owner, staffed_farm, batch, link
+    ):
+        rid = str(uuid.uuid4())
+        auth(owner).post(
+            _bulk_url(staffed_farm, batch),
+            {"records": [{"id": rid, **_payload()}]},
+            format="json",
+        )
+        sale = SaleEvent.objects.get(pk=rid)
+        _age_out(sale)
+
+        resp = auth(owner).post(
+            _bulk_url(staffed_farm, batch),
+            {"records": [{"id": rid, **_payload(buyer_link=link.pk)}]},
+            format="json",
+        )
+        # 207: the one record in this batch failed (locked).
+        assert resp.status_code == 207, resp.data
+        assert resp.data["failed"] and resp.data["failed"][0]["id"] == rid
+        sale.refresh_from_db()
+        assert sale.buyer_link is None
+
+
+# ─────────────────────────────────────────────────────────────
+# Part C: OTHERS sale type
+# ─────────────────────────────────────────────────────────────
+
+
+class TestOthersSaleType:
+    def test_others_requires_part_name(self, auth, owner, staffed_farm, batch):
+        resp = auth(owner).post(
+            _sales_url(staffed_farm, batch),
+            _payload(
+                sale_type=SaleEvent.SaleType.OTHERS,
+                total_weight_kg="5.00",
+                price_per_kg="120.00",
+            ),
+            format="json",
+        )
+        assert resp.status_code == 400
+        assert "part_name" in resp.data
+
+    def test_others_part_name_is_trimmed(self, auth, owner, staffed_farm, batch):
+        resp = auth(owner).post(
+            _sales_url(staffed_farm, batch),
+            _payload(
+                sale_type=SaleEvent.SaleType.OTHERS,
+                part_name="  Feet  ",
+                total_weight_kg="5.00",
+                price_per_kg="120.00",
+            ),
+            format="json",
+        )
+        assert resp.status_code == 201, resp.data
+        assert resp.data["part_name"] == "Feet"
+
+    def test_others_bird_count_defaults_to_zero(
+        self, auth, owner, staffed_farm, batch
+    ):
+        body = _payload(
+            sale_type=SaleEvent.SaleType.OTHERS,
+            part_name="Gizzards",
+            total_weight_kg="5.00",
+            price_per_kg="120.00",
+        )
+        del body["bird_count"]  # omitted entirely, as a real client would
+        resp = auth(owner).post(
+            _sales_url(staffed_farm, batch), body, format="json"
+        )
+        assert resp.status_code == 201, resp.data
+        assert resp.data["bird_count"] == 0
+
+    def test_part_name_rejected_for_non_others_sale(
+        self, auth, owner, staffed_farm, batch
+    ):
+        resp = auth(owner).post(
+            _sales_url(staffed_farm, batch),
+            _payload(part_name="Feet"),
+            format="json",
+        )
+        assert resp.status_code == 400
+        assert "part_name" in resp.data
+
+    def test_others_does_not_count_toward_birds_sold_or_alive(
+        self, auth, owner, staffed_farm, batch
+    ):
+        assert batch.current_bird_count == 960
+
+        resp = auth(owner).post(
+            _sales_url(staffed_farm, batch),
+            _payload(
+                sale_type=SaleEvent.SaleType.OTHERS,
+                part_name="Feet",
+                bird_count=50,  # supplied anyway — must still be excluded
+                total_weight_kg="5.00",
+                price_per_kg="120.00",
+            ),
+            format="json",
+        )
+        assert resp.status_code == 201, resp.data
+
+        batch.refresh_from_db()
+        assert batch.total_birds_sold == 0
+        assert batch.current_bird_count == 960
+
+    def test_others_exempt_from_more_than_flock_check(
+        self, auth, owner, staffed_farm, batch
+    ):
+        """An OTHERS sale with an absurd bird_count still succeeds — the
+        'more than flock' check only applies to DRESSED/LIVE sales."""
+        resp = auth(owner).post(
+            _sales_url(staffed_farm, batch),
+            _payload(
+                sale_type=SaleEvent.SaleType.OTHERS,
+                part_name="Feet",
+                bird_count=999999,
+                total_weight_kg="5.00",
+                price_per_kg="120.00",
+            ),
+            format="json",
+        )
+        assert resp.status_code == 201, resp.data
+
+    def test_others_counts_in_revenue_and_sales_history_not_fcr(
+        self, auth, owner, staffed_farm, batch
+    ):
+        auth(owner).post(
+            _sales_url(staffed_farm, batch),
+            _payload(bird_count=950, total_weight_kg="1900.00", price_per_kg="70.00"),
+            format="json",
+        )
+        others_resp = auth(owner).post(
+            _sales_url(staffed_farm, batch),
+            _payload(
+                sale_date=date(2026, 1, 11).isoformat(),
+                sale_type=SaleEvent.SaleType.OTHERS,
+                part_name="Feet",
+                total_weight_kg="20.00",
+                price_per_kg="50.00",
+            ),
+            format="json",
+        )
+        assert others_resp.status_code == 201, others_resp.data
+
+        resp = auth(owner).post(_close_url(staffed_farm, batch), {}, format="json")
+        assert resp.status_code == 201, resp.data
+
+        harvest = Harvest.objects.get(batch=batch)
+        # Live weight / birds exclude the OTHERS sale (FCR denominator).
+        assert harvest.birds_harvested == 950
+        assert harvest.total_weight_kg == Decimal("1900.00")
+        # Revenue includes it: 950*70 (66500*... ) — 1900*70=133000, +20*50=1000.
+        assert harvest.revenue == Decimal("134000.00")
+
+    def test_tc25_fcr_and_survival_unaffected_by_an_others_sale(
+        self, auth, owner, staffed_farm, house, batch
+    ):
+        """
+        TC-25: 1000 placed, 50 lost (5.00% mortality), 900 live-weight
+        birds sold (90.00% survival), 1500 kg feed / 900 kg weight sold =
+        FCR 1.67 — unchanged by an extra OTHERS (parts) sale on the batch.
+        """
+        # batch already has 40 mortality / 400kg feed from days 1-4; add
+        # one more day to reach 50 total mortality.
+        DailyRecord.objects.create(
+            batch=batch, record_date=date(2026, 1, 5),
+            mortality_disease=10, feed_kg=Decimal("1100.00"), recorded_by=owner,
+        )
+        batch.refresh_from_db()
+        assert batch.total_mortality == 50
+        assert batch.total_feed_kg == Decimal("1500.00")
+
+        auth(owner).post(
+            _sales_url(staffed_farm, batch),
+            _payload(bird_count=900, total_weight_kg="900.00", price_per_kg="70.00"),
+            format="json",
+        )
+        auth(owner).post(
+            _sales_url(staffed_farm, batch),
+            _payload(
+                sale_date=date(2026, 1, 11).isoformat(),
+                sale_type=SaleEvent.SaleType.OTHERS,
+                part_name="Gizzards",
+                total_weight_kg="10.00",
+                price_per_kg="50.00",
+            ),
+            format="json",
+        )
+
+        resp = auth(owner).post(_close_url(staffed_farm, batch), {}, format="json")
+        assert resp.status_code == 201, resp.data
+        batch.refresh_from_db()
+
+        row = next(r for r in fcr_by_batch(staffed_farm)["rows"] if r["batch_code"] == "S-1")
+        assert row["survival_rate_pct"] == "90.00"
+        assert row["fcr"] == "1.667"

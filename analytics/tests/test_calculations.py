@@ -212,7 +212,7 @@ class TestProfitability:
         )
         FeedDelivery.objects.create(
             farm=farm, delivery_date=date(2026, 1, 15),
-            feed_type=FeedDelivery.FeedType.GROWER,
+            feed_type=FeedDelivery.FeedType.BOOSTER,
             quantity_kg=Decimal("1000"), unit_cost=Decimal("60.00"),
             recorded_by=owner,
         )

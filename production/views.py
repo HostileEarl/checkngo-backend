@@ -724,7 +724,10 @@ class FeedDeliveryListCreateView(generics.ListCreateAPIView):
         )
         feed_type = self.request.query_params.get("type")
         if feed_type:
-            qs = qs.filter(feed_type=feed_type.upper())
+            feed_type = feed_type.upper()
+            if feed_type == "GROWER":
+                feed_type = FeedDelivery.FeedType.BOOSTER
+            qs = qs.filter(feed_type=feed_type)
         return qs
 
 

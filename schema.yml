@@ -3529,11 +3529,29 @@ paths:
         GET /api/partners/my-purchases/ — a buyer's view of what farms recorded
         selling them.
 
-        Scoped to Harvest rows whose buyer_link points at the requesting user.
-        A weight and delivery ledger only: no revenue (see BuyerPurchaseSerializer
-        for why), no farm annotations, nothing about mortality, feed, or FCR, and
-        never another buyer's rows. Internal staff have no buyer identity here, so
-        they get an empty list rather than a 403.
+        Two sources, merged: Harvest rows whose buyer_link points at the
+        requesting user (the batch's overall buyer, recorded once at closing),
+        and SaleEvent rows whose own buyer_link points at them (a per-sale
+        buyer — see SaleEvent.buyer_link). Each row carries a "source" field
+        ("harvest" or "sale") so the two are distinguishable.
+
+        No double counting, without breaking legacy batches: a batch is only
+        in "per-sale" mode — reporting through its SaleEvent rows and
+        dropping the Harvest row entirely — once at least one of its sale
+        events actually carries a buyer_link (see
+        production.models.per_sale_mode_batch_ids, the single source of truth
+        for this rule, shared with the sales-history report's buyer column).
+        A batch whose sale events are all unlinked (every existing production
+        batch, today) is NOT in per-sale mode — its Harvest.buyer_link is
+        shown exactly as before. A buyer therefore never sees the same batch
+        counted on both sides, and never loses a purchase that predates
+        per-sale buyers.
+
+        A weight and delivery ledger only: no revenue (see
+        BuyerPurchaseSerializer / BuyerSalePurchaseSerializer for why), no farm
+        annotations, nothing about mortality, feed, or FCR, and never another
+        buyer's rows. Internal staff have no buyer identity here, so they get
+        an empty list rather than a 403.
       tags:
       - partners
       security:
@@ -3545,7 +3563,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/BuyerPurchase'
+                  $ref: '#/components/schemas/BuyerPurchaseRow'
           description: ''
 components:
   schemas:
@@ -3743,6 +3761,9 @@ components:
         * `ACTIVE` - Active
         * `HARVESTED` - Harvested
         * `TERMINATED` - Terminated
+    BlankEnum:
+      enum:
+      - ''
     BuyerPayment:
       type: object
       description: |-
@@ -3812,6 +3833,9 @@ components:
         id:
           type: integer
           readOnly: true
+        source:
+          type: string
+          readOnly: true
         harvest_date:
           type: string
           format: date
@@ -3837,6 +3861,7 @@ components:
           nullable: true
         average_weight_kg:
           type: string
+          nullable: true
           readOnly: true
       required:
       - average_weight_kg
@@ -3846,6 +3871,77 @@ components:
       - farm_name
       - harvest_date
       - id
+      - source
+      - total_weight_kg
+    BuyerPurchaseRow:
+      oneOf:
+      - $ref: '#/components/schemas/BuyerPurchase'
+      - $ref: '#/components/schemas/BuyerSalePurchase'
+      discriminator:
+        propertyName: source
+        mapping:
+          harvest: '#/components/schemas/BuyerPurchase'
+          sale: '#/components/schemas/BuyerSalePurchase'
+    BuyerSalePurchase:
+      type: object
+      description: |-
+        A buyer's read-only view of one SaleEvent recorded against them
+        directly (see SaleEvent.buyer_link) — the per-sale counterpart to
+        BuyerPurchaseSerializer, same withholding policy: no revenue (the
+        farm's figure, not an invoice — see BuyerPurchaseSerializer's
+        docstring), no notes, no recorded_by, nothing about mortality, feed,
+        or FCR.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        source:
+          type: string
+          readOnly: true
+        harvest_date:
+          type: string
+          format: date
+          readOnly: true
+        farm:
+          type: integer
+          readOnly: true
+        farm_name:
+          type: string
+          readOnly: true
+        batch_code:
+          type: string
+          readOnly: true
+        birds_harvested:
+          type: integer
+          readOnly: true
+        total_weight_kg:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+        average_weight_kg:
+          type: string
+          nullable: true
+          readOnly: true
+        sale_type:
+          allOf:
+          - $ref: '#/components/schemas/SaleTypeEnum'
+          readOnly: true
+        part_name:
+          type: string
+          readOnly: true
+      required:
+      - average_weight_kg
+      - batch_code
+      - birds_harvested
+      - farm
+      - farm_name
+      - harvest_date
+      - id
+      - part_name
+      - sale_type
+      - source
       - total_weight_kg
     DailyRecord:
       type: object
@@ -4217,7 +4313,10 @@ components:
           type: string
           format: date
         feed_type:
-          $ref: '#/components/schemas/FeedTypeEnum'
+          $ref: '#/components/schemas/FeedDeliveryFeedTypeEnum'
+        legacy_feed_type:
+          type: boolean
+          readOnly: true
         quantity_kg:
           type: string
           format: decimal
@@ -4263,10 +4362,23 @@ components:
       - farm
       - feed_type
       - id
+      - legacy_feed_type
       - quantity_kg
       - recorded_by
       - recorded_by_name
       - supplier_name
+    FeedDeliveryFeedTypeEnum:
+      enum:
+      - STARTER
+      - BOOSTER
+      - FINISHER
+      - OTHER
+      type: string
+      description: |-
+        * `STARTER` - Starter
+        * `BOOSTER` - Booster
+        * `FINISHER` - Finisher
+        * `OTHER` - Other
     FeedDeliveryRequest:
       type: object
       properties:
@@ -4277,7 +4389,7 @@ components:
           type: string
           format: date
         feed_type:
-          $ref: '#/components/schemas/FeedTypeEnum'
+          $ref: '#/components/schemas/FeedDeliveryFeedTypeEnum'
         quantity_kg:
           type: string
           format: decimal
@@ -4310,18 +4422,6 @@ components:
       - delivery_date
       - feed_type
       - quantity_kg
-    FeedTypeEnum:
-      enum:
-      - STARTER
-      - GROWER
-      - FINISHER
-      - OTHER
-      type: string
-      description: |-
-        * `STARTER` - Starter
-        * `GROWER` - Grower
-        * `FINISHER` - Finisher
-        * `OTHER` - Other
     Harvest:
       type: object
       description: |-
@@ -4498,6 +4598,12 @@ components:
           type: boolean
           description: Feed stock arrives via deliveries and leaves via daily records,
             not manual entries.
+        feed_type:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/InventoryItemFeedTypeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
         low_stock_threshold:
           type: string
           format: decimal
@@ -4534,6 +4640,16 @@ components:
       - stocked_in
       - unit
       - used_total
+    InventoryItemFeedTypeEnum:
+      enum:
+      - STARTER
+      - BOOSTER
+      - FINISHER
+      type: string
+      description: |-
+        * `STARTER` - Starter
+        * `BOOSTER` - Booster
+        * `FINISHER` - Finisher
     InventoryItemRequest:
       type: object
       description: |-
@@ -4561,6 +4677,12 @@ components:
           type: boolean
           description: Feed stock arrives via deliveries and leaves via daily records,
             not manual entries.
+        feed_type:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/InventoryItemFeedTypeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
         low_stock_threshold:
           type: string
           format: decimal
@@ -4948,6 +5070,9 @@ components:
       - CONSUMER
       type: string
       description: '* `CONSUMER` - Consumer'
+    NullEnum:
+      enum:
+      - null
     PartnerInvitationCreate:
       type: object
       description: |-
@@ -5144,6 +5269,12 @@ components:
           type: boolean
           description: Feed stock arrives via deliveries and leaves via daily records,
             not manual entries.
+        feed_type:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/InventoryItemFeedTypeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
         low_stock_threshold:
           type: string
           format: decimal
@@ -5203,7 +5334,10 @@ components:
         bird_count:
           type: integer
           maximum: 2147483647
-          minimum: 1
+          minimum: 0
+        part_name:
+          type: string
+          maxLength: 60
         total_weight_kg:
           type: string
           format: decimal
@@ -5214,6 +5348,10 @@ components:
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
           nullable: true
           description: Price per kilogram. Revenue is derived from this x total_weight_kg.
+        buyer_link:
+          type: integer
+          nullable: true
+          description: Optional per-sale buyer.
         notes:
           type: string
           maxLength: 255
@@ -5469,7 +5607,10 @@ components:
         bird_count:
           type: integer
           maximum: 2147483647
-          minimum: 1
+          minimum: 0
+        part_name:
+          type: string
+          maxLength: 60
         total_weight_kg:
           type: string
           format: decimal
@@ -5488,6 +5629,10 @@ components:
           nullable: true
           description: Sale value. Derived from price_per_kg; null only on legacy
             rows.
+        buyer_link:
+          type: integer
+          nullable: true
+          description: Optional per-sale buyer.
         notes:
           type: string
           maxLength: 255
@@ -5534,7 +5679,6 @@ components:
       required:
       - average_weight_kg
       - batch
-      - bird_count
       - created_at
       - is_editable
       - is_fully_paid
@@ -5586,7 +5730,10 @@ components:
         bird_count:
           type: integer
           maximum: 2147483647
-          minimum: 1
+          minimum: 0
+        part_name:
+          type: string
+          maxLength: 60
         total_weight_kg:
           type: string
           format: decimal
@@ -5597,6 +5744,10 @@ components:
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
           nullable: true
           description: Price per kilogram. Revenue is derived from this x total_weight_kg.
+        buyer_link:
+          type: integer
+          nullable: true
+          description: Optional per-sale buyer.
         notes:
           type: string
           maxLength: 255
@@ -5605,7 +5756,6 @@ components:
           format: date-time
           description: Client-supplied. When the worker actually entered this.
       required:
-      - bird_count
       - sale_date
       - sale_type
       - total_weight_kg
@@ -5613,10 +5763,12 @@ components:
       enum:
       - DRESSED
       - LIVE
+      - OTHERS
       type: string
       description: |-
         * `DRESSED` - Dressed
         * `LIVE` - Live
+        * `OTHERS` - Others
     StatusE59Enum:
       enum:
       - PENDING
