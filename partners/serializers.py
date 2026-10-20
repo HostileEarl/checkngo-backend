@@ -1,4 +1,5 @@
 # partners/serializers.py
+from django.db import transaction
 from rest_framework import serializers
 
 from accounts.models import Invitation, User, UserManager
@@ -116,7 +117,13 @@ class PartnerInvitationCreateSerializer(serializers.ModelSerializer):
         if existing is None:
             self.issued_pin = invitation.issue_pin()
 
-        invitation.save()
+        # Same as staff invitations: an overdue PENDING invite for this
+        # phone and farm would trip unique_pending_invite_per_phone_farm.
+        with transaction.atomic():
+            Invitation.objects.filter(
+                farm=farm, phone_number=invitation.phone_number
+            ).expire_overdue()
+            invitation.save()
         return invitation
 
 

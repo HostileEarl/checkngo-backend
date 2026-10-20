@@ -5,6 +5,7 @@ from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
 from django.db.models import Count, Prefetch, Q
+from django.utils import timezone
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
@@ -283,6 +284,41 @@ class FarmOwnerAccountAdmin(ModelAdmin):
         return False
 
 
+class EffectiveStatusFilter(admin.SimpleListFilter):
+    """
+    Filter on the status a person would actually see: a PENDING row past
+    expires_at counts as Expired, not Pending, even before the daily
+    expire_invitations job has rewritten it.
+    """
+
+    title = "status"
+    parameter_name = "status"
+
+    def lookups(self, request, model_admin):
+        return Invitation.Status.choices
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if not value:
+            return queryset
+        now = timezone.now()
+        overdue = Q(status=Invitation.Status.PENDING, expires_at__lte=now)
+        if value == Invitation.Status.PENDING:
+            return queryset.filter(status=value, expires_at__gt=now)
+        if value == Invitation.Status.EXPIRED:
+            return queryset.filter(Q(status=value) | overdue)
+        return queryset.filter(status=value)
+
+
+# Same pill classes as the other admin status columns (checkngo-admin.css).
+INVITATION_STATUS_PILL = {
+    Invitation.Status.PENDING: "status-warning",
+    Invitation.Status.ACCEPTED: "status-success",
+    Invitation.Status.REVOKED: "status-danger",
+    Invitation.Status.EXPIRED: "status-muted",
+}
+
+
 @admin.register(Invitation)
 class InvitationAdmin(ModelAdmin):
     """Read-only. An invitation is a credential handoff record, not a form."""
@@ -292,11 +328,11 @@ class InvitationAdmin(ModelAdmin):
         "phone_number",
         "farm",
         "account_role",
-        "status",
+        "effective_status",
         "created_at",
         "expires_at",
     ]
-    list_filter = ["status", "account_role", "farm"]
+    list_filter = [EffectiveStatusFilter, "account_role", "farm"]
     search_fields = ["full_name", "phone_number", "business_name"]
     list_select_related = ["farm"]
     date_hierarchy = "created_at"
@@ -325,6 +361,13 @@ class InvitationAdmin(ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+    @admin.display(description="Status", ordering="status")
+    def effective_status(self, obj):
+        status = Invitation.Status(obj.effective_status)
+        return format_html(
+            '<span class="{}">{}</span>', INVITATION_STATUS_PILL[status], status.label
+        )
 
     @admin.action(description="Revoke selected pending invitations")
     def revoke_invitations(self, request, queryset):

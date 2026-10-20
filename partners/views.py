@@ -1,5 +1,6 @@
 # partners/views.py
 from django.conf import settings
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import PolymorphicProxySerializer, extend_schema
 from rest_framework import generics, status
@@ -202,7 +203,14 @@ class MyPaymentsView(generics.ListAPIView):
     """
     GET /api/partners/my-payments/ — a buyer's view of payments they made.
 
-    Scoped to Payment rows whose buyer_link points at the requesting user.
+    Scoped to Payment rows whose buyer_link points at the requesting user,
+    plus payments with no buyer_link of their own on a sale whose
+    buyer_link does. Payments recorded before the app sent buyer_link have
+    none, but their sale names the buyer; reversals follow the same rule.
+    A payment explicitly attributed to someone else never shows here, even
+    on this buyer's sale. Read-side only: PaymentSerializer still never
+    infers buyer_link on write.
+
     A buyer sees only their own payments, never another buyer's, and
     nothing about the sale's revenue or outstanding balance (that's the
     farm's side of the ledger — see BuyerPaymentSerializer). Internal
@@ -219,7 +227,10 @@ class MyPaymentsView(generics.ListAPIView):
             return Payment.objects.none()
 
         qs = (
-            Payment.objects.filter(buyer_link__partner=user)
+            Payment.objects.filter(
+                Q(buyer_link__partner=user)
+                | Q(buyer_link__isnull=True, sale__buyer_link__partner=user)
+            )
             .select_related("sale__batch__house__farm", "buyer_link")
             .order_by("-recorded_at")
         )

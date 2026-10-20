@@ -272,20 +272,30 @@ def sync_feed_usage_log(daily_record, *, user):
         existing.delete()
         existing = None
 
+    # The daily record's notes travel with the drawdown so usage history
+    # says why the feed went out, truncated in case the two fields' limits
+    # ever drift apart.
+    notes_max = InventoryUsageLog._meta.get_field("notes").max_length
+    notes = (daily_record.notes or "")[:notes_max]
+
     if existing is None:
         return InventoryUsageLog.objects.create(
             daily_record=daily_record,
             item=daily_record.feed_item,
             quantity_used=daily_record.feed_sacks,
             usage_date=daily_record.record_date,
+            notes=notes,
             recorded_by=user,
         )
 
     existing.quantity_used = daily_record.feed_sacks
     existing.usage_date = daily_record.record_date
+    existing.notes = notes
     existing.recorded_by = user
     existing.save(
-        update_fields=["quantity_used", "usage_date", "recorded_by", "updated_at"]
+        update_fields=[
+            "quantity_used", "usage_date", "notes", "recorded_by", "updated_at"
+        ]
     )
     return existing
 
@@ -1674,6 +1684,23 @@ class InventoryUsageLogSerializer(serializers.ModelSerializer):
         source="recorded_by.full_name", read_only=True, default=None
     )
     sync_delay_seconds = serializers.FloatField(read_only=True)
+    # Where the drawdown came from. A row derived from a daily record's feed
+    # line names its batch and house; a row logged on the supplies screen
+    # has neither. daily_record_notes reads the daily record directly, so
+    # rows synced before notes were copied across still show them.
+    source = serializers.SerializerMethodField()
+    daily_record = serializers.PrimaryKeyRelatedField(read_only=True)
+    batch_code = serializers.CharField(
+        source="daily_record.batch.batch_code", read_only=True, default=None
+    )
+    house_name = serializers.CharField(
+        source="daily_record.batch.house.display_name",
+        read_only=True,
+        default=None,
+    )
+    daily_record_notes = serializers.CharField(
+        source="daily_record.notes", read_only=True, default=None
+    )
 
     class Meta:
         model = InventoryUsageLog
@@ -1691,8 +1718,16 @@ class InventoryUsageLogSerializer(serializers.ModelSerializer):
             "created_at",
             "is_editable",
             "sync_delay_seconds",
+            "source",
+            "daily_record",
+            "batch_code",
+            "house_name",
+            "daily_record_notes",
         ]
         read_only_fields = ["recorded_by", "created_at"]
+
+    def get_source(self, obj):
+        return "DAILY_ENTRY" if obj.daily_record_id else "MANUAL"
 
     def validate_item(self, value):
         farm = self.context["farm"]
