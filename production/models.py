@@ -1077,12 +1077,12 @@ def _item_sum_subquery(model, field):
     )
 
 
-def _item_count_subquery(model):
-    """How many `model` rows belong to the outer InventoryItem."""
+def _item_count_subquery(model, field="item"):
+    """How many `model` rows belong to the outer InventoryItem via `field`."""
     return Coalesce(
         models.Subquery(
-            model.objects.filter(item=models.OuterRef("pk"))
-            .values("item")
+            model.objects.filter(**{field: models.OuterRef("pk")})
+            .values(field)
             .annotate(c=models.Count("pk"))
             .values("c")[:1],
             output_field=models.IntegerField(),
@@ -1119,6 +1119,8 @@ class InventoryItemQuerySet(models.QuerySet):
             ),
             stock_in_count=_item_count_subquery(InventoryStockIn),
             usage_count=_item_count_subquery(InventoryUsageLog),
+            feed_delivery_count=_item_count_subquery(FeedDelivery, "inventory_item"),
+            daily_feed_record_count=_item_count_subquery(DailyRecord, "feed_item"),
         )
 
 
@@ -1172,6 +1174,14 @@ class InventoryItem(models.Model):
     )
 
     is_active = models.BooleanField(default=True)
+
+    # Retirement, not a maintenance flag — the same owner/manager archive
+    # pair as House.archived_at. An archived item drops out of the item
+    # list, the usage picker and the feed-delivery item picker, but its
+    # past stock-ins, usage logs and deliveries stay exactly where they
+    # are: reports, stock history and analytics never filter on this.
+    archived_at = models.DateTimeField(null=True, blank=True)
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -1262,6 +1272,31 @@ class InventoryItem(models.Model):
         if self.never_stocked:
             return False
         return self.current_quantity <= self.low_stock_threshold
+
+    @property
+    def is_archived(self):
+        return self.archived_at is not None
+
+    @property
+    def has_history(self):
+        """
+        Any reference anywhere — the four FKs that point at this item.
+        PROTECT on three of them already stops a bare .delete() at the DB
+        level; this is what lets the API reject early with a clear message
+        instead of surfacing an IntegrityError, and it also catches
+        DailyRecord.feed_item, which is SET_NULL and so would otherwise let
+        the row through only to silently orphan that link.
+        """
+        return (
+            self.stock_ins.exists()
+            or self.usage_logs.exists()
+            or self.feed_deliveries.exists()
+            or self.daily_feed_records.exists()
+        )
+
+    @property
+    def can_delete(self):
+        return not self.has_history
 
 
 class InventoryStockIn(models.Model):
