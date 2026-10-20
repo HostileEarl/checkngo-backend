@@ -35,14 +35,10 @@ class Command(BaseCommand):
         sent_count = 0
 
         for farm in Farm.objects.filter(is_active=True).select_related("owner"):
-            items = InventoryItem.objects.filter(farm=farm, is_active=True).with_levels()
-
-            low_items = [
-                item
-                for item in items
-                if not (item.stock_in_count == 0 and item.usage_count == 0)
-                and item.qty_current <= item.low_stock_threshold
-            ]
+            # low_stock() is the one shared definition of "alertable" —
+            # archived and never-stocked items are excluded there, so this
+            # command and the in-app alerts endpoint can't drift apart.
+            low_items = list(InventoryItem.objects.filter(farm=farm).low_stock())
             if not low_items:
                 continue
 

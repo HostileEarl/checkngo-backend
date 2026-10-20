@@ -1123,6 +1123,35 @@ class InventoryItemQuerySet(models.QuerySet):
             daily_feed_record_count=_item_count_subquery(DailyRecord, "feed_item"),
         )
 
+    def low_stock(self):
+        """
+        The one definition of "alertable" low stock, shared by every
+        consumer that fires an alert off it — the in-app alerts endpoint
+        and the send_stock_alerts SMS command. Anything else that wants to
+        know what is running low must filter through here rather than
+        reimplement the rule, which is what keeps a new alert channel from
+        quietly forgetting one of these exclusions:
+
+          archived   — retired by the owner/manager archive pair. Still
+                       real in reports and stock history, but nobody
+                       should be paged about restocking it.
+          inactive   — the older, separate is_active flag; same idea.
+          never stocked — no stock-ins AND no usage. Not "low", simply
+                       untouched; warning on it the moment it's created
+                       would be noise.
+
+        What remains is filtered to the actual reorder condition. Callers
+        branch on qty_current <= 0 for "out of stock" vs. the rest for
+        "running low" — both are already guaranteed <= low_stock_threshold
+        here.
+        """
+        return (
+            self.with_levels()
+            .filter(archived_at__isnull=True, is_active=True)
+            .exclude(stock_in_count=0, usage_count=0)
+            .filter(qty_current__lte=models.F("low_stock_threshold"))
+        )
+
 
 class InventoryItem(models.Model):
     class FeedType(models.TextChoices):

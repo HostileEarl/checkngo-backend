@@ -135,12 +135,11 @@ def _low_stock(farm):
     """
     An inventory item at or below its reorder level.
 
-    Three states, told apart deliberately:
+    What counts as a candidate at all — not archived, not inactive, not
+    never-stocked — is decided once in InventoryItem.objects.low_stock(),
+    shared with the send_stock_alerts SMS command so the two channels can
+    never drift apart on an exclusion. What's left here is just severity:
 
-      never stocked  — no stock-ins AND no usage. A brand-new item nobody
-                       has touched is not "low"; it has simply never been
-                       stocked. Suppressed, or a warning fires the instant
-                       a manager adds an item.
       out of stock   — balance <= 0. Surfaced as `danger`: a worker
                        recording usage against an empty item is a data
                        problem, not a "reorder soon" nudge.
@@ -149,13 +148,10 @@ def _low_stock(farm):
     Restocking is a purchasing decision, so this goes to owners and
     managers only — the same audience as the feed-balance alert.
     """
-    items = InventoryItem.objects.filter(farm=farm, is_active=True).with_levels()
+    items = InventoryItem.objects.filter(farm=farm).low_stock()
 
     out = []
     for item in items:
-        if item.stock_in_count == 0 and item.usage_count == 0:
-            continue  # never stocked
-
         qty = item.qty_current
         threshold = item.low_stock_threshold
 

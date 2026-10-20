@@ -288,6 +288,58 @@ class TestOfflineUsageLogAcrossArchiving:
 # ─────────────────────────────────────────────────────────────
 
 
+class TestArchivedItemExcludedFromLowStockAlerts:
+    """
+    The in-app alert side of the shared InventoryItemQuerySet.low_stock()
+    rule. The SMS side is covered in
+    notifications/tests/test_send_stock_alerts.py.
+    """
+
+    @pytest.fixture
+    def alerts_url(self, staffed_farm):
+        return reverse("analytics:alerts", kwargs={"farm_pk": staffed_farm.pk})
+
+    def _low_stock_alerts(self, response):
+        return [
+            a for a in response.data["alerts"] if a["id"].startswith("low-stock:")
+        ]
+
+    def test_archived_out_of_stock_item_triggers_no_in_app_alert(
+        self, auth, owner, worker, staffed_farm, item, alerts_url
+    ):
+        InventoryStockIn.objects.create(
+            item=item, quantity=10, stock_in_date=timezone.localdate(), recorded_by=owner,
+        )
+        InventoryUsageLog.objects.create(
+            item=item, quantity_used=10, usage_date=timezone.localdate(), recorded_by=worker,
+        )
+        # Confirm it alerts before archiving, to prove the archive is what
+        # silences it rather than some other mismatch in the fixture.
+        assert self._low_stock_alerts(auth(owner).get(alerts_url))
+
+        item.archived_at = timezone.now()
+        item.save(update_fields=["archived_at"])
+
+        assert self._low_stock_alerts(auth(owner).get(alerts_url)) == []
+
+    def test_restoring_the_item_brings_the_alert_back(
+        self, auth, owner, worker, staffed_farm, item, alerts_url
+    ):
+        InventoryStockIn.objects.create(
+            item=item, quantity=10, stock_in_date=timezone.localdate(), recorded_by=owner,
+        )
+        InventoryUsageLog.objects.create(
+            item=item, quantity_used=10, usage_date=timezone.localdate(), recorded_by=worker,
+        )
+        item.archived_at = timezone.now()
+        item.save(update_fields=["archived_at"])
+        assert self._low_stock_alerts(auth(owner).get(alerts_url)) == []
+
+        auth(owner).post(restore_url(staffed_farm, item))
+
+        assert self._low_stock_alerts(auth(owner).get(alerts_url))
+
+
 class TestDelete:
     def test_item_with_no_history_can_be_deleted(self, auth, owner, staffed_farm, item):
         resp = auth(owner).delete(detail_url(staffed_farm, item))
