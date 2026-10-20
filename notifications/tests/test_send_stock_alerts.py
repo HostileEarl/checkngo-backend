@@ -100,6 +100,33 @@ class TestSendStockAlerts:
         call_command("send_stock_alerts")
         assert SmsLog.objects.filter(purpose=SmsLog.Purpose.LOW_STOCK).count() == 1
 
+    def test_archived_out_of_stock_item_sends_no_sms(self, settings, farm, worker):
+        settings.SMS_ENABLED = True
+        settings.SEMAPHORE_API_KEY = "test-key"
+
+        item = _make_low_item(farm, "Feed Sacks", worker)
+        item.archived_at = timezone.now()
+        item.save(update_fields=["archived_at"])
+
+        call_command("send_stock_alerts")  # no fake_semaphore: nothing should be posted
+
+        assert not SmsLog.objects.filter(purpose=SmsLog.Purpose.LOW_STOCK).exists()
+
+    def test_restoring_the_item_brings_the_sms_back(self, fake_semaphore, farm, worker):
+        item = _make_low_item(farm, "Feed Sacks", worker)
+        item.archived_at = timezone.now()
+        item.save(update_fields=["archived_at"])
+        call_command("send_stock_alerts")
+        assert not SmsLog.objects.filter(purpose=SmsLog.Purpose.LOW_STOCK).exists()
+
+        item.archived_at = None
+        item.save(update_fields=["archived_at"])
+        call_command("send_stock_alerts")
+
+        log = SmsLog.objects.get(purpose=SmsLog.Purpose.LOW_STOCK)
+        assert "Feed Sacks" in log.message
+        assert log.status == SmsLog.Status.SENT
+
     def test_different_item_sets_that_render_identically_do_not_suppress_each_other(
         self, fake_semaphore, farm, worker
     ):

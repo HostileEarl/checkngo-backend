@@ -1752,11 +1752,16 @@ paths:
     get:
       operationId: farms_inventory_items_list
       description: |-
-        GET  /api/farms/<farm_pk>/inventory/items/   — any active member
+        GET  /api/farms/<farm_pk>/inventory/items/?include_archived=true
         POST /api/farms/<farm_pk>/inventory/items/   — owner/manager only
 
         CanManageInventory leaves reads open (empty read_roles), so a worker
         can still fetch the list to pick an item to log usage against.
+
+        Archived items are left out by default — this is the same list the
+        usage picker and the feed-delivery item picker both read, so excluding
+        them here keeps an archived item out of both at once. The frontend's
+        "Show archived" toggle sends ?include_archived=true to see them again.
       parameters:
       - in: path
         name: farm_pk
@@ -1779,11 +1784,16 @@ paths:
     post:
       operationId: farms_inventory_items_create
       description: |-
-        GET  /api/farms/<farm_pk>/inventory/items/   — any active member
+        GET  /api/farms/<farm_pk>/inventory/items/?include_archived=true
         POST /api/farms/<farm_pk>/inventory/items/   — owner/manager only
 
         CanManageInventory leaves reads open (empty read_roles), so a worker
         can still fetch the list to pick an item to log usage against.
+
+        Archived items are left out by default — this is the same list the
+        usage picker and the feed-delivery item picker both read, so excluding
+        them here keeps an archived item out of both at once. The frontend's
+        "Show archived" toggle sends ?include_archived=true to see them again.
       parameters:
       - in: path
         name: farm_pk
@@ -1891,8 +1901,14 @@ paths:
   /api/farms/{farm_pk}/inventory/items/{id}/:
     get:
       operationId: farms_inventory_items_retrieve
-      description: GET / PATCH /api/farms/<farm_pk>/inventory/items/<pk>/ — owner/manager
-        to write.
+      description: |-
+        GET / PATCH / DELETE /api/farms/<farm_pk>/inventory/items/<pk>/ — owner/manager to write.
+
+        DELETE only succeeds for an item with no history anywhere — no
+        stock-ins, usage logs, feed deliveries, or daily records referencing
+        it. Anything else means archiving, not deleting: the PROTECT FKs would
+        refuse the DB delete anyway, but has_history catches it first with a
+        message that tells the caller what to do instead.
       parameters:
       - in: path
         name: farm_pk
@@ -1917,8 +1933,14 @@ paths:
           description: ''
     put:
       operationId: farms_inventory_items_update
-      description: GET / PATCH /api/farms/<farm_pk>/inventory/items/<pk>/ — owner/manager
-        to write.
+      description: |-
+        GET / PATCH / DELETE /api/farms/<farm_pk>/inventory/items/<pk>/ — owner/manager to write.
+
+        DELETE only succeeds for an item with no history anywhere — no
+        stock-ins, usage logs, feed deliveries, or daily records referencing
+        it. Anything else means archiving, not deleting: the PROTECT FKs would
+        refuse the DB delete anyway, but has_history catches it first with a
+        message that tells the caller what to do instead.
       parameters:
       - in: path
         name: farm_pk
@@ -1955,8 +1977,14 @@ paths:
           description: ''
     patch:
       operationId: farms_inventory_items_partial_update
-      description: GET / PATCH /api/farms/<farm_pk>/inventory/items/<pk>/ — owner/manager
-        to write.
+      description: |-
+        GET / PATCH / DELETE /api/farms/<farm_pk>/inventory/items/<pk>/ — owner/manager to write.
+
+        DELETE only succeeds for an item with no history anywhere — no
+        stock-ins, usage logs, feed deliveries, or daily records referencing
+        it. Anything else means archiving, not deleting: the PROTECT FKs would
+        refuse the DB delete anyway, but has_history catches it first with a
+        message that tells the caller what to do instead.
       parameters:
       - in: path
         name: farm_pk
@@ -1990,6 +2018,80 @@ paths:
               schema:
                 $ref: '#/components/schemas/InventoryItem'
           description: ''
+    delete:
+      operationId: farms_inventory_items_destroy
+      description: |-
+        GET / PATCH / DELETE /api/farms/<farm_pk>/inventory/items/<pk>/ — owner/manager to write.
+
+        DELETE only succeeds for an item with no history anywhere — no
+        stock-ins, usage logs, feed deliveries, or daily records referencing
+        it. Anything else means archiving, not deleting: the PROTECT FKs would
+        refuse the DB delete anyway, but has_history catches it first with a
+        message that tells the caller what to do instead.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/farms/{farm_pk}/inventory/items/{id}/archive/:
+    post:
+      operationId: farms_inventory_items_archive_create
+      description: POST /api/farms/<farm_pk>/inventory/items/<pk>/archive/ — owner/manager
+        only.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/farms/{farm_pk}/inventory/items/{id}/restore/:
+    post:
+      operationId: farms_inventory_items_restore_create
+      description: POST /api/farms/<farm_pk>/inventory/items/<pk>/restore/ — owner/manager
+        only.
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/farms/{farm_pk}/inventory/usage/:
     get:
       operationId: farms_inventory_usage_list
@@ -4626,11 +4728,21 @@ components:
         never_stocked:
           type: boolean
           readOnly: true
+        archived_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        can_delete:
+          type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
           readOnly: true
       required:
+      - archived_at
+      - can_delete
       - created_at
       - current_quantity
       - id

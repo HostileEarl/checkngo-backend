@@ -870,11 +870,16 @@ class FarmCorrectionListView(generics.ListAPIView):
 
 class InventoryItemListCreateView(generics.ListCreateAPIView):
     """
-    GET  /api/farms/<farm_pk>/inventory/items/   — any active member
+    GET  /api/farms/<farm_pk>/inventory/items/?include_archived=true
     POST /api/farms/<farm_pk>/inventory/items/   — owner/manager only
 
     CanManageInventory leaves reads open (empty read_roles), so a worker
     can still fetch the list to pick an item to log usage against.
+
+    Archived items are left out by default — this is the same list the
+    usage picker and the feed-delivery item picker both read, so excluding
+    them here keeps an archived item out of both at once. The frontend's
+    "Show archived" toggle sends ?include_archived=true to see them again.
     """
 
     serializer_class = InventoryItemSerializer
@@ -889,11 +894,21 @@ class InventoryItemListCreateView(generics.ListCreateAPIView):
         qs = InventoryItem.objects.filter(farm=self.request.farm).with_levels()
         if self.request.query_params.get("active") == "1":
             qs = qs.filter(is_active=True)
+        if self.request.query_params.get("include_archived") != "true":
+            qs = qs.filter(archived_at__isnull=True)
         return qs
 
 
-class InventoryItemDetailView(generics.RetrieveUpdateAPIView):
-    """GET / PATCH /api/farms/<farm_pk>/inventory/items/<pk>/ — owner/manager to write."""
+class InventoryItemDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    GET / PATCH / DELETE /api/farms/<farm_pk>/inventory/items/<pk>/ — owner/manager to write.
+
+    DELETE only succeeds for an item with no history anywhere — no
+    stock-ins, usage logs, feed deliveries, or daily records referencing
+    it. Anything else means archiving, not deleting: the PROTECT FKs would
+    refuse the DB delete anyway, but has_history catches it first with a
+    message that tells the caller what to do instead.
+    """
 
     serializer_class = InventoryItemSerializer
     permission_classes = [CanManageInventory]
@@ -905,6 +920,51 @@ class InventoryItemDetailView(generics.RetrieveUpdateAPIView):
 
     def get_queryset(self):
         return InventoryItem.objects.filter(farm=self.request.farm).with_levels()
+
+    def perform_destroy(self, instance):
+        if instance.has_history:
+            raise serializers.ValidationError(
+                {"detail": "This item has history. Archive it instead."}
+            )
+        instance.delete()
+
+
+class InventoryItemArchiveView(APIView):
+    """POST /api/farms/<farm_pk>/inventory/items/<pk>/archive/ — owner/manager only."""
+
+    permission_classes = [CanManageInventory]
+
+    def post(self, request, farm_pk, pk):
+        item = get_object_or_404(InventoryItem, pk=pk, farm=request.farm)
+
+        if item.is_archived:
+            return Response(
+                {"detail": f"{item.name} is already archived."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        item.archived_at = timezone.now()
+        item.save(update_fields=["archived_at"])
+        return Response(InventoryItemSerializer(item).data)
+
+
+class InventoryItemRestoreView(APIView):
+    """POST /api/farms/<farm_pk>/inventory/items/<pk>/restore/ — owner/manager only."""
+
+    permission_classes = [CanManageInventory]
+
+    def post(self, request, farm_pk, pk):
+        item = get_object_or_404(InventoryItem, pk=pk, farm=request.farm)
+
+        if not item.is_archived:
+            return Response(
+                {"detail": f"{item.name} is not archived."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        item.archived_at = None
+        item.save(update_fields=["archived_at"])
+        return Response(InventoryItemSerializer(item).data)
 
 
 class InventoryStockInListCreateView(generics.ListCreateAPIView):

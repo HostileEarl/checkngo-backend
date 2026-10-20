@@ -1287,6 +1287,11 @@ class FeedDeliverySerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("That item belongs to another farm.")
         if not value.is_feed:
             raise serializers.ValidationError("That item is not marked as feed.")
+        if value.is_archived:
+            raise serializers.ValidationError(
+                f"{value.name} is archived. Restore it before recording a "
+                "delivery against it."
+            )
         return value
 
     def validate_delivery_date(self, value):
@@ -1534,6 +1539,7 @@ class InventoryItemSerializer(serializers.ModelSerializer):
     used_total = serializers.SerializerMethodField()
     is_low = serializers.SerializerMethodField()
     never_stocked = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
 
     class Meta:
         model = InventoryItem
@@ -1551,9 +1557,11 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             "used_total",
             "is_low",
             "never_stocked",
+            "archived_at",
+            "can_delete",
             "created_at",
         ]
-        read_only_fields = ["id", "created_at"]
+        read_only_fields = ["id", "archived_at", "created_at"]
 
     def _level(self, obj, annotated_attr, prop_name):
         val = getattr(obj, annotated_attr, None)
@@ -1584,6 +1592,17 @@ class InventoryItemSerializer(serializers.ModelSerializer):
         if current is None:
             current = obj.current_quantity
         return current <= obj.low_stock_threshold
+
+    def get_can_delete(self, obj) -> bool:
+        counts = [
+            getattr(obj, "stock_in_count", None),
+            getattr(obj, "usage_count", None),
+            getattr(obj, "feed_delivery_count", None),
+            getattr(obj, "daily_feed_record_count", None),
+        ]
+        if all(c is not None for c in counts):
+            return all(c == 0 for c in counts)
+        return obj.can_delete
 
     def validate_name(self, value):
         farm = self.context["farm"]
@@ -1650,9 +1669,14 @@ class InventoryStockInSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        if self.context["item"].is_feed:
+        item = self.context["item"]
+        if item.is_feed:
             raise serializers.ValidationError(
                 "Feed stock is added by recording a feed delivery."
+            )
+        if item.is_archived:
+            raise serializers.ValidationError(
+                f"{item.name} is archived. Restore it before adding stock."
             )
         return attrs
 
@@ -1750,6 +1774,28 @@ class InventoryUsageLogSerializer(serializers.ModelSerializer):
         if value > timezone.localdate():
             raise serializers.ValidationError("Cannot record a future date.")
         return value
+
+    def validate(self, attrs):
+        # recorded_at is the client's clock — when the worker actually
+        # logged this, offline or not — so a backlog entry queued before
+        # the item was archived is accepted on sync even though the item
+        # looks archived right now. Anything typed after archival, whether
+        # just-submitted or a late offline entry, is rejected either way.
+        item = attrs.get("item", getattr(self.instance, "item", None))
+        if item is not None and item.is_archived:
+            recorded_at = attrs.get(
+                "recorded_at", getattr(self.instance, "recorded_at", None)
+            )
+            if recorded_at is None or recorded_at >= item.archived_at:
+                raise serializers.ValidationError(
+                    {
+                        "item": (
+                            f"{item.name} is archived. Restore it before "
+                            "logging new usage."
+                        )
+                    }
+                )
+        return attrs
 
     def update(self, instance, validated_data):
         # The 24-hour lock has teeth here exactly as it does on a daily
