@@ -326,6 +326,10 @@ class InvitationReadSerializer(serializers.ModelSerializer):
     invited_by_name = serializers.CharField(source="invited_by.full_name", read_only=True)
     farm_name = serializers.CharField(source="farm.name", read_only=True)
     is_expired = serializers.BooleanField(read_only=True)
+    # Overrides the raw model field: `status` alone never flips to EXPIRED
+    # in the database, it just stops being actionable — see
+    # Invitation.effective_status.
+    status = serializers.CharField(source="effective_status", read_only=True)
 
     class Meta:
         model = Invitation
@@ -333,6 +337,8 @@ class InvitationReadSerializer(serializers.ModelSerializer):
             "id",
             "phone_number",
             "full_name",
+            "business_name",
+            "account_role",
             "membership_role",
             "farm_name",
             "status",

@@ -10,7 +10,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from farms.models import FarmMembership
 from farms.permissions import CanInviteRole, IsFarmManagerOrOwner
 
-from .models import Invitation
+from .models import Invitation, User
 from .serializers import (
     CredentialChangeSerializer,
     InvitationAcceptSerializer,
@@ -128,9 +128,23 @@ class FarmInvitationListCreateView(generics.ListCreateAPIView):
         return context
 
     def get_queryset(self):
-        return Invitation.objects.filter(farm=self.request.farm).select_related(
+        qs = Invitation.objects.filter(farm=self.request.farm).select_related(
             "invited_by", "farm"
         )
+
+        kind = self.request.query_params.get("kind")
+        if kind == "buyer":
+            qs = qs.filter(account_role=User.Role.CONSUMER)
+        elif kind == "staff":
+            qs = qs.exclude(account_role=User.Role.CONSUMER)
+
+        # A manager never sees buyer invitations here, regardless of ?kind
+        # — buyer invitations are owner-only (see FarmPartnerListCreateView
+        # and FarmInvitationRevokeView for the matching write-side rule).
+        if self.request.membership.role == FarmMembership.Role.MANAGER:
+            qs = qs.exclude(account_role=User.Role.CONSUMER)
+
+        return qs
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -196,14 +210,17 @@ class FarmInvitationRevokeView(APIView):
     def post(self, request, farm_pk, pk):
         invitation = get_object_or_404(Invitation, pk=pk, farm=request.farm)
 
-        if (
-            request.membership.role == FarmMembership.Role.MANAGER
-            and invitation.membership_role != FarmMembership.Role.WORKER
-        ):
-            return Response(
-                {"detail": "Only the farm owner can revoke a manager-level invitation."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        if request.membership.role == FarmMembership.Role.MANAGER:
+            if invitation.account_role == User.Role.CONSUMER:
+                return Response(
+                    {"detail": "Only the farm owner can revoke a buyer invitation."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if invitation.membership_role != FarmMembership.Role.WORKER:
+                return Response(
+                    {"detail": "Only the farm owner can revoke a manager-level invitation."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         if invitation.status != Invitation.Status.PENDING:
             return Response(

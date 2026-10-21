@@ -256,7 +256,10 @@ class TestMyPurchases:
 
         row = auth(buyer).get(URL).data[0]
 
-        for hidden in ("revenue", "revenue_per_kg", "notes", "recorded_by", "price_per_kg"):
+        for hidden in (
+            "revenue", "revenue_per_kg", "notes", "recorded_by", "price_per_kg",
+            "buyer_name", "buyer_display",
+        ):
             assert hidden not in row
 
     def test_sale_with_no_buyer_is_invisible_to_everyone(

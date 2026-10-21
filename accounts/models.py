@@ -223,7 +223,11 @@ class Invitation(models.Model):
         related_name="invitations",
         null=True,
         blank=True,
-        help_text="Null for external partners, who hold no farm membership.",
+        help_text=(
+            "Buyer invitations keep the inviting farm, same as staff "
+            "invitations — a buyer holds no membership_role, but the "
+            "invitation itself is not farm-less."
+        ),
     )
     account_role = models.CharField(max_length=20, choices=User.Role.choices)
     membership_role = models.CharField(
@@ -316,6 +320,17 @@ class Invitation(models.Model):
     @property
     def is_actionable(self):
         return self.status == self.Status.PENDING and not self.is_expired
+
+    @property
+    def effective_status(self):
+        """
+        `status` alone lies for an overdue invitation: nothing ever flips
+        it to EXPIRED in the database, it just stops being actionable once
+        `expires_at` passes. This is the status a human should be shown.
+        """
+        if self.status == self.Status.PENDING and self.is_expired:
+            return self.Status.EXPIRED
+        return self.status
 
     @property
     def effective_status(self):

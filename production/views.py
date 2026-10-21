@@ -519,7 +519,11 @@ class SaleEventListCreateView(BatchScopedMixin, generics.ListCreateAPIView):
     def get_queryset(self):
         return (
             SaleEvent.objects.filter(batch=self.batch)
-            .select_related("recorded_by")
+            .select_related(
+                "recorded_by", "buyer_link", "buyer_link__partner",
+                "batch__harvest", "batch__harvest__buyer_link",
+                "batch__harvest__buyer_link__partner",
+            )
             .prefetch_related("payments")
         )
 
@@ -557,7 +561,11 @@ class SaleEventDetailView(BatchScopedMixin, generics.RetrieveUpdateAPIView):
     def get_queryset(self):
         return (
             SaleEvent.objects.filter(batch=self.batch)
-            .select_related("recorded_by")
+            .select_related(
+                "recorded_by", "buyer_link", "buyer_link__partner",
+                "batch__harvest", "batch__harvest__buyer_link",
+                "batch__harvest__buyer_link__partner",
+            )
             .prefetch_related("payments")
         )
 

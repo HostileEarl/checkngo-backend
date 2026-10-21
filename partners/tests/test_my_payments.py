@@ -135,6 +135,8 @@ class TestMyPayments:
         assert "revenue" not in row
         assert "outstanding" not in row
         assert "notes" not in row
+        assert "buyer_name" not in row
+        assert "buyer_display" not in row
         assert set(row) == {
             "id",
             "farm",

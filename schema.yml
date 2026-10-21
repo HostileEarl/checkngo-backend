@@ -2526,8 +2526,10 @@ paths:
         GET  /api/farms/<farm_pk>/partners/ — this farm's consumer directory
         POST /api/farms/<farm_pk>/partners/ — invite a new partner
 
-        Owner and manager both permitted: unlike manager promotion, adding a
-        consumer grants no authority over the farm, so it needs no owner gate.
+        Reading the directory stays open to owner and manager alike. Inviting
+        a buyer is owner-only — unlike manager promotion this grants no
+        authority over the farm, but the owner wants to be the one deciding
+        who the farm transacts with.
       parameters:
       - in: path
         name: farm_pk
@@ -2553,8 +2555,10 @@ paths:
         GET  /api/farms/<farm_pk>/partners/ — this farm's consumer directory
         POST /api/farms/<farm_pk>/partners/ — invite a new partner
 
-        Owner and manager both permitted: unlike manager promotion, adding a
-        consumer grants no authority over the farm, so it needs no owner gate.
+        Reading the directory stays open to owner and manager alike. Inviting
+        a buyer is owner-only — unlike manager promotion this grants no
+        authority over the farm, but the owner wants to be the one deciding
+        who the farm transacts with.
       parameters:
       - in: path
         name: farm_pk
@@ -2584,13 +2588,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/PartnerInvitationCreate'
           description: ''
+  /api/farms/{farm_pk}/partners/{id}/restore/:
+    post:
+      operationId: farms_partners_restore_create
+      description: |-
+        POST /api/farms/<farm_pk>/partners/<pk>/restore/
+
+        Undo an unlink. Owner only — see FarmPartnerListCreateView. 400 if the
+        link is already active; 404 if the link belongs to another farm (the
+        farm scoping on the lookup below is what produces that, same as every
+        other farm-scoped detail action).
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - farms
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/farms/{farm_pk}/partners/{id}/unlink/:
     post:
       operationId: farms_partners_unlink_create
       description: |-
         POST /api/farms/<farm_pk>/partners/<pk>/unlink/
 
-        Soft — the relationship ends, the record of it having existed does not.
+        Soft — the relationship ends, the record of it having existed does
+        not. Owner only — see FarmPartnerListCreateView.
       parameters:
       - in: path
         name: farm_pk
@@ -3605,7 +3638,14 @@ paths:
       description: |-
         GET /api/partners/my-payments/ — a buyer's view of payments they made.
 
-        Scoped to Payment rows whose buyer_link points at the requesting user.
+        Scoped to Payment rows whose buyer_link points at the requesting user,
+        plus payments with no buyer_link of their own on a sale whose
+        buyer_link does. Payments recorded before the app sent buyer_link have
+        none, but their sale names the buyer; reversals follow the same rule.
+        A payment explicitly attributed to someone else never shows here, even
+        on this buyer's sale. Read-side only: PaymentSerializer still never
+        infers buyer_link on write.
+
         A buyer sees only their own payments, never another buyer's, and
         nothing about the sale's revenue or outstanding balance (that's the
         farm's side of the ledger — see BuyerPaymentSerializer). Internal
@@ -4930,14 +4970,35 @@ components:
           type: number
           format: double
           readOnly: true
+        source:
+          type: string
+          readOnly: true
+        daily_record:
+          type: string
+          format: uuid
+          readOnly: true
+        batch_code:
+          type: string
+          readOnly: true
+        house_name:
+          type: string
+          readOnly: true
+        daily_record_notes:
+          type: string
+          readOnly: true
       required:
+      - batch_code
       - created_at
+      - daily_record
+      - daily_record_notes
+      - house_name
       - is_editable
       - item
       - item_name
       - quantity_used
       - recorded_by
       - recorded_by_name
+      - source
       - sync_delay_seconds
       - unit
       - usage_date
@@ -5065,6 +5126,12 @@ components:
         full_name:
           type: string
           maxLength: 150
+        business_name:
+          type: string
+          description: External partners only. Carried onto the FarmPartnerLink.
+          maxLength: 150
+        account_role:
+          $ref: '#/components/schemas/AccountRoleEnum'
         membership_role:
           type: string
           description: Operational role at the farm. Blank for external partners.
@@ -5073,7 +5140,8 @@ components:
           type: string
           readOnly: true
         status:
-          $ref: '#/components/schemas/StatusE59Enum'
+          type: string
+          readOnly: true
         is_expired:
           type: boolean
           readOnly: true
@@ -5115,6 +5183,7 @@ components:
           readOnly: true
       required:
       - accept_url
+      - account_role
       - created_at
       - detail
       - existing_user
@@ -5128,6 +5197,7 @@ components:
       - phone_number
       - pin
       - sms_sent
+      - status
       - token
     InvitationRead:
       type: object
@@ -5142,6 +5212,12 @@ components:
         full_name:
           type: string
           maxLength: 150
+        business_name:
+          type: string
+          description: External partners only. Carried onto the FarmPartnerLink.
+          maxLength: 150
+        account_role:
+          $ref: '#/components/schemas/AccountRoleEnum'
         membership_role:
           type: string
           description: Operational role at the farm. Blank for external partners.
@@ -5150,7 +5226,8 @@ components:
           type: string
           readOnly: true
         status:
-          $ref: '#/components/schemas/StatusE59Enum'
+          type: string
+          readOnly: true
         is_expired:
           type: boolean
           readOnly: true
@@ -5169,6 +5246,7 @@ components:
           format: date-time
           nullable: true
       required:
+      - account_role
       - created_at
       - expires_at
       - farm_name
@@ -5177,6 +5255,7 @@ components:
       - invited_by_name
       - is_expired
       - phone_number
+      - status
     LinkTypeEnum:
       enum:
       - CONSUMER
@@ -5218,7 +5297,7 @@ components:
           $ref: '#/components/schemas/AccountRoleEnum'
         status:
           allOf:
-          - $ref: '#/components/schemas/StatusE59Enum'
+          - $ref: '#/components/schemas/PartnerInvitationCreateStatusEnum'
           readOnly: true
         expires_at:
           type: string
@@ -5270,6 +5349,18 @@ components:
       - account_role
       - full_name
       - phone_number
+    PartnerInvitationCreateStatusEnum:
+      enum:
+      - PENDING
+      - ACCEPTED
+      - REVOKED
+      - EXPIRED
+      type: string
+      description: |-
+        * `PENDING` - Pending
+        * `ACCEPTED` - Accepted
+        * `REVOKED` - Revoked
+        * `EXPIRED` - Expired
     PatchedDailyRecordRequest:
       type: object
       description: |-
@@ -5464,6 +5555,9 @@ components:
           type: integer
           nullable: true
           description: Optional per-sale buyer.
+        buyer_name:
+          type: string
+          maxLength: 100
         notes:
           type: string
           maxLength: 255
@@ -5745,6 +5839,20 @@ components:
           type: integer
           nullable: true
           description: Optional per-sale buyer.
+        buyer_name:
+          type: string
+          maxLength: 100
+        buyer_display:
+          type: string
+          description: |-
+            The buyer column's single source of truth: a registered buyer's
+            business name or personal name, else the free-text walk-in name,
+            else "Walk-in". Falls back further, same as the sales-history
+            report (see analytics.reports.sales_history_rows), to the batch's
+            legacy Harvest-wide buyer when NO sale on this batch has ever
+            carried its own buyer_link — the pre-per-sale-buyer behaviour,
+            preserved for batches closed before this field existed.
+          readOnly: true
         notes:
           type: string
           maxLength: 255
@@ -5791,6 +5899,7 @@ components:
       required:
       - average_weight_kg
       - batch
+      - buyer_display
       - created_at
       - is_editable
       - is_fully_paid
@@ -5860,6 +5969,9 @@ components:
           type: integer
           nullable: true
           description: Optional per-sale buyer.
+        buyer_name:
+          type: string
+          maxLength: 100
         notes:
           type: string
           maxLength: 255
@@ -5881,18 +5993,6 @@ components:
         * `DRESSED` - Dressed
         * `LIVE` - Live
         * `OTHERS` - Others
-    StatusE59Enum:
-      enum:
-      - PENDING
-      - ACCEPTED
-      - REVOKED
-      - EXPIRED
-      type: string
-      description: |-
-        * `PENDING` - Pending
-        * `ACCEPTED` - Accepted
-        * `REVOKED` - Revoked
-        * `EXPIRED` - Expired
     TaskCompletion:
       type: object
       description: |-
