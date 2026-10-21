@@ -402,14 +402,30 @@ class TestLowStockUsesCorrectedLevel:
 
 
 class TestAdminFeedFieldsReadOnly:
-    def test_daily_record_admin_feed_fields_are_read_only(self):
-        from production.admin import DailyRecordAdmin
-        from production.models import DailyRecord as DR
+    """
+    Feed fields can't be edited through the admin at all — not because
+    DailyRecordAdmin marks them read-only (there is no DailyRecordAdmin
+    any more), but because the admin doesn't carry farm-operational
+    models at all. See production/admin.py and checkngo/admin_theme.py:
+    the technical administrator maintains accounts, not farm data.
+    """
 
-        admin_instance = DailyRecordAdmin(DR, None)
-        assert "feed_kg" in admin_instance.readonly_fields
-        assert "feed_sacks" in admin_instance.readonly_fields
-        assert "feed_item" in admin_instance.readonly_fields
+    def test_daily_record_is_not_registered_in_the_admin(self):
+        from django.contrib import admin
+
+        from production.models import DailyRecord
+
+        assert not admin.site.is_registered(DailyRecord)
+
+    def test_no_production_model_is_registered_in_the_admin(self):
+        from django.contrib import admin
+
+        registered_production_models = {
+            model._meta.model_name
+            for model in admin.site._registry
+            if model._meta.app_label == "production"
+        }
+        assert registered_production_models == set()
 
 
 class TestSeedInvariant:
