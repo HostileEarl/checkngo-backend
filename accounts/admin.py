@@ -4,37 +4,14 @@ from django.contrib import admin, messages
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, Q
 from django.utils import timezone
 from django.utils.html import format_html
-from unfold.admin import ModelAdmin, TabularInline
+from unfold.admin import ModelAdmin
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
-from farms.models import FarmMembership
-
-from .models import FarmOwnerAccount, Invitation, User
+from .models import FarmOwnerAccount, Invitation, User, mask_phone
 from .services import issue_owner_account
-
-
-class UserFarmMembershipInline(TabularInline):
-    """
-    Read-only view of the user's active farm scope.
-
-    Memberships are created and revoked from the Farms section (or via the
-    invite flow), never typed in here — this inline exists so an
-    administrator can see someone's reach without leaving the user page.
-    """
-
-    model = FarmMembership
-    fk_name = "user"
-    extra = 0
-    can_delete = False
-    verbose_name_plural = "Farm memberships (read-only — manage from Farms)"
-    fields = ["farm", "role", "is_active", "joined_at", "invited_by"]
-    readonly_fields = fields
-
-    def has_add_permission(self, request, obj=None):
-        return False
 
 
 class NoMembershipFilter(admin.SimpleListFilter):
@@ -75,11 +52,10 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
     ordering = ["full_name"]
     list_display = [
         "full_name",
-        "phone_number",
+        "masked_phone_number",
         "role",
         "credential_status",
         "membership_count",
-        "member_of",
         "is_active",
         "date_joined",
     ]
@@ -90,27 +66,21 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
         "is_staff",
         NoMembershipFilter,
     ]
+    # Search runs against the real field, never the masked display — an
+    # admin typing the exact number still finds the person. Email stays
+    # searchable (not displayed anywhere — see masked_phone_number and the
+    # fieldsets below) since a search box reveals nothing by itself.
     search_fields = ["full_name", "phone_number", "email"]
-    readonly_fields = ["date_joined", "last_login", "credential_changed_at"]
+    readonly_fields = ["date_joined", "last_login"]
     date_hierarchy = "date_joined"
-    inlines = [UserFarmMembershipInline]
 
+    # Account maintenance only: identity, role, and the permission flags.
+    # No email (personal detail) and no farm data (memberships, credential
+    # rotation timestamps) — see this app's docstring for why.
     fieldsets = (
         (None, {"fields": ("phone_number", "password")}),
-        ("Identity", {"fields": ("full_name", "email", "role")}),
-        (
-            "Credential",
-            {
-                "fields": ("must_change_credential", "credential_changed_at"),
-                "description": (
-                    "must_change_credential gates the API. Clearing it by hand "
-                    "defeats the forced-rotation guarantee — let the user rotate "
-                    "their own PIN instead."
-                ),
-            },
-        ),
-        ("Permissions", {"fields": ("is_active", "is_staff", "is_superuser", "groups")}),
-        ("Dates", {"fields": ("last_login", "date_joined")}),
+        ("Identity", {"fields": ("full_name", "role")}),
+        ("Permissions", {"fields": ("is_active", "is_staff", "is_superuser")}),
     )
 
     add_fieldsets = (
@@ -124,23 +94,17 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
     )
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        qs = qs.annotate(
+        return super().get_queryset(request).annotate(
             _active_membership_count=Count(
                 "farm_memberships",
                 filter=Q(farm_memberships__is_active=True),
                 distinct=True,
             )
         )
-        return qs.prefetch_related(
-            Prefetch(
-                "farm_memberships",
-                queryset=FarmMembership.objects.filter(is_active=True).select_related(
-                    "farm"
-                ),
-                to_attr="_active_memberships",
-            )
-        )
+
+    @admin.display(description="Phone number")
+    def masked_phone_number(self, obj):
+        return mask_phone(obj.phone_number)
 
     @admin.display(description="Credential")
     def credential_status(self, obj):
@@ -150,20 +114,8 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
 
     @admin.display(description="Active farms", ordering="_active_membership_count")
     def membership_count(self, obj):
+        """A bare count — which farms, not shown here (see Farm memberships)."""
         return getattr(obj, "_active_membership_count", 0)
-
-    @admin.display(description="Member of")
-    def member_of(self, obj):
-        memberships = getattr(obj, "_active_memberships", None)
-        if memberships is None:
-            memberships = list(
-                obj.farm_memberships.filter(is_active=True).select_related("farm")
-            )
-        if not memberships:
-            return format_html('<span class="{}">{}</span>', "status-muted", "— none —")
-        return ", ".join(
-            f"{m.farm.name} ({m.get_role_display()})" for m in memberships
-        )
 
 
 class FarmOwnerCreationForm(forms.ModelForm):
@@ -199,7 +151,7 @@ class FarmOwnerAccountAdmin(ModelAdmin):
 
     list_display = [
         "full_name",
-        "phone_number",
+        "masked_phone_number",
         "credential_state",
         "in_setup_wizard",
         "date_joined",
@@ -207,6 +159,10 @@ class FarmOwnerAccountAdmin(ModelAdmin):
     search_fields = ["full_name", "phone_number", "email"]
     ordering = ["full_name"]
     date_hierarchy = "date_joined"
+
+    @admin.display(description="Phone number")
+    def masked_phone_number(self, obj):
+        return mask_phone(obj.phone_number)
 
     # --- scope + annotations -------------------------------------------------
 
@@ -325,7 +281,7 @@ class InvitationAdmin(ModelAdmin):
 
     list_display = [
         "full_name",
-        "phone_number",
+        "masked_phone_number",
         "farm",
         "account_role",
         "effective_status",
@@ -361,6 +317,10 @@ class InvitationAdmin(ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+    @admin.display(description="Phone number")
+    def masked_phone_number(self, obj):
+        return mask_phone(obj.phone_number)
 
     @admin.display(description="Status", ordering="status")
     def effective_status(self, obj):

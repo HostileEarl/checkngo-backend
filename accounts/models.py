@@ -15,6 +15,20 @@ e164_validator = RegexValidator(
 )
 
 
+def mask_phone(phone_number):
+    """
+    Keep the first 4 and last 4 characters, mask the rest — e.g.
+    +639171112222 -> +639••••2222. Used everywhere a phone number is
+    DISPLAYED (admin changelists, __str__ representations); never applied
+    to the stored value or to search, so exact-number lookups still work.
+    Short/malformed values are returned unchanged rather than risking an
+    empty or confusing mask.
+    """
+    if not phone_number or len(phone_number) <= 8:
+        return phone_number
+    return f"{phone_number[:4]}••••{phone_number[-4:]}"
+
+
 class UserManager(BaseUserManager):
     use_in_migrations = True
 
@@ -99,7 +113,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         ]
 
     def __str__(self):
-        return f"{self.full_name} ({self.phone_number})"
+        return f"{self.full_name} ({mask_phone(self.phone_number)})"
 
     @property
     def is_internal(self):
@@ -285,7 +299,7 @@ class Invitation(models.Model):
         ]
 
     def __str__(self):
-        return f"Invite: {self.full_name} ({self.phone_number}) — {self.status}"
+        return f"Invite: {self.full_name} ({mask_phone(self.phone_number)}) — {self.status}"
 
     # --- Creation ---
 
