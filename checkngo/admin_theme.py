@@ -9,9 +9,10 @@ settings.py only holds the UNFOLD dict:
   primary-600 is the olive (#4F6334, 6.6:1 with white). The lime
   (#C4F188) sits at primary-300 and is used for the main Save button and
   highlights through checkngo-admin.css, always with ink text.
-- SIDEBAR_NAVIGATION: the same hubs the old admin_hubs.py built (People,
-  Farms, Birds & Sales, Resources, System), now as Unfold's sidebar.
-  Each link is hidden unless the user may view that model.
+- SIDEBAR_NAVIGATION: the hubs this admin covers — People, Farms, System.
+  Accounts only: no farm-operational hub (Birds & Sales, Resources) —
+  see production/admin.py, which registers nothing. Each link is hidden
+  unless the user may view that model.
 - dashboard_callback: the numbers and quick actions on the admin home.
 
 Nothing here touches a model at import time: settings.py imports this
@@ -118,34 +119,7 @@ SIDEBAR_NAVIGATION = [
         "collapsible": True,
         "items": [
             _item(_("Farms"), "agriculture", "farms", "farm"),
-            _item(_("Houses"), "warehouse", "production", "house"),
             _item(_("Ownership history"), "history", "farms", "farmownershiphistory"),
-        ],
-    },
-    {
-        "title": _("Birds & Sales"),
-        "separator": True,
-        "collapsible": True,
-        "items": [
-            _item(_("Batches"), "egg", "production", "batch"),
-            _item(_("Daily records"), "edit_calendar", "production", "dailyrecord"),
-            _item(_("Weight samples"), "scale", "production", "weightsample"),
-            _item(_("Record corrections"), "rule", "production", "recordcorrection"),
-            _item(_("Sales"), "sell", "production", "saleevent"),
-            _item(_("Harvests"), "inventory", "production", "harvest"),
-        ],
-    },
-    {
-        "title": _("Resources"),
-        "separator": True,
-        "collapsible": True,
-        "items": [
-            _item(_("Feed deliveries"), "local_shipping", "production", "feeddelivery"),
-            _item(_("Inventory items"), "inventory_2", "production", "inventoryitem"),
-            _item(_("Stock in"), "move_to_inbox", "production", "inventorystockin"),
-            _item(_("Usage logs"), "outbox", "production", "inventoryusagelog"),
-            _item(_("Routine tasks"), "checklist", "production", "tasktemplate"),
-            _item(_("Task completions"), "task_alt", "production", "taskcompletion"),
         ],
     },
     {
@@ -177,12 +151,28 @@ def pending_invitations_badge(request):
 
 def dashboard_callback(request, context):
     """Numbers and quick actions for templates/admin/index.html."""
-    from accounts.models import Invitation, User
+    from types import SimpleNamespace
+
+    from accounts.models import Invitation, User, mask_phone
     from farms.models import Farm
-    from production.models import Batch
+
+    from .platform_stats import platform_stats
 
     owners = User.objects.filter(role=User.Role.OWNER)
     owners_in_setup = owners.exclude(farm_memberships__is_active=True).distinct()
+
+    # Wrapped rather than passed as bare User rows: the template reads
+    # `owner.phone_number` as-is (unchanged, per the house style — see its
+    # own comment), so the phone number handed to it here is masked
+    # up front instead.
+    recent_owners = [
+        SimpleNamespace(
+            full_name=o.full_name,
+            phone_number=mask_phone(o.phone_number),
+            must_change_credential=o.must_change_credential,
+        )
+        for o in owners.order_by("-date_joined")[:5]
+    ]
 
     context.update(
         {
@@ -211,15 +201,13 @@ def dashboard_callback(request, context):
                     "link": reverse_lazy("admin:accounts_invitation_changelist")
                     + "?status__exact=PENDING",
                 },
-                {
-                    "label": _("Active batches"),
-                    "value": Batch.objects.filter(status=Batch.Status.ACTIVE).count(),
-                    "link": reverse_lazy("admin:production_batch_changelist")
-                    + "?status__exact=ACTIVE",
-                },
             ],
             "can_add_owner_account": can_create_owner(request),
-            "recent_owners": owners.order_by("-date_joined")[:5],
+            "recent_owners": recent_owners,
+            # Platform-wide counts only — never per-farm, never a name, a
+            # phone number, or money. See checkngo.platform_stats for the
+            # keys available to templates/admin/index.html.
+            "platform_stats": platform_stats(),
         }
     )
     return context

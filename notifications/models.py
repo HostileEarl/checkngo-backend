@@ -64,4 +64,6 @@ class SmsLog(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.get_purpose_display()} to {self.recipient} ({self.status})"
+        from accounts.models import mask_phone
+
+        return f"{self.get_purpose_display()} to {mask_phone(self.recipient)} ({self.status})"
