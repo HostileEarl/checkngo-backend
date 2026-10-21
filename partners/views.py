@@ -13,10 +13,11 @@ from accounts.serializers import (
     existing_user_invite_message,
     send_invitation_pin_sms,
 )
-from farms.permissions import HasRotatedCredential, IsFarmManagerOrOwner
+from farms.permissions import HasRotatedCredential
 from production.models import Harvest, Payment, SaleEvent, per_sale_mode_batch_ids
 
 from .models import FarmPartnerLink
+from .permissions import IsFarmOwnerForBuyerManagement
 from .serializers import (
     BuyerPaymentSerializer,
     BuyerPurchaseSerializer,
@@ -31,11 +32,13 @@ class FarmPartnerListCreateView(generics.ListCreateAPIView):
     GET  /api/farms/<farm_pk>/partners/ — this farm's consumer directory
     POST /api/farms/<farm_pk>/partners/ — invite a new partner
 
-    Owner and manager both permitted: unlike manager promotion, adding a
-    consumer grants no authority over the farm, so it needs no owner gate.
+    Reading the directory stays open to owner and manager alike. Inviting
+    a buyer is owner-only — unlike manager promotion this grants no
+    authority over the farm, but the owner wants to be the one deciding
+    who the farm transacts with.
     """
 
-    permission_classes = [IsFarmManagerOrOwner]
+    permission_classes = [IsFarmOwnerForBuyerManagement]
 
     def get_serializer_class(self):
         return (
@@ -56,6 +59,15 @@ class FarmPartnerListCreateView(generics.ListCreateAPIView):
         link_type = self.request.query_params.get("type")
         if link_type:
             qs = qs.filter(link_type=link_type.upper())
+
+        # Default (no ?status, or any value other than active/archived)
+        # keeps today's behaviour: every link, active and archived alike.
+        status_param = (self.request.query_params.get("status") or "").lower()
+        if status_param == "active":
+            qs = qs.filter(is_active=True)
+        elif status_param == "archived":
+            qs = qs.filter(is_active=False)
+
         return qs
 
     def create(self, request, *args, **kwargs):
@@ -95,16 +107,43 @@ class FarmPartnerUnlinkView(APIView):
     """
     POST /api/farms/<farm_pk>/partners/<pk>/unlink/
 
-    Soft — the relationship ends, the record of it having existed does not.
+    Soft — the relationship ends, the record of it having existed does
+    not. Owner only — see FarmPartnerListCreateView.
     """
 
-    permission_classes = [IsFarmManagerOrOwner]
+    permission_classes = [IsFarmOwnerForBuyerManagement]
 
     def post(self, request, farm_pk, pk):
         link = get_object_or_404(FarmPartnerLink, pk=pk, farm=request.farm)
         link.deactivate()
         return Response(
             {"detail": f"{link.partner.full_name} is no longer linked to this farm."},
+            status=status.HTTP_200_OK,
+        )
+
+
+class FarmPartnerRestoreView(APIView):
+    """
+    POST /api/farms/<farm_pk>/partners/<pk>/restore/
+
+    Undo an unlink. Owner only — see FarmPartnerListCreateView. 400 if the
+    link is already active; 404 if the link belongs to another farm (the
+    farm scoping on the lookup below is what produces that, same as every
+    other farm-scoped detail action).
+    """
+
+    permission_classes = [IsFarmOwnerForBuyerManagement]
+
+    def post(self, request, farm_pk, pk):
+        link = get_object_or_404(FarmPartnerLink, pk=pk, farm=request.farm)
+        if link.is_active:
+            return Response(
+                {"detail": f"{link.partner.full_name} is already linked to this farm."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        link.reactivate()
+        return Response(
+            FarmPartnerLinkSerializer(link).data,
             status=status.HTTP_200_OK,
         )
 

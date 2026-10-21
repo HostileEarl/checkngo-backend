@@ -617,6 +617,12 @@ class SaleEvent(OfflineSyncModel):
         related_name="sales_purchased",
         help_text="Optional per-sale buyer.",
     )
+    # A free-text name for a walk-in buyer who is not (and may never be) a
+    # registered partner — a gate sale to someone with no FarmPartnerLink.
+    # Mutually exclusive with buyer_link at the serializer layer: a sale
+    # either names a registered buyer or an unnamed/named walk-in, never
+    # both. Blank means an unnamed walk-in.
+    buyer_name = models.CharField(max_length=100, blank=True, default="")
 
     class Meta:
         db_table = "production_sale_event"

@@ -1,7 +1,23 @@
 # partners/permissions.py
 from rest_framework.permissions import BasePermission
 
+from farms.models import FarmMembership
+from farms.permissions import FarmScopedPermission
+
 from .models import FarmPartnerLink
+
+
+class IsFarmOwnerForBuyerManagement(FarmScopedPermission):
+    """
+    Creating a buyer invitation, archiving (unlinking), and restoring a
+    buyer link: owner only. A manager keeps reading the partner directory
+    (unlike buyer *invitations*, which a manager never sees — see
+    accounts.views.FarmInvitationListCreateView) but cannot act on it.
+    """
+
+    allowed_roles = {FarmMembership.Role.OWNER}
+    read_roles = {FarmMembership.Role.OWNER, FarmMembership.Role.MANAGER}
+    message = "Only the farm owner can manage buyers."
 
 
 class IsLinkedPartner(BasePermission):

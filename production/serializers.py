@@ -718,6 +718,7 @@ class SaleEventSerializer(serializers.ModelSerializer):
         source="recorded_by.full_name", read_only=True, default=None
     )
     sync_delay_seconds = serializers.FloatField(read_only=True)
+    buyer_display = serializers.SerializerMethodField()
 
     class Meta:
         model = SaleEvent
@@ -732,6 +733,8 @@ class SaleEventSerializer(serializers.ModelSerializer):
             "price_per_kg",
             "revenue",
             "buyer_link",
+            "buyer_name",
+            "buyer_display",
             "notes",
             "average_weight_kg",
             "revenue_per_kg",
@@ -750,6 +753,7 @@ class SaleEventSerializer(serializers.ModelSerializer):
             "bird_count": {"required": False},
             "part_name": {"required": False, "allow_blank": True},
             "buyer_link": {"required": False, "allow_null": True},
+            "buyer_name": {"required": False, "allow_blank": True},
         }
 
     def get_average_weight_kg(self, obj) -> str | None:
@@ -770,6 +774,29 @@ class SaleEventSerializer(serializers.ModelSerializer):
     def get_is_fully_paid(self, obj) -> bool:
         return obj.is_fully_paid
 
+    def get_buyer_display(self, obj) -> str:
+        """
+        The buyer column's single source of truth: a registered buyer's
+        business name or personal name, else the free-text walk-in name,
+        else "Walk-in". Falls back further, same as the sales-history
+        report (see analytics.reports.sales_history_rows), to the batch's
+        legacy Harvest-wide buyer when NO sale on this batch has ever
+        carried its own buyer_link — the pre-per-sale-buyer behaviour,
+        preserved for batches closed before this field existed.
+        """
+        if obj.buyer_link_id:
+            return obj.buyer_link.business_name or obj.buyer_link.partner.full_name
+        if obj.buyer_name:
+            return obj.buyer_name
+        harvest = getattr(obj.batch, "harvest", None)
+        if harvest and harvest.buyer_link_id:
+            on_per_sale_tracking = SaleEvent.objects.filter(
+                batch_id=obj.batch_id, buyer_link__isnull=False
+            ).exists()
+            if not on_per_sale_tracking:
+                return harvest.buyer_link.business_name or harvest.buyer_link.partner.full_name
+        return "Walk-in"
+
     def validate_sale_date(self, value):
         batch = self.context["batch"]
         if value < batch.start_date:
@@ -779,6 +806,9 @@ class SaleEventSerializer(serializers.ModelSerializer):
         if value > timezone.localdate():
             raise serializers.ValidationError("Cannot record a future date.")
         return value
+
+    def validate_buyer_name(self, value):
+        return value.strip()
 
     def validate_buyer_link(self, value):
         if value is None:
@@ -792,13 +822,38 @@ class SaleEventSerializer(serializers.ModelSerializer):
                 "That partner is not registered as a buyer."
             )
         if not value.is_active:
-            raise serializers.ValidationError(
-                "That buyer's link to this farm is no longer active."
-            )
+            # An edit that resends the SAME (now-archived) buyer unchanged
+            # must still go through — only a NEW assignment of an inactive
+            # buyer is refused. `self.instance` covers the direct PATCH
+            # path; `self.initial_data` covers the bulk-sync path, where
+            # each record is validated standalone with no instance set.
+            instance = self.instance
+            if instance is None:
+                supplied_id = self.initial_data.get("id")
+                if supplied_id:
+                    instance = SaleEvent.objects.filter(
+                        pk=supplied_id, batch=batch
+                    ).first()
+            unchanged = instance is not None and instance.buyer_link_id == value.pk
+            if not unchanged:
+                raise serializers.ValidationError(
+                    "That buyer's link to this farm is no longer active."
+                )
         return value
 
     def validate(self, attrs):
         batch = self.context["batch"]
+
+        buyer_link = attrs.get(
+            "buyer_link", getattr(self.instance, "buyer_link", None)
+        )
+        buyer_name = attrs.get(
+            "buyer_name", getattr(self.instance, "buyer_name", "")
+        )
+        if buyer_link is not None and buyer_name:
+            raise serializers.ValidationError(
+                {"buyer_name": ["Leave the name empty when a linked buyer is chosen."]}
+            )
 
         # Required for new sales; a legacy row with no price on record is
         # left alone rather than forced to acquire a guessed one on edit.

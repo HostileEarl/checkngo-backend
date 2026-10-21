@@ -456,14 +456,17 @@ def sales_history_rows(farm, date_from=None, date_to=None):
     `part_name` is blank except on an OTHERS sale, where it names what was
     actually sold (feet, gizzards, a culled runt).
 
-    `buyer` prefers the sale's own buyer_link. A batch can carry both a
-    per-sale buyer and the batch-level Harvest.buyer_link recorded once at
-    closing (see both model docstrings) — once ANY sale on a batch carries
-    its own buyer_link, that batch is on the new per-sale tracking, and a
-    sale on it with no buyer stays blank rather than borrowing the
-    Harvest's. The Harvest-wide fallback only fires for a batch where NO
-    sale has ever carried a buyer_link — a legacy batch, or one closed
-    before this field existed.
+    `buyer` is the same value SaleEventSerializer.buyer_display computes
+    for the sale (kept in lockstep deliberately — this is a bulk,
+    precomputed version of that same priority, not an independent rule):
+    the sale's own buyer_link, else its free-text buyer_name, else, only
+    for a batch where NO sale has ever carried its own buyer_link (a
+    legacy batch, or one closed before per-sale buyers existed), the
+    batch-level Harvest.buyer_link recorded once at closing — and failing
+    all of that, "Walk-in". Once ANY sale on a batch carries its own
+    buyer_link, that batch is on per-sale tracking, and a sale on it with
+    neither a buyer_link nor a buyer_name reads "Walk-in" rather than
+    borrowing the Harvest's.
     """
     yield [
         "sale_date",
@@ -510,9 +513,11 @@ def sales_history_rows(farm, date_from=None, date_to=None):
     def _buyer_for(sale):
         if sale.buyer_link_id:
             return sale.buyer_link.business_name or sale.buyer_link.partner.full_name
+        if sale.buyer_name:
+            return sale.buyer_name
         if sale.batch_id in batches_with_sale_buyer:
-            return ""
-        return harvest_buyers.get(sale.batch_id, "")
+            return "Walk-in"
+        return harvest_buyers.get(sale.batch_id) or "Walk-in"
 
     for s in sales.iterator():
         yield [
@@ -539,11 +544,13 @@ def sales_history_rows(farm, date_from=None, date_to=None):
     yield [
         "NOTE",
         (
-            "buyer is that sale's own buyer when one is recorded. For a "
-            "batch where no sale carries its own buyer, it falls back to "
-            "the batch's overall buyer recorded once at closing; once any "
-            "sale on a batch has its own buyer, a sale with none stays "
-            "blank rather than borrowing the batch's."
+            "buyer is that sale's own buyer, registered or a typed "
+            "walk-in name, when one is recorded. For a batch where no "
+            "sale carries its own buyer, it falls back to the batch's "
+            "overall buyer recorded once at closing; once any sale on a "
+            "batch has its own buyer, a sale with neither reads 'Walk-in' "
+            "rather than borrowing the batch's. A sale with no buyer at "
+            "all reads 'Walk-in'."
         ),
     ]
     yield [

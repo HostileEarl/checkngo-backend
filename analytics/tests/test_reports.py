@@ -394,7 +394,9 @@ class TestReportContent:
         active = next(r for r in body if r[1] == "B-2026-02")
         assert active[header.index("sale_type")] == "Live"
         assert active[header.index("revenue")] == ""  # no value entered
-        assert active[header.index("buyer")] == ""  # not yet harvested
+        # No buyer_link, no buyer_name, and not yet harvested — reads the
+        # same "Walk-in" default as SaleEventSerializer.buyer_display.
+        assert active[header.index("buyer")] == "Walk-in"
 
     def test_sales_history_date_filter_narrows_rows(
         self, auth, owner, populated_farm
