@@ -34,3 +34,24 @@ services:
         sync: false
       - key: SEMAPHORE_SENDER_NAME
         sync: false
+
+  - type: cron
+    name: checkngo-expire-invitations
+    runtime: python
+    plan: starter
+    # Same daily slot as the low-stock alerts: 05:30 Asia/Manila (Render
+    # cron runs in UTC). Marks PENDING invitations past expires_at as
+    # EXPIRED (accounts/management/commands/expire_invitations.py), so
+    # the admin's stored status stops reading "Pending" forever. Its own
+    # service rather than chained onto send_stock_alerts, so an SMS
+    # failure there never skips this. No SMS, so no Semaphore keys.
+    schedule: "30 21 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python manage.py expire_invitations
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.14.3
+      - key: SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false

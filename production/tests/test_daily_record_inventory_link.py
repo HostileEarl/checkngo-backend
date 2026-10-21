@@ -355,3 +355,97 @@ class TestFcrUnaffected:
         # And the sack batch really did draw its item down.
         feed_item.refresh_from_db()
         assert feed_item.current_quantity == Decimal("95")
+
+
+def _usage_url(farm):
+    return f"/api/farms/{farm.id}/inventory/usage/"
+
+
+class TestUsageHistorySource:
+    """
+    The usage history says where each drawdown came from: a daily record's
+    feed line (with its batch, house and notes) or a manual supplies entry.
+    """
+
+    def test_daily_record_notes_are_copied_onto_the_usage_log(
+        self, auth, owner, farm, batch, feed_item
+    ):
+        response = auth(owner).post(
+            _url(farm, batch),
+            _sacks("2026-01-05", feed_item, 5, "250.00", notes="Topped up after rain"),
+            format="json",
+        )
+        assert response.status_code == 201, response.data
+
+        log = InventoryUsageLog.objects.get(daily_record_id=response.data["id"])
+        assert log.notes == "Topped up after rain"
+
+    def test_editing_daily_record_notes_updates_the_usage_log(
+        self, auth, owner, farm, batch, feed_item
+    ):
+        create = auth(owner).post(
+            _url(farm, batch),
+            _sacks("2026-01-05", feed_item, 5, "250.00", notes="first"),
+            format="json",
+        )
+        pk = create.data["id"]
+
+        patch = auth(owner).patch(
+            f"{_url(farm, batch)}{pk}/",
+            _sacks("2026-01-05", feed_item, 5, "250.00", notes="second"),
+            format="json",
+        )
+        assert patch.status_code == 200, patch.data
+
+        assert InventoryUsageLog.objects.get(daily_record_id=pk).notes == "second"
+
+    def test_usage_list_names_the_daily_record_batch_and_house(
+        self, auth, owner, farm, batch, feed_item
+    ):
+        create = auth(owner).post(
+            _url(farm, batch),
+            _sacks("2026-01-05", feed_item, 5, "250.00", notes="Topped up after rain"),
+            format="json",
+        )
+        assert create.status_code == 201, create.data
+
+        response = auth(owner).get(_usage_url(farm))
+        assert response.status_code == 200, response.data
+        rows = response.data
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["source"] == "DAILY_ENTRY"
+        assert str(row["daily_record"]) == str(create.data["id"])
+        assert row["batch_code"] == "DR-INV-1"
+        assert row["house_name"] == "Shed 1"
+        assert row["daily_record_notes"] == "Topped up after rain"
+        assert row["notes"] == "Topped up after rain"
+
+    def test_manual_usage_row_is_marked_manual_with_nulls(
+        self, auth, owner, farm
+    ):
+        item = InventoryItem.objects.create(
+            farm=farm, name="Disinfectant", unit="litre", created_by=owner
+        )
+        InventoryStockIn.objects.create(
+            item=item, quantity=Decimal("10"), stock_in_date=date(2026, 1, 1)
+        )
+        InventoryUsageLog.objects.create(
+            item=item,
+            quantity_used=Decimal("2"),
+            usage_date=date(2026, 1, 5),
+            notes="Footbath",
+            recorded_by=owner,
+        )
+
+        response = auth(owner).get(_usage_url(farm))
+        assert response.status_code == 200, response.data
+        rows = response.data
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["source"] == "MANUAL"
+        assert row["daily_record"] is None
+        assert row["batch_code"] is None
+        assert row["house_name"] is None
+        assert row["daily_record_notes"] is None
+        assert row["notes"] == "Footbath"

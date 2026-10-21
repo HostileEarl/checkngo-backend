@@ -1023,7 +1023,9 @@ class InventoryUsageListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         qs = InventoryUsageLog.objects.filter(
             item__farm=self.request.farm
-        ).select_related("item", "recorded_by")
+        ).select_related(
+            "item", "recorded_by", "daily_record__batch__house"
+        )
         item_id = self.request.query_params.get("item")
         if item_id:
             qs = qs.filter(item_id=item_id)
@@ -1075,7 +1077,9 @@ class InventoryUsageDetailView(generics.RetrieveUpdateAPIView):
     def get_queryset(self):
         return InventoryUsageLog.objects.filter(
             item__farm=self.request.farm
-        ).select_related("item", "recorded_by")
+        ).select_related(
+            "item", "recorded_by", "daily_record__batch__house"
+        )
 
 
 @extend_schema(

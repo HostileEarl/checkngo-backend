@@ -168,6 +168,24 @@ class InvitationQuerySet(models.QuerySet):
     def for_farm(self, farm):
         return self.filter(farm=farm)
 
+    def overdue(self):
+        """Still PENDING in the database, but past expires_at."""
+        return self.filter(
+            status=Invitation.Status.PENDING,
+            expires_at__lte=timezone.now(),
+        )
+
+    def expire_overdue(self):
+        """
+        Move overdue PENDING rows to EXPIRED; return how many moved.
+
+        Nothing else ever writes EXPIRED. Until this runs, an overdue row
+        still counts as PENDING for unique_pending_invite_per_phone_farm,
+        which blocks re-inviting that phone to that farm. Chain it to
+        narrow the scope, e.g. ``.filter(farm=f, phone_number=p).expire_overdue()``.
+        """
+        return self.overdue().update(status=Invitation.Status.EXPIRED)
+
 
 class Invitation(models.Model):
     """
@@ -298,6 +316,21 @@ class Invitation(models.Model):
     @property
     def is_actionable(self):
         return self.status == self.Status.PENDING and not self.is_expired
+
+    @property
+    def effective_status(self):
+        """The stored status, except a PENDING row past expires_at reads EXPIRED."""
+        if self.status == self.Status.PENDING and self.is_expired:
+            return self.Status.EXPIRED
+        return self.status
+
+    def expire_if_overdue(self):
+        """Persist EXPIRED on this row if it is PENDING and past expires_at."""
+        if self.status != self.Status.PENDING or not self.is_expired:
+            return False
+        self.status = self.Status.EXPIRED
+        self.save(update_fields=["status"])
+        return True
 
     def check_pin(self, raw_pin):
         from django.contrib.auth.hashers import check_password

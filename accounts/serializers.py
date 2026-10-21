@@ -1,5 +1,6 @@
 # accounts/serializers.py
 from django.conf import settings
+from django.db import transaction
 from rest_framework import serializers
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -309,7 +310,15 @@ class InvitationCreateSerializer(serializers.ModelSerializer):
         if existing is None:
             self.issued_pin = invitation.issue_pin()
 
-        invitation.save()
+        # An overdue invite for this phone and farm is still PENDING in the
+        # database until something expires it, and would trip
+        # unique_pending_invite_per_phone_farm (a 500). Expire it in the
+        # same transaction as the insert.
+        with transaction.atomic():
+            Invitation.objects.filter(
+                farm=farm, phone_number=invitation.phone_number
+            ).expire_overdue()
+            invitation.save()
         return invitation
 
 
@@ -399,6 +408,10 @@ class InvitationAcceptSerializer(serializers.Serializer):
     def validate_token(self, value):
         invitation = Invitation.objects.filter(token=value).first()
         if invitation is None or not invitation.is_actionable:
+            # Overdue but still PENDING: record that it expired, then
+            # refuse it exactly as before.
+            if invitation is not None:
+                invitation.expire_if_overdue()
             raise serializers.ValidationError("This invitation is not valid.")
         self.invitation = invitation
         return value

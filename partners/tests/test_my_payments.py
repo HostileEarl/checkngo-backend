@@ -149,7 +149,8 @@ class TestMyPayments:
     def test_unattributed_payments_are_not_shown_to_any_buyer(
         self, auth, buyer, owner, farm, link_buyer
     ):
-        """A cash-at-the-gate payment with no buyer_link belongs to no one."""
+        """A cash-at-the-gate payment with no buyer_link, on a sale with no
+        buyer either, belongs to no one."""
         sale = _sale(farm, owner=owner)
         _payment(sale, link=None)
 
@@ -169,3 +170,100 @@ class TestMyPayments:
 
     def test_unauthenticated_request_gets_401(self, api):
         assert api.get(URL).status_code == 401
+
+
+def _buyers_sale(farm, owner, link):
+    sale = _sale(farm, owner=owner)
+    sale.buyer_link = link
+    sale.save(update_fields=["buyer_link"])
+    return sale
+
+
+class TestPaymentsOnTheBuyersSales:
+    """
+    Payments recorded before the app sent buyer_link have none of their
+    own; the sale's buyer_link says whose they are.
+    """
+
+    def test_a_payment_without_buyer_link_on_the_buyers_sale_is_listed(
+        self, auth, buyer, owner, farm, link_buyer
+    ):
+        sale = _buyers_sale(farm, owner, link_buyer)
+        _payment(sale, link=None, amount=Decimal("1200.00"))
+
+        resp = auth(buyer).get(URL)
+
+        assert resp.status_code == 200
+        assert [row["amount"] for row in resp.data] == ["1200.00"]
+        assert resp.data[0]["batch_code"] == sale.batch.batch_code
+
+    def test_a_payment_on_another_buyers_sale_is_not_listed(
+        self, auth, buyer, buyer_b, owner, farm, link_buyer, link_buyer_b
+    ):
+        theirs = _buyers_sale(farm, owner, link_buyer_b)
+        _payment(theirs, link=None)
+
+        assert auth(buyer).get(URL).data == []
+        assert len(auth(buyer_b).get(URL).data) == 1
+
+    def test_a_payment_attributed_to_someone_else_stays_theirs_even_on_my_sale(
+        self, auth, buyer, buyer_b, owner, farm, link_buyer, link_buyer_b
+    ):
+        """An explicit buyer_link wins over the sale's buyer."""
+        mine = _buyers_sale(farm, owner, link_buyer)
+        _payment(mine, link_buyer_b, amount=Decimal("300.00"))
+
+        assert auth(buyer).get(URL).data == []
+        assert [row["amount"] for row in auth(buyer_b).get(URL).data] == ["300.00"]
+
+    def test_reversals_follow_the_same_rule(
+        self, auth, buyer, buyer_b, owner, farm, link_buyer, link_buyer_b
+    ):
+        mine = _buyers_sale(farm, owner, link_buyer)
+        original = _payment(mine, link=None, amount=Decimal("800.00"))
+        Payment.objects.create(
+            sale=mine,
+            amount=Decimal("-800.00"),
+            received_date=date(2026, 1, 12),
+            reverses=original,
+        )
+        theirs = _buyers_sale(farm, owner, link_buyer_b)
+        other = _payment(theirs, link=None, amount=Decimal("400.00"))
+        Payment.objects.create(
+            sale=theirs,
+            amount=Decimal("-400.00"),
+            received_date=date(2026, 1, 12),
+            reverses=other,
+        )
+
+        rows = auth(buyer).get(URL).data
+
+        assert sorted((row["amount"], row["is_reversal"]) for row in rows) == [
+            ("-800.00", True),
+            ("800.00", False),
+        ]
+
+    def test_the_farm_filter_still_applies(
+        self, auth, buyer, owner, farm, rival_farm, rival_owner, link_buyer
+    ):
+        rival_link = FarmPartnerLink.objects.create(
+            farm=rival_farm,
+            partner=buyer,
+            link_type=FarmPartnerLink.LinkType.CONSUMER,
+            linked_by=rival_owner,
+        )
+        _payment(_buyers_sale(farm, owner, link_buyer), link=None)
+        _payment(_buyers_sale(rival_farm, rival_owner, rival_link), link=None)
+
+        all_rows = auth(buyer).get(URL).data
+        one_farm = auth(buyer).get(URL, {"farm": farm.id}).data
+
+        assert len(all_rows) == 2
+        assert [row["farm"] for row in one_farm] == [farm.id]
+
+    def test_internal_user_still_gets_an_empty_list(
+        self, auth, worker, owner, farm, link_buyer
+    ):
+        _payment(_buyers_sale(farm, owner, link_buyer), link=None)
+
+        assert auth(worker).get(URL).data == []
