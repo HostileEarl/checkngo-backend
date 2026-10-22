@@ -1,6 +1,8 @@
 # accounts/throttles.py
 from rest_framework.throttling import SimpleRateThrottle
 
+from .models import UserManager
+
 
 class PhoneLoginThrottle(SimpleRateThrottle):
     """
@@ -15,7 +17,11 @@ class PhoneLoginThrottle(SimpleRateThrottle):
     scope = "phone_login"
 
     def get_cache_key(self, request, view):
-        phone = (request.data.get("phone_number") or "").strip()
+        # Keyed on the number the way the login reads it: the serializer
+        # field trims it and PhonePinTokenSerializer.validate()
+        # runs UserManager.normalize_phone(), so "+63 917 111 2222" and
+        # "+639171112222" are one account and must share one count.
+        phone = UserManager.normalize_phone((request.data.get("phone_number") or "").strip())
         if not phone:
             return None  # No target — nothing to throttle.
         return self.cache_format % {"scope": self.scope, "ident": phone}
