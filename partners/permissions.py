@@ -2,7 +2,7 @@
 from rest_framework.permissions import BasePermission
 
 from farms.models import FarmMembership
-from farms.permissions import FarmScopedPermission
+from farms.permissions import FarmScopedPermission, HasRotatedCredential
 
 from .models import FarmPartnerLink
 
@@ -32,7 +32,12 @@ class IsLinkedPartner(BasePermission):
 
     def has_permission(self, request, view):
         user = request.user
-        if not user or not user.is_authenticated or user.is_internal:
+        if not user or not user.is_authenticated:
+            return False
+        if user.must_change_credential:  # THE GATE — see FarmScopedPermission
+            self.message = HasRotatedCredential.message
+            return False
+        if user.is_internal:
             return False
 
         farm_id = view.kwargs.get(self.farm_url_kwarg)

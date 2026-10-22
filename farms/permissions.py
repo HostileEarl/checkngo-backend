@@ -19,6 +19,10 @@ class FarmScopedPermission(BasePermission):
     `read_roles` empty rather than overriding has_permission. An override
     that calls super() first cannot re-open a read the base already denied,
     which is how the worker read path got swallowed previously.
+
+    THE GATE is enforced here too. A view that sets permission_classes
+    replaces DEFAULT_PERMISSION_CLASSES, HasRotatedCredential included, so
+    every farm-scoped view would otherwise be open to an unrotated PIN.
     """
 
     allowed_roles = set()
@@ -37,6 +41,9 @@ class FarmScopedPermission(BasePermission):
     def has_permission(self, request, view):
         user = request.user
         if not user or not user.is_authenticated:
+            return False
+        if user.must_change_credential:
+            self.message = HasRotatedCredential.message
             return False
 
         farm = self.get_farm(request, view)
@@ -129,7 +136,12 @@ class IsExternalPartner(BasePermission):
 
     def has_permission(self, request, view):
         user = request.user
-        return bool(user and user.is_authenticated and not user.is_internal)
+        if not user or not user.is_authenticated:
+            return False
+        if user.must_change_credential:  # THE GATE — see FarmScopedPermission
+            self.message = HasRotatedCredential.message
+            return False
+        return not user.is_internal
 
 
 class HasRotatedCredential(BasePermission):
