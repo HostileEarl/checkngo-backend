@@ -13,7 +13,9 @@ permissions:
 
 jobs:
   pytest:
-    runs-on: ubuntu-latest
+    # Pinned: setup-python has no 3.14.3 build for ubuntu-latest (26.04)
+    # yet, only for 22.04 and 24.04. Move with render.yaml's version.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
 
     services:
