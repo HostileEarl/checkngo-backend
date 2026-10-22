@@ -730,6 +730,29 @@ class WeightSampleSerializer(ClientIdMixin, serializers.ModelSerializer):
             )
         return value
 
+    def validate(self, attrs):
+        batch = self.context["batch"]
+
+        # The same rule as daily records: a harvested or terminated batch's
+        # figures are final.
+        if batch.status != Batch.Status.ACTIVE:
+            raise serializers.ValidationError(
+                "This batch is closed and accepts no further records."
+            )
+
+        # unique_weight_sample_per_day, answered as a 400: one weighing per
+        # batch per day, whether this is a new sample or an edit's new date.
+        sample_date = attrs.get("sample_date", getattr(self.instance, "sample_date", None))
+        if sample_date is not None:
+            clash = WeightSample.objects.filter(batch=batch, sample_date=sample_date)
+            if self.instance is not None:
+                clash = clash.exclude(pk=self.instance.pk)
+            if clash.exists():
+                raise serializers.ValidationError(
+                    {"sample_date": "This batch already has a weight sample for this date."}
+                )
+        return attrs
+
     def update(self, instance, validated_data):
         if not instance.is_editable:
             raise serializers.ValidationError(
