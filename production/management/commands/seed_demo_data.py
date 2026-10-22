@@ -22,6 +22,11 @@ from django.utils import timezone
 from accounts.models import User
 from farms.models import Farm, FarmMembership
 from partners.models import FarmPartnerLink
+from production.evaluation import (
+    feed_in_sacks,
+    mortality_day_weights,
+    save_daily_records,
+)
 from production.models import (
     Batch,
     DailyRecord,
@@ -37,7 +42,6 @@ from production.models import (
     WeightSample,
     record_feed_delivery,
 )
-from production.serializers import sync_feed_usage_log
 
 DEMO_PREFIX = "DEMO-"
 FARM_NAME = "Santos Broiler Farm"
@@ -495,15 +499,7 @@ class Command(BaseCommand):
         total_target = int(batch.initial_bird_count * profile["target_pct"] / 100)
 
         # Weight the daily distribution into the realistic U-shape.
-        weights = []
-        for day in range(1, days + 1):
-            if day <= 7:
-                w = 3.5 - (day * 0.3)       # early chick losses
-            elif day <= 28:
-                w = 0.5                      # healthy plateau
-            else:
-                w = 0.8 + ((day - 28) * 0.05)  # heavier birds, more culls
-            weights.append(max(w, 0.2))
+        weights = mortality_day_weights(days)
 
         total_weight = sum(weights)
         alive = batch.initial_bird_count
@@ -554,15 +550,10 @@ class Command(BaseCommand):
             feed_sacks = None
             record_feed_item = None
             if feed_item is not None and feed_kg > 0:
-                # Feed is converted once: sacks is derived from the target
-                # kg above, then feed_kg is re-derived FROM that sack
-                # count — not kept as the independently-rounded figure the
-                # curve produced — so this record's contribution to the
-                # feed ledger and to the item's usage log always agree
-                # exactly. A plain-kg record (no feed_item) keeps the
-                # curve's feed_kg untouched, same as the API.
-                feed_sacks = (feed_kg / feed_item.kg_per_unit).quantize(Decimal("0.01"))
-                feed_kg = (feed_sacks * feed_item.kg_per_unit).quantize(Decimal("0.01"))
+                # Feed is converted once (see feed_in_sacks). A plain-kg
+                # record (no feed_item) keeps the curve's feed_kg
+                # untouched, same as the API.
+                feed_sacks, feed_kg = feed_in_sacks(feed_kg, feed_item)
                 record_feed_item = feed_item
 
             records.append(
@@ -581,14 +572,9 @@ class Command(BaseCommand):
                 )
             )
 
-        DailyRecord.objects.bulk_create(records)
-        # bulk_create skips signals, so refresh the denormalized totals and
-        # — same as the API's create()/bulk-sync — mirror each feed line
-        # into its linked InventoryUsageLog.
-        batch.recalculate_totals()
-        for record in records:
-            if record.feed_item_id is not None:
-                sync_feed_usage_log(record, user=worker)
+        # Refreshes the batch totals and mirrors each feed line into its
+        # linked InventoryUsageLog, same as the API.
+        save_daily_records(batch, records, user=worker)
 
     def _fill_weight_samples(self, batch, days, quality, worker):
         """Weekly weighing. Ross 308 reaches ~2.4kg at day 42 when well managed."""
