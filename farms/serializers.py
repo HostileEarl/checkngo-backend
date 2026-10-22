@@ -88,10 +88,12 @@ class FarmMembershipSerializer(serializers.ModelSerializer):
         daily use, so there is nothing left to assign a worker to it for."""
         farm = self.instance.farm if self.instance else self.context.get("farm")
         if farm is not None:
-            stray = [h.name for h in value if h.farm_id != farm.pk]
-            if stray:
+            # Never name them: house ids are sequential, and echoing the
+            # name of whatever another farm's id points at would let any
+            # owner or manager read every farm's house names.
+            if any(h.farm_id != farm.pk for h in value):
                 raise serializers.ValidationError(
-                    f"These houses belong to another farm: {', '.join(stray)}."
+                    "One or more of these houses is not on this farm."
                 )
         archived = [h.name for h in value if h.is_archived]
         if archived:
