@@ -312,6 +312,12 @@ times out, nothing was created — try again with fewer.
 Create each farm close to its session: the records end "yesterday"
 relative to the day the farm is created.
 
+No text message ever goes to a demo number: the daily low-stock job skips
+evaluation farms, and the SMS sender refuses `+63999NN0000[1-4]` outright
+(logged in **System → SMS log** as *Skipped*, `reserved_demo_number`) — so
+inviting a demo number during a session saves the invitation but sends
+nothing. Any other number a tester types is texted as usual.
+
 **After the session:** tick the farm and use **Archive selected evaluation
 farms**. The farm becomes inactive and its four accounts are deactivated
 (they can no longer log in). Nothing is deleted.

@@ -18,6 +18,9 @@ It runs against the production database, so it only ever ADDS rows:
   directly, each with a random 6-digit PIN (``accounts.models.generate_pin``,
   i.e. ``secrets``) stored hashed like any other credential, and with the
   PIN-change gate already passed (must_change_credential=False).
+- Nothing texts them later either: their numbers are reserved
+  (accounts/demo_numbers.py) and notifications/sms.py refuses to send to
+  them, and send_stock_alerts skips evaluation farms altogether.
 - An evaluation farm is identified by its name, "Demo Farm – Session NN",
   and by its owner holding that session's reserved number. There is no
   extra column, so there is no migration.
@@ -47,6 +50,12 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from accounts.demo_numbers import (
+    DEMO_NUMBER_PREFIX,
+    MAX_SESSION_NUMBER,
+    demo_phone_number,
+    is_reserved_demo_number,
+)
 from accounts.models import User, generate_pin
 from farms.models import Farm, FarmMembership
 from partners.models import FarmPartnerLink
@@ -127,10 +136,11 @@ def save_daily_records(batch, records, user=None):
 # ─────────────────────────────────────────────────────────────
 
 EVALUATION_FARM_PREFIX = "Demo Farm – Session "
-MAX_SESSION_NUMBER = 99
 MAX_FARMS_PER_REQUEST = 10
 
-# (key, label, User.Role, digit at the end of the phone number)
+# (key, label, User.Role, digit at the end of the phone number). The numbers
+# themselves — and the rule that nothing ever texts them — are defined once
+# in accounts/demo_numbers.py, shared with notifications/sms.py.
 DEMO_ROLES = [
     ("owner", "Owner", User.Role.OWNER, 1),
     ("manager", "Manager", User.Role.MANAGER, 2),
@@ -147,11 +157,6 @@ class EvaluationFarmError(Exception):
 
 def evaluation_farm_name(session_number):
     return f"{EVALUATION_FARM_PREFIX}{session_number:02d}"
-
-
-def demo_phone_number(session_number, role_digit):
-    """+63999 NN 0000 R, e.g. session 3's owner is +639990300001."""
-    return f"+63999{session_number:02d}0000{role_digit}"
 
 
 def demo_phone_numbers(session_number):
@@ -226,7 +231,7 @@ def next_free_session_numbers(count):
         )
     )
     taken_phones = set(
-        User.objects.filter(phone_number__startswith="+63999").values_list(
+        User.objects.filter(phone_number__startswith=DEMO_NUMBER_PREFIX).values_list(
             "phone_number", flat=True
         )
     )
@@ -352,8 +357,12 @@ def _create_one(session_number, credentials, created_by):
     accounts = []
     for key, label, role, digit in DEMO_ROLES:
         pin, password_hash = credentials[key]
+        phone = demo_phone_number(session_number, digit)
+        if not is_reserved_demo_number(phone):
+            # send_sms would text it: refuse rather than mint a textable account.
+            raise RuntimeError(f"{phone} is not a reserved demo number.")
         user = User(
-            phone_number=demo_phone_number(session_number, digit),
+            phone_number=phone,
             full_name=f"{label} – Session {nn}",
             role=role,
             password=password_hash,

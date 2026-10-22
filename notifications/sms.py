@@ -2,7 +2,7 @@
 """
 Thin wrapper around Semaphore's SMS API.
 
-Three things make this safe to call from anywhere in the request path:
+Four things make this safe to call from anywhere in the request path:
 
   1. It never raises. A provider outage or a missing API key must never
      break the operation that triggered the text (an invitation still
@@ -18,6 +18,10 @@ Three things make this safe to call from anywhere in the request path:
      expected to build messages that never trip this, via
      notifications/messages.py.
 
+  4. It never texts a number reserved for evaluation-farm demo accounts
+     (accounts/demo_numbers.py) — whatever triggered the send, a low-stock
+     alert or someone inviting a demo number during a test session.
+
 Every attempt, successful or not, is written to SmsLog.
 """
 import logging
@@ -26,6 +30,8 @@ from dataclasses import dataclass
 
 import requests
 from django.conf import settings
+
+from accounts.demo_numbers import is_reserved_demo_number
 
 from .models import SmsLog
 
@@ -152,10 +158,18 @@ def send_sms(
     content backstop; a message that fails is never sent, only logged as
     SKIPPED. This should never fire in practice — see
     notifications/messages.py — but it is the guarantee, not the templates.
+
+    A reserved demo number is refused ahead of every other check, so it can
+    never reach the network whatever the settings say.
     """
     recipient = normalize_to_local(to)
 
-    if not is_gsm7_basic(message) or len(message) > SMS_SEGMENT_LIMIT:
+    if is_reserved_demo_number(to) or is_reserved_demo_number(recipient):
+        logger.warning(
+            "SMS blocked (reserved_demo_number) for %s: %s", recipient, log_message
+        )
+        result = SmsResult(status=SmsLog.Status.SKIPPED, error="reserved_demo_number")
+    elif not is_gsm7_basic(message) or len(message) > SMS_SEGMENT_LIMIT:
         logger.error(
             "SMS blocked (invalid_content) for %s: %s", recipient, log_message
         )
