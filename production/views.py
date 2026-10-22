@@ -66,6 +66,7 @@ from .permissions import (
     CanViewProduction,
 )
 from .serializers import (
+    ID_IN_USE,
     BatchCloseSerializer,
     BatchCreateSerializer,
     BatchSerializer,
@@ -89,6 +90,25 @@ from .serializers import (
     WeightSampleSerializer,
 )
 from drf_spectacular.utils import OpenApiExample, extend_schema
+
+
+def _well_formed_uuid(value):
+    """The client's id as a UUID, or None when missing or malformed (the serializer reports that)."""
+    if not value:
+        return None
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
+def _id_in_use():
+    """
+    A client UUID that already names a row outside this request's farm,
+    batch or house. Refused rather than updated, and rather than letting the
+    insert collide with that row's primary key.
+    """
+    return Response({"id": [ID_IN_USE]}, status=status.HTTP_400_BAD_REQUEST)
 
 # ─────────────────────────────────────────────────────────────
 # Houses
@@ -334,6 +354,8 @@ class DailyRecordListCreateView(BatchScopedMixin, generics.ListCreateAPIView):
                 pass
             else:
                 existing = self.get_queryset().filter(pk=supplied_id).first()
+                if existing is None and DailyRecord.objects.filter(pk=supplied_id).exists():
+                    return _id_in_use()
 
         if existing is not None:
             # DailyRecordSerializer.update() already enforces the 24-hour
@@ -484,6 +506,15 @@ class WeightSampleListCreateView(BatchScopedMixin, generics.ListCreateAPIView):
             "recorded_by"
         )
 
+    def create(self, request, *args, **kwargs):
+        supplied_id = _well_formed_uuid(request.data.get("id"))
+        if (
+            supplied_id is not None
+            and WeightSample.objects.filter(pk=supplied_id).exclude(batch=self.batch).exists()
+        ):
+            return _id_in_use()
+        return super().create(request, *args, **kwargs)
+
 
 class WeightSampleDetailView(BatchScopedMixin, generics.RetrieveUpdateAPIView):
     """GET / PATCH /api/farms/<farm_pk>/batches/<batch_pk>/weights/<pk>/"""
@@ -537,6 +568,8 @@ class SaleEventListCreateView(BatchScopedMixin, generics.ListCreateAPIView):
                 pass
             else:
                 existing = self.get_queryset().filter(pk=supplied_id).first()
+                if existing is None and SaleEvent.objects.filter(pk=supplied_id).exists():
+                    return _id_in_use()
 
         if existing is not None:
             serializer = self.get_serializer(existing, data=request.data)
@@ -1054,6 +1087,8 @@ class InventoryUsageListCreateView(generics.ListCreateAPIView):
                 pass
             else:
                 existing = self.get_queryset().filter(pk=supplied_id).first()
+                if existing is None and InventoryUsageLog.objects.filter(pk=supplied_id).exists():
+                    return _id_in_use()
 
         if existing is not None:
             # Reusing the serializer's update() keeps this retry path
@@ -1241,13 +1276,17 @@ class TaskCompletionListCreateView(generics.ListCreateAPIView):
             except (ValueError, AttributeError, TypeError):
                 pass
             else:
+                # Only this farm's tick for the house this request names
+                # (the house the scope check above passed) is a retry.
                 existing = (
                     TaskCompletion.objects.filter(
-                        pk=supplied_id, template__farm=request.farm
+                        pk=supplied_id, template__farm=request.farm, house=house
                     )
                     .select_related("template", "recorded_by", "house")
                     .first()
                 )
+                if existing is None and TaskCompletion.objects.filter(pk=supplied_id).exists():
+                    return _id_in_use()
 
         if existing is not None:
             serializer = self.get_serializer(existing, data=request.data)

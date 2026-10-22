@@ -28,6 +28,33 @@ from .models import (
     WeightSample,
 )
 
+# The refusal for a client UUID that names a row the request may not
+# touch: another farm's, another batch's, another house's. Deliberately the
+# same wording whichever it is, so the answer reveals nothing about where
+# that row lives.
+ID_IN_USE = "This id is already in use."
+
+
+class ClientIdMixin:
+    """
+    For serializers whose `id` is the client-generated UUID.
+
+    The id names a record once, when it is created. On an update it may
+    only repeat the record's own id, which is then ignored: a different one
+    would be assigned by ModelSerializer.update(), and save() would write
+    this record's values over the row that id belongs to (another farm's,
+    or a locked one).
+    """
+
+    def validate_id(self, value):
+        if self.instance is not None and value is not None and value != self.instance.pk:
+            raise serializers.ValidationError("A saved record's id cannot be changed.")
+        return value
+
+    def update(self, instance, validated_data):
+        validated_data.pop("id", None)
+        return super().update(instance, validated_data)
+
 
 # ─────────────────────────────────────────────────────────────
 # Houses
@@ -300,7 +327,7 @@ def sync_feed_usage_log(daily_record, *, user):
     return existing
 
 
-class DailyRecordSerializer(serializers.ModelSerializer):
+class DailyRecordSerializer(ClientIdMixin, serializers.ModelSerializer):
     """
     One entry per batch per day.
 
@@ -557,6 +584,19 @@ class DailyRecordBulkSyncSerializer(serializers.Serializer):
                             batch=batch, record_date=record_date
                         ).first()
 
+                    if (
+                        existing is None
+                        and supplied_id is not None
+                        and DailyRecord.objects.filter(pk=supplied_id).exists()
+                    ):
+                        # The id is taken outside this batch: it names a
+                        # row this request may not touch, so never update
+                        # it and never let the insert collide with it.
+                        failed.append(
+                            {"record_date": str(record_date), "error": ID_IN_USE}
+                        )
+                        continue
+
                     if existing is None:
                         # An id was supplied and doesn't exist yet, but a
                         # DIFFERENT record may already occupy this date —
@@ -632,7 +672,7 @@ class DailyRecordBulkSyncSerializer(serializers.Serializer):
 # ─────────────────────────────────────────────────────────────
 
 
-class WeightSampleSerializer(serializers.ModelSerializer):
+class WeightSampleSerializer(ClientIdMixin, serializers.ModelSerializer):
     # Same fix as DailyRecordSerializer: a primary-key field is forced
     # read_only=True by ModelSerializer's field-building regardless of
     # extra_kwargs, which silently discarded the client-supplied id.
@@ -697,7 +737,7 @@ class WeightSampleSerializer(serializers.ModelSerializer):
 # ─────────────────────────────────────────────────────────────
 
 
-class SaleEventSerializer(serializers.ModelSerializer):
+class SaleEventSerializer(ClientIdMixin, serializers.ModelSerializer):
     """
     One transaction in which some of a batch's birds left.
 
@@ -1097,6 +1137,12 @@ class SaleEventBulkSyncSerializer(serializers.Serializer):
                         existing = SaleEvent.objects.filter(
                             pk=supplied_id, batch=batch
                         ).first()
+                        if (
+                            existing is None
+                            and SaleEvent.objects.filter(pk=supplied_id).exists()
+                        ):
+                            failed.append({"id": str(supplied_id), "error": ID_IN_USE})
+                            continue
 
                     if existing is None:
                         record = SaleEvent.objects.create(
@@ -1743,7 +1789,7 @@ class InventoryStockInSerializer(serializers.ModelSerializer):
         )
 
 
-class InventoryUsageLogSerializer(serializers.ModelSerializer):
+class InventoryUsageLogSerializer(ClientIdMixin, serializers.ModelSerializer):
     """
     One worker drawing an item down.
 
@@ -1897,6 +1943,7 @@ class InventoryUsageBulkSyncSerializer(serializers.Serializer):
 
     def save(self, **kwargs):
         user = self.context["request"].user
+        farm = self.context["farm"]
         created, updated, failed = [], [], []
 
         for payload in self.validated_data["records"]:
@@ -1905,11 +1952,18 @@ class InventoryUsageBulkSyncSerializer(serializers.Serializer):
                 with transaction.atomic():
                     existing = None
                     if supplied_id is not None:
+                        # Only this farm's log is a re-sync of this event.
                         existing = (
                             InventoryUsageLog.objects.select_related("item")
-                            .filter(pk=supplied_id)
+                            .filter(pk=supplied_id, item__farm=farm)
                             .first()
                         )
+                        if (
+                            existing is None
+                            and InventoryUsageLog.objects.filter(pk=supplied_id).exists()
+                        ):
+                            failed.append({"id": str(supplied_id), "error": ID_IN_USE})
+                            continue
 
                     if existing is None:
                         record = InventoryUsageLog.objects.create(
@@ -1983,7 +2037,7 @@ class TaskTemplateSerializer(serializers.ModelSerializer):
         )
 
 
-class TaskCompletionSerializer(serializers.ModelSerializer):
+class TaskCompletionSerializer(ClientIdMixin, serializers.ModelSerializer):
     """
     A routine item ticked off for a day.
 
@@ -2143,9 +2197,20 @@ class TaskCompletionBulkSyncSerializer(serializers.Serializer):
                 with transaction.atomic():
                     existing = None
                     if supplied_id is not None:
+                        # Only this farm's tick, for the house this record
+                        # names (the house the scope check above passed),
+                        # is a re-sync of it.
                         existing = TaskCompletion.objects.filter(
-                            pk=supplied_id
+                            pk=supplied_id,
+                            template__farm=self.context["farm"],
+                            house=payload["house"],
                         ).first()
+                        if (
+                            existing is None
+                            and TaskCompletion.objects.filter(pk=supplied_id).exists()
+                        ):
+                            failed.append({"id": str(supplied_id), "error": ID_IN_USE})
+                            continue
 
                     if existing is None:
                         # A different device may already have ticked this
