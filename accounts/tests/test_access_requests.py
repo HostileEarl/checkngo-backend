@@ -36,6 +36,7 @@ def payload(**overrides):
         "farm_name": "Manalo Broiler Farm",
         "location": "Capas, Tarlac",
         "houses": 3,
+        "birds": 15000,
         "role": "OWNER",
         "message": "We run three tunnel-vent houses.",
         "consent": True,
@@ -80,6 +81,7 @@ class TestValidRequest:
         assert req.farm_name == "Manalo Broiler Farm"
         assert req.location == "Capas, Tarlac"
         assert req.houses == 3
+        assert req.birds == 15000
         assert req.role == AccessRequest.Role.OWNER
         assert req.consent is True
         assert req.status == AccessRequest.Status.NEW
@@ -108,13 +110,15 @@ class TestValidRequest:
 
     def test_optional_fields_may_be_left_out(self, api):
         data = payload()
-        for key in ("email", "houses", "message", "website"):
+        for key in ("email", "houses", "birds", "role", "message", "website"):
             data.pop(key)
         r = post(api, data)
         assert r.status_code == 201, r.content
         req = AccessRequest.objects.get()
         assert req.email == ""
         assert req.houses is None
+        assert req.birds is None
+        assert req.role == AccessRequest.Role.OWNER
         assert req.message == ""
 
     def test_no_ip_address_is_stored(self, api):
@@ -169,7 +173,9 @@ class TestValidation:
         cache.clear()
         assert post(api, payload(**{field: "x" * limit})).status_code == 201
 
-    @pytest.mark.parametrize("field", ["full_name", "phone_number", "farm_name", "location", "role"])
+    @pytest.mark.parametrize(
+        "field", ["full_name", "phone_number", "farm_name", "location", "consent"]
+    )
     def test_required_fields(self, api, field):
         data = payload()
         data.pop(field)
@@ -187,11 +193,87 @@ class TestValidation:
         assert r.status_code == 400
         assert "email" in r.json()
 
-    @pytest.mark.parametrize("houses", [-1, 1000, "many"])
+    @pytest.mark.parametrize("houses", [-1, 1000, "many", 2.5])
     def test_bad_houses_is_400(self, api, houses):
         r = post(api, payload(houses=houses))
         assert r.status_code == 400
         assert "houses" in r.json()
+
+    @pytest.mark.parametrize("birds", [0, -5, "lots", 2.5, "1.5", 2_147_483_648])
+    def test_bad_birds_is_400(self, api, birds):
+        r = post(api, payload(birds=birds))
+        assert r.status_code == 400
+        assert "birds" in r.json()
+        assert not AccessRequest.objects.exists()
+
+    @pytest.mark.parametrize(
+        "sent,stored",
+        [(1, 1), ("15000", 15000), ("15,000", 15000), (" 1,200,000 ", 1200000), ("", None), (None, None)],
+    )
+    def test_birds_accepts_what_the_landing_form_types(self, api, sent, stored):
+        r = post(api, payload(birds=sent))
+        assert r.status_code == 201, r.content
+        assert AccessRequest.objects.get().birds == stored
+
+    @pytest.mark.parametrize("sent,stored", [("4", 4), (" 12 ", 12), ("", None), ("  ", None)])
+    def test_houses_accepts_what_the_landing_form_types(self, api, sent, stored):
+        r = post(api, payload(houses=sent))
+        assert r.status_code == 201, r.content
+        assert AccessRequest.objects.get().houses == stored
+
+    def test_role_defaults_to_owner_but_can_be_given(self, api):
+        data = payload()
+        data.pop("role")
+        assert post(api, data).status_code == 201
+        assert post(api, payload(role="MANAGER")).status_code == 201
+        assert list(AccessRequest.objects.order_by("id").values_list("role", flat=True)) == [
+            "OWNER",
+            "MANAGER",
+        ]
+
+    def test_landing_form_payload_as_peter_maps_it(self, api, notify_phone, fake_semaphore):
+        """
+        The frontend form (src/lib/request-access.ts) keeps every field as a
+        string and sends the phone through toPhilippineMobile(). This is
+        exactly what it posts after mapping its camelCase names: no role.
+        """
+        form = {
+            "fullName": "Liza Manalo",
+            "farmName": "Manalo Broiler Farm",
+            "mobile": "+639181234567",  # toPhilippineMobile("0918 123 4567")
+            "email": "",
+            "location": "Capas, Tarlac",
+            "houses": "3",
+            "birds": "15,000",
+            "message": "",
+        }
+        body = {
+            "full_name": form["fullName"],
+            "farm_name": form["farmName"],
+            "phone_number": form["mobile"],
+            "email": form["email"],
+            "location": form["location"],
+            "houses": form["houses"],
+            "birds": form["birds"],
+            "message": form["message"],
+            "consent": True,
+            "website": "",
+        }
+        r = post(api, body)
+        assert r.status_code == 201, r.content
+        assert r.json() == SUCCESS
+        req = AccessRequest.objects.get()
+        assert (req.houses, req.birds, req.role, req.email) == (3, 15000, "OWNER", "")
+        assert alert_logs().get().status == SmsLog.Status.SENT
+
+    def test_consent_must_be_true_not_just_truthy_text(self, api):
+        # DRF reads "true"/"1" as True; anything else is not consent.
+        for value in ("no", 0, "false", None):
+            cache.clear()
+            r = post(api, payload(consent=value))
+            assert r.status_code == 400, value
+            assert "consent" in r.json()
+        assert not AccessRequest.objects.exists()
 
     def test_status_cannot_be_set_by_the_requester(self, api):
         r = post(api, payload(status="APPROVED", handled_at="2026-01-01T00:00:00Z"))
@@ -404,6 +486,12 @@ class TestAdmin:
         html = admin_client.get(f"{CHANGELIST}{req.pk}/change/").content.decode()
         assert "+639181234567" in html
         assert "liza@example.com" in html
+
+    def test_detail_page_shows_birds_read_only(self, admin_client):
+        req = make_request(birds=15000)
+        resp = admin_client.get(f"{CHANGELIST}{req.pk}/change/")
+        assert "birds" in resp.context["adminform"].readonly_fields
+        assert "15000" in resp.content.decode()
 
     def test_list_is_newest_first(self, admin_client):
         old = make_request(farm_name="Old Farm")

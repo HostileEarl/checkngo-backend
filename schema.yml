@@ -3788,6 +3788,11 @@ components:
           maximum: 999
           minimum: 0
           nullable: true
+        birds:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          nullable: true
         role:
           $ref: '#/components/schemas/AccessRequestRoleEnum'
         message:
@@ -3805,7 +3810,6 @@ components:
       - full_name
       - location
       - phone_number
-      - role
     AccessRequestRoleEnum:
       enum:
       - OWNER

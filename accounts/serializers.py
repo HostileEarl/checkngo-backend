@@ -500,6 +500,23 @@ class AccessRequestCreatedSerializer(serializers.Serializer):
     detail = serializers.CharField()
 
 
+class WholeNumberField(serializers.IntegerField):
+    """
+    An optional count as the landing form types it: 5000, "5000" or
+    "5,000". An empty string means "not given", the same as null.
+    """
+
+    def validate_empty_values(self, data):
+        if isinstance(data, str) and not data.strip():
+            data = None
+        return super().validate_empty_values(data)
+
+    def to_internal_value(self, data):
+        if isinstance(data, str):
+            data = data.replace(",", "").strip()
+        return super().to_internal_value(data)
+
+
 class AccessRequestSerializer(serializers.ModelSerializer):
     """
     The public "Request access" form. Creates an AccessRequest and nothing
@@ -509,6 +526,12 @@ class AccessRequestSerializer(serializers.ModelSerializer):
     # Declared rather than inherited from the model so the number is
     # normalized BEFORE the E.164 check — "+63 917 123 4567" is accepted.
     phone_number = serializers.CharField(max_length=32)
+    houses = WholeNumberField(required=False, allow_null=True, min_value=0, max_value=999)
+    # Positive: a farm asking for access raises at least one bird. The max
+    # is the column's own limit.
+    birds = WholeNumberField(
+        required=False, allow_null=True, min_value=1, max_value=2_147_483_647
+    )
     consent = serializers.BooleanField()
     # Honeypot — see AccessRequestCreateView. Declared only so the schema
     # documents it; the view acts on it before this serializer runs.
@@ -528,12 +551,12 @@ class AccessRequestSerializer(serializers.ModelSerializer):
             "farm_name",
             "location",
             "houses",
+            "birds",
             "role",
             "message",
             "consent",
             "website",
         ]
-        extra_kwargs = {"houses": {"max_value": 999}}
 
     def validate_phone_number(self, value):
         value = UserManager.normalize_phone(value)

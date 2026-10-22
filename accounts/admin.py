@@ -380,6 +380,7 @@ class AccessRequestAdmin(ModelAdmin):
         "farm_name",
         "location",
         "houses",
+        "birds",
         "role",
         "message",
         "consent",

@@ -474,7 +474,12 @@ class AccessRequest(models.Model):
     farm_name = models.CharField(max_length=150)
     location = models.CharField(max_length=150, help_text="Municipality / province.")
     houses = models.PositiveSmallIntegerField(null=True, blank=True)
-    role = models.CharField(max_length=20, choices=Role.choices)
+    birds = models.PositiveIntegerField(
+        null=True, blank=True, help_text="How many birds the farm raises."
+    )
+    # The landing form doesn't ask; nearly everyone requesting access owns
+    # the farm.
+    role = models.CharField(max_length=20, choices=Role.choices, default=Role.OWNER)
     message = models.CharField(max_length=500, blank=True, default="")
     consent = models.BooleanField(default=False)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW)
