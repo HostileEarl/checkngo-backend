@@ -608,6 +608,18 @@ class DailyRecordBulkSyncSerializer(serializers.Serializer):
                 sync_feed_usage_log(record, user=user)
                 return "created", str(record.id)
 
+            if existing.record_date != record_date:
+                # Same id, another day: the numbers may change on a
+                # re-sync, the day they describe may not (the PATCH and
+                # retried-POST paths keep it the same way).
+                return "failed", {
+                    "record_date": str(record_date),
+                    "error": (
+                        f"This record is for {existing.record_date}; "
+                        "a re-sync cannot move it to another day."
+                    ),
+                }
+
             if existing.is_editable:
                 # Overwrite on re-sync — the device is the source of
                 # truth for a day it already reported.
