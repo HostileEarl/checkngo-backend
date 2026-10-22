@@ -86,6 +86,7 @@ CONCERNS = OrderedDict([
         "partners/tests/test_my_purchases.py",
         "partners/tests/test_my_payments.py",
         "farms/tests/test_isolation.py::TestExternalPartners",
+        "farms/tests/test_farm_registration.py",
         "analytics/tests/test_access.py::TestAnalyticsAccess::test_consumer_blocked",
     ]),
     ("PIN-change gate", [
@@ -231,9 +232,7 @@ def render(ids, outcomes, messages, run, commit=None):
 
     failing = [i for i in ids if outcomes.get(i) in ("failed", "error")]
     if failing:
-        out("Failing tests, with the first line of each error. Each asserts a rule the code does")
-        out("not follow today; the sync findings are described in docs/SYNC_POLICY.md (*Where the")
-        out("code does not hold today*), the others in the failing test's own docstring.")
+        out("Failing tests, with the first line of each error.")
         out("")
         out("| Test | Message |")
         out("|---|---|")
