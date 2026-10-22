@@ -31,3 +31,5 @@ Thumbs.db
 
 # Build artifacts
 schema.yml
+# Test reports (scripts/test_evidence.py reads one)
+test-results/
