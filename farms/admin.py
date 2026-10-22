@@ -47,6 +47,13 @@ class FarmAdmin(ModelAdmin):
         # never by typing a bare name into the admin.
         return False
 
+    def get_urls(self):
+        # System → Evaluation farms (superusers only): the guided-test farms.
+        # Ahead of the stock URLs, whose <object_id>/ pattern would match first.
+        from .evaluation_admin import evaluation_urls
+
+        return evaluation_urls(self) + super().get_urls()
+
 
 @admin.register(FarmMembership)
 class FarmMembershipAdmin(ModelAdmin):

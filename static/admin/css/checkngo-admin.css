@@ -12,6 +12,7 @@
      3. Status labels used by list columns (status-danger / -success /
         -warning / -muted), returned by the ModelAdmins' format_html calls.
      4. The dashboard (templates/admin/index.html).
+     5. The evaluation farms pages (templates/admin/evaluation_farms/).
 
    Tokens (from the frontend's tailwind.config.js)
      lime #C4F188 (ink text, 13.9:1) · hover #B6E07E
@@ -311,8 +312,113 @@ html:not(.dark) button[type="submit"].bg-primary-600:hover {
 .dark .checkngo-panel__empty { color: #B5B0AD; }
 .dark .checkngo-panel__head a { color: var(--cng-lime); }
 
+/* 5. Evaluation farms (templates/admin/evaluation_farms/) ---------------------- */
+
+.checkngo-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 1.25rem;
+}
+
+.checkngo-form--actions { border-top: 1px solid #EEEEEE; }
+
+.checkngo-form__label {
+    font-weight: 700;
+    color: var(--cng-ink);
+}
+
+.checkngo-form__row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.checkngo-input {
+    width: 7rem;
+    min-height: 44px;
+    padding: 0 0.75rem;
+    border: 1px solid #C9C7C5;
+    border-radius: 10px;
+    background: #fff;
+    color: var(--cng-ink);
+    font-size: 1rem;
+}
+
+.checkngo-input:focus {
+    outline: 2px solid var(--cng-olive);
+    outline-offset: 1px;
+}
+
+.checkngo-btn--outline {
+    align-self: flex-start;
+    border: 1px solid var(--cng-olive);
+    background: transparent;
+    color: var(--cng-olive);
+    cursor: pointer;
+}
+.checkngo-btn--outline:hover { background: #EEF8DF; }
+
+button.checkngo-btn--primary { border: 0; cursor: pointer; }
+button.checkngo-btn:disabled { opacity: 0.6; cursor: progress; }
+
+.checkngo-note {
+    margin: 0;
+    color: var(--cng-muted);
+    font-size: 0.85rem;
+}
+
+.checkngo-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.checkngo-table th,
+.checkngo-table td {
+    padding: 0.65rem 1.25rem;
+    border-bottom: 1px solid #EEEEEE;
+    text-align: left;
+    color: var(--cng-ink);
+}
+
+.checkngo-table th {
+    color: var(--cng-muted);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.checkngo-table tbody tr:last-child td { border-bottom: 0; }
+
+.checkngo-mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.checkngo-pin { font-size: 1.1rem; font-weight: 800; letter-spacing: 0.08em; }
+
+.checkngo-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+}
+
+.dark .checkngo-form__label,
+.dark .checkngo-table td { color: #F4F4F4; }
+.dark .checkngo-table th,
+.dark .checkngo-note { color: #B5B0AD; }
+.dark .checkngo-table th,
+.dark .checkngo-table td,
+.dark .checkngo-form--actions { border-color: #3A3633; }
+.dark .checkngo-input { background: #1F1C1A; border-color: #3A3633; color: #F4F4F4; }
+.dark .checkngo-btn--outline { border-color: var(--cng-lime); color: var(--cng-lime); }
+.dark .checkngo-btn--outline:hover { background: rgba(118, 206, 0, 0.15); }
+
 @media (max-width: 640px) {
     .checkngo-dash__hero { padding: 1.25rem; }
+    .checkngo-table th,
+    .checkngo-table td { padding: 0.6rem 0.75rem; }
     .checkngo-dash__title { font-size: 1.3rem; }
     .checkngo-btn { width: 100%; justify-content: center; }
 }

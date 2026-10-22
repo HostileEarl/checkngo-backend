@@ -10,6 +10,7 @@ from farms.models import Farm
 from notifications.messages import render_low_stock_message
 from notifications.models import SmsLog
 from notifications.sms import send_sms
+from production.evaluation import session_number_of
 from production.models import InventoryItem
 
 DEDUPE_WINDOW = timedelta(hours=24)
@@ -41,6 +42,13 @@ class Command(BaseCommand):
             # the app open. The full farm-wide set, not just low stock:
             # syncing a partial list would resolve every other open log.
             sync_alert_logs(farm, compute_alerts(farm))
+
+            # Evaluation farms (production/evaluation.py) are built with an
+            # item under its reorder level on purpose, and their owners sit
+            # on reserved demo numbers that send_sms refuses anyway. Their
+            # alert history above stays current; they just get no text.
+            if session_number_of(farm) is not None:
+                continue
 
             # low_stock() is the one shared definition of "alertable" —
             # archived and never-stocked items are excluded there, so this

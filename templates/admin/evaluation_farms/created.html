@@ -1,0 +1,62 @@
+{% extends "admin/base.html" %}
+{% load i18n %}
+
+{#
+  The response to "Create farms" (farms/evaluation_admin.py). The only
+  place the demo PINs ever appear: they are not stored in the clear, and
+  this page is served never-cache and cannot be reached again by URL.
+  Shows the farm's name and its four accounts — nothing else about it.
+#}
+
+{% block title %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+  {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="checkngo-dash">
+
+  <section class="checkngo-dash__hero">
+    <div>
+      <p class="checkngo-dash__eyebrow">{% translate "System" %}</p>
+      <h1 class="checkngo-dash__title">{% blocktranslate count counter=results|length %}{{ counter }} evaluation farm created{% plural %}{{ counter }} evaluation farms created{% endblocktranslate %}</h1>
+      <p class="checkngo-dash__lead">{% translate "Copy these accounts into the private session sheet now. The PINs are shown only on this page: they are stored hashed and cannot be shown again. Do not reload this page." %}</p>
+    </div>
+    <div class="checkngo-dash__actions">
+      <a class="checkngo-btn checkngo-btn--secondary" href="{% url 'admin:farms_farm_evaluation' %}">
+        <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+        {% translate "Back to evaluation farms" %}
+      </a>
+    </div>
+  </section>
+
+  {% for result in results %}
+    <section class="checkngo-panel">
+      <header class="checkngo-panel__head">
+        <h2>{{ result.farm.name }}</h2>
+      </header>
+      <table class="checkngo-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate "Role" %}</th>
+            <th scope="col">{% translate "Name" %}</th>
+            <th scope="col">{% translate "Phone" %}</th>
+            <th scope="col">{% translate "PIN" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for account in result.accounts %}
+            <tr>
+              <td>{{ account.role }}</td>
+              <td>{{ account.full_name }}</td>
+              <td class="checkngo-mono">{{ account.phone_number }}</td>
+              <td class="checkngo-mono checkngo-pin">{{ account.pin }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endfor %}
+</div>
+{% endblock %}

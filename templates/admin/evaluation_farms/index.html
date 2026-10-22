@@ -1,0 +1,90 @@
+{% extends "admin/base.html" %}
+{% load i18n %}
+
+{#
+  System → Evaluation farms (farms/evaluation_admin.py). Superusers only.
+
+  Shows farm names, active flag and created date — nothing about the
+  farms' houses, flocks, sales or stock, and never a PIN (PINs appear once,
+  on created.html). Same checkngo-* classes as the dashboard.
+#}
+
+{% block title %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+  {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="checkngo-dash">
+
+  <section class="checkngo-dash__hero">
+    <div>
+      <p class="checkngo-dash__eyebrow">{% translate "System" %}</p>
+      <h1 class="checkngo-dash__title">{% translate "Evaluation farms" %}</h1>
+      <p class="checkngo-dash__lead">{% translate "One clean farm per guided test session: three weeks of sample records and four demo accounts. Creating only adds data; archiving never deletes." %}</p>
+    </div>
+  </section>
+
+  <div class="checkngo-dash__grid">
+    <section class="checkngo-panel">
+      <header class="checkngo-panel__head">
+        <h2>{% translate "Create farms" %}</h2>
+      </header>
+      <form method="post" action="{% url 'admin:farms_farm_evaluation_create' %}" class="checkngo-form" onsubmit="this.querySelector('button[type=submit]').disabled = true;">
+        {% csrf_token %}
+        <input type="hidden" name="token" value="{{ token }}">
+        <label class="checkngo-form__label" for="id_count">{% translate "How many farms" %}</label>
+        <div class="checkngo-form__row">
+          <input class="checkngo-input" type="number" id="id_count" name="count" min="1" max="{{ max_count }}" value="1" required>
+          <button type="submit" class="checkngo-btn checkngo-btn--primary">
+            <span class="material-symbols-outlined" aria-hidden="true">add</span>
+            {% translate "Create farms" %}
+          </button>
+        </div>
+        <p class="checkngo-note">{% blocktranslate %}Between 1 and {{ max_count }}. Each farm takes the next free session number. The four accounts and their PINs are shown once, on the next page — have the private session sheet open. Each farm takes a few seconds to create; on the live site create two or three at a time.{% endblocktranslate %}</p>
+      </form>
+    </section>
+
+    <section class="checkngo-panel">
+      <header class="checkngo-panel__head">
+        <h2>{% translate "Existing evaluation farms" %}</h2>
+      </header>
+      {% if farms %}
+        <form method="post" action="{% url 'admin:farms_farm_evaluation_archive' %}">
+          {% csrf_token %}
+          <table class="checkngo-table">
+            <thead>
+              <tr>
+                <th scope="col"><span class="checkngo-sr-only">{% translate "Select" %}</span></th>
+                <th scope="col">{% translate "Name" %}</th>
+                <th scope="col">{% translate "Active" %}</th>
+                <th scope="col">{% translate "Created" %}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for farm in farms %}
+                <tr>
+                  <td><input type="checkbox" name="farm_ids" value="{{ farm.pk }}" id="farm-{{ farm.pk }}"></td>
+                  <td><label for="farm-{{ farm.pk }}">{{ farm.name }}</label></td>
+                  <td>{% if farm.is_active %}<span class="status-success">{% translate "Active" %}</span>{% else %}<span class="status-muted">{% translate "Archived" %}</span>{% endif %}</td>
+                  <td>{{ farm.created_at|date:"j M Y, H:i" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="checkngo-form checkngo-form--actions">
+            <button type="submit" class="checkngo-btn checkngo-btn--outline">
+              <span class="material-symbols-outlined" aria-hidden="true">archive</span>
+              {% translate "Archive selected evaluation farms" %}
+            </button>
+            <p class="checkngo-note">{% translate "Sets each farm inactive and deactivates its four demo accounts. Nothing is deleted." %}</p>
+          </div>
+        </form>
+      {% else %}
+        <p class="checkngo-panel__empty">{% translate "No evaluation farms yet." %}</p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

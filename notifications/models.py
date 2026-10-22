@@ -30,9 +30,9 @@ class SmsLog(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices)
     provider_message_id = models.CharField(max_length=64, blank=True)
     # Reused for a machine-readable reason on a SKIPPED row (e.g.
-    # "invalid_content", "blocked_test_prefix") as well as a provider
-    # error message on a FAILED one — both describe why the row isn't a
-    # plain SENT.
+    # "invalid_content", "blocked_test_prefix", "reserved_demo_number") as
+    # well as a provider error message on a FAILED one — both describe why
+    # the row isn't a plain SENT.
     error = models.CharField(max_length=255, blank=True)
     sent_at = models.DateTimeField(auto_now_add=True)
     related_farm = models.ForeignKey(

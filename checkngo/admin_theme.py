@@ -13,7 +13,8 @@ settings.py only holds the UNFOLD dict:
   People starts with landing-page access requests (accounts.AccessRequest).
   Accounts only: no farm-operational hub (Birds & Sales, Resources) —
   see production/admin.py, which registers nothing. Each link is hidden
-  unless the user may view that model.
+  unless the user may view that model. System also holds "Evaluation
+  farms" (superusers only; farms/evaluation_admin.py).
 - dashboard_callback: the numbers and quick actions on the admin home.
 
 Nothing here touches a model at import time: settings.py imports this
@@ -77,6 +78,11 @@ def can_create_owner(request):
     return request.user.has_perm("accounts.add_user")
 
 
+def is_superuser(request):
+    # Evaluation farms: superusers only, same check as farms/evaluation_admin.py.
+    return request.user.is_active and request.user.is_superuser
+
+
 def _item(title, icon, app_label, model_name, permission=None):
     return {
         "title": title,
@@ -132,6 +138,12 @@ SIDEBAR_NAVIGATION = [
         "separator": True,
         "collapsible": True,
         "items": [
+            {
+                "title": _("Evaluation farms"),
+                "icon": "science",
+                "link": reverse_lazy("admin:farms_farm_evaluation"),
+                "permission": is_superuser,
+            },
             _item(_("SMS log"), "sms", "notifications", "smslog"),
             _item(_("Login attempts"), "lock", "axes", "accessattempt"),
             _item(_("Login failures"), "gpp_bad", "axes", "accessfailurelog"),

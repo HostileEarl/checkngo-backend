@@ -279,6 +279,54 @@ just means an idle no-op most of the time, not extra texts.
 
 ---
 
+## 8. Evaluation farms (guided test sessions)
+
+**System → Evaluation farms** (superusers only; everyone else gets a 403)
+creates one clean farm per guided test session. It only adds data: it
+never edits, renames or deletes an existing farm, user or record, sends
+no SMS and creates no invitation.
+
+Each farm is called **Demo Farm – Session NN** (Atimonan, Quezon) and comes
+with:
+
+- four accounts that log in straight away, with no PIN change on first
+  login: Owner, Manager, Worker (House 1 only) and Buyer (a linked buyer).
+  Their numbers are `+63999` + `NN` + `0000` + `1`/`2`/`3`/`4`;
+- House 1 and House 2, each with a flock placed 21 days ago and a daily
+  record for every day up to **yesterday** — today is left for the
+  respondent to record;
+- a closed flock in House 1 from about two months ago, with sales to the
+  linked buyer (one paid, one with a returned cheque), a walk-in sale and
+  a parts sale;
+- feed and supplies stock (Vitamins sits just under its reorder level, so
+  a low-stock alert shows) and the daily routine ticked on past days.
+
+**Create farms:** choose how many (1–10). They take the next free session
+numbers. The next page lists each farm's four accounts with their PINs
+**once** — copy them into the private session sheet before leaving the
+page. They are stored hashed and cannot be shown again; reloading the page
+does not create more farms. Each farm takes a few seconds (four PINs are
+hashed), so on the live site create two or three at a time. If a request
+times out, nothing was created — try again with fewer.
+
+Create each farm close to its session: the records end "yesterday"
+relative to the day the farm is created.
+
+No text message ever goes to a demo number: the daily low-stock job skips
+evaluation farms, and the SMS sender refuses `+63999NN0000[1-4]` outright
+(logged in **System → SMS log** as *Skipped*, `reserved_demo_number`) — so
+inviting a demo number during a session saves the invitation but sends
+nothing. Any other number a tester types is texted as usual.
+
+**After the session:** tick the farm and use **Archive selected evaluation
+farms**. The farm becomes inactive and its four accounts are deactivated
+(they can no longer log in). Nothing is deleted.
+
+Locally the same is available as
+`python manage.py create_evaluation_farms --count N`.
+
+---
+
 ## Reference — what each admin section is for
 
 | Section | Editable? | Notes |
@@ -290,6 +338,7 @@ just means an idle no-op most of the time, not extra texts.
 | Farms → Farms | Yes | Membership + ownership-history inlines. |
 | Farms → Farm memberships | Yes | Grant/revoke farm access here. |
 | Farms → Farm ownership history | Read-only | Append-only ledger. |
+| System → Evaluation farms | Create / archive | Superusers only. Guided-test farms; PINs shown once. See section 8. |
 | Partners → Farm partner links | Yes | Consumer (buyer) relationships. |
 | Production → Houses | Yes | Physical sheds. |
 | Production → Batches | Yes | Totals are denormalized; recalculate action provided. |
