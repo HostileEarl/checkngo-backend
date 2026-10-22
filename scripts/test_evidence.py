@@ -4,7 +4,7 @@ Write docs/TEST_EVIDENCE.md from the test suite.
 
     pytest accounts analytics farms notifications partners production \
         --junitxml=test-results/junit.xml
-    python scripts/test_evidence.py --junit test-results/junit.xml
+    python scripts/test_evidence.py --junit test-results/junit.xml [--commit <sha>]
 
 1. Collects the suite with `pytest --collect-only -q` (no database needed)
    for the test counts per app and per file.
@@ -190,11 +190,15 @@ def _result_cell(counts):
     return ", ".join(parts)
 
 
-def render(ids, outcomes, messages, run):
+def render(ids, outcomes, messages, run, commit=None):
     lines = []
     out = lines.append
     head = _git("rev-parse", "HEAD")
-    dirty = [l for l in _git("status", "--porcelain").splitlines() if "docs/TEST_EVIDENCE.md" not in l]
+    tested = _git("rev-parse", commit) if commit else head
+    # Uncommitted changes only matter when the run was on the working tree.
+    dirty = tested == head and any(
+        "docs/TEST_EVIDENCE.md" not in line for line in _git("status", "--porcelain").splitlines()
+    )
 
     out("# Test evidence")
     out("")
@@ -214,7 +218,7 @@ def render(ids, outcomes, messages, run):
     out("| | |")
     out("|---|---|")
     out(f"| Date | {when} |")
-    out(f"| Commit | `{head}`{' (with uncommitted changes)' if dirty else ''} |")
+    out(f"| Commit tested | `{tested}`{' (with uncommitted changes)' if dirty else ''} |")
     out(f"| Python | {platform.python_version()} |")
     out(f"| Collected | {len(ids)} |")
     for key in ("passed", "failed", "error", "skipped", "not run"):
@@ -298,6 +302,7 @@ def render(ids, outcomes, messages, run):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--junit", required=True, type=Path, help="JUnit XML report of a full run")
+    parser.add_argument("--commit", help="the commit the report was produced on (default: HEAD)")
     args = parser.parse_args()
 
     ids = collect()
@@ -305,7 +310,7 @@ def main():
     unknown = sorted(set(outcomes) - set(ids))
     if unknown:
         sys.exit(f"The report has tests that are not collected now (stale report?): {unknown[:5]}")
-    OUTPUT.write_text(render(ids, outcomes, messages, run) + "\n", encoding="utf-8")
+    OUTPUT.write_text(render(ids, outcomes, messages, run, args.commit) + "\n", encoding="utf-8")
     print(f"Wrote {OUTPUT.relative_to(ROOT)}: {len(ids)} tests")
 
 
