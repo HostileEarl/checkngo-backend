@@ -10,6 +10,10 @@ add moving parts to reproduce facts we can read on demand.
 Same split as services.py: the arithmetic lives here, the view does HTTP.
 Each alert is a plain dict; `id` is stable for a given condition so the
 client can remember dismissals across polls.
+
+The alerts themselves stay computed. Only their history — when each
+condition was first seen and when it cleared — is stored, by
+alert_history.py, keyed on that same `id`.
 """
 from datetime import timedelta
 from decimal import Decimal

@@ -4,6 +4,8 @@ from datetime import timedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from analytics.alert_history import sync_alert_logs
+from analytics.alerts import compute_alerts
 from farms.models import Farm
 from notifications.messages import render_low_stock_message
 from notifications.models import SmsLog
@@ -35,6 +37,11 @@ class Command(BaseCommand):
         sent_count = 0
 
         for farm in Farm.objects.filter(is_active=True).select_related("owner"):
+            # Keep the farm's alert history current even when nobody has
+            # the app open. The full farm-wide set, not just low stock:
+            # syncing a partial list would resolve every other open log.
+            sync_alert_logs(farm, compute_alerts(farm))
+
             # low_stock() is the one shared definition of "alertable" —
             # archived and never-stocked items are excluded there, so this
             # command and the in-app alerts endpoint can't drift apart.

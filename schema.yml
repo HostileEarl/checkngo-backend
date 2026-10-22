@@ -181,7 +181,9 @@ paths:
       description: |-
         Standing conditions derived from live data — high mortality, an unbalanced feed ledger, a day not yet recorded, an approaching harvest, an expiring invitation, a recent correction.
 
-        Nothing is persisted. Each alert carries a stable `id` so the client can remember dismissals, and an `audience` — the list is already filtered to the caller's role before it is returned. `link` omits the role prefix; the client prepends it.
+        Computed on every call. Each alert carries a stable `id` so the client can remember dismissals, and an `audience` — the list is already filtered to the caller's role before it is returned. `link` omits the role prefix; the client prepends it.
+
+        Each call also records the farm's alerts in its history — see `alerts/history/`.
       summary: Computed alerts for the notification bell
       parameters:
       - in: path
@@ -196,6 +198,37 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/farms/{farm_pk}/alerts/history/:
+    get:
+      operationId: farms_alerts_history_list
+      description: |-
+        Every alert the farm has had, newest first (`first_seen_at`, then `id`), 20 per page via `?page=N`. `resolved_at` is null while the condition still stands. Filtered to the caller's role exactly as `alerts/` is. A condition that clears and comes back is a new row with the same `alert_key`.
+
+        Resolved entries are kept for 90 days. A page past the end is a 404.
+      summary: Alert history for the notification bell
+      parameters:
+      - in: path
+        name: farm_pk
+        schema:
+          type: integer
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Analytics
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlertLogList'
+          description: ''
   /api/farms/{farm_pk}/analytics/batches/{batch_pk}/growth/:
     get:
       operationId: farms_analytics_batches_growth_retrieve
@@ -3721,6 +3754,48 @@ components:
         * `MANAGER` - Farm Manager
         * `WORKER` - Farm Worker
         * `CONSUMER` - Consumer
+    AlertLog:
+      type: object
+      description: One row of the alert history. The audience and farm stay server-side.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        alert_key:
+          type: string
+          readOnly: true
+          description: The alert's `id`, e.g. low-stock:12.
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        detail:
+          type: string
+          readOnly: true
+        link:
+          type: string
+          readOnly: true
+        first_seen_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - alert_key
+      - detail
+      - first_seen_at
+      - id
+      - link
+      - resolved_at
+      - severity
+      - title
     Batch:
       type: object
       description: Read view. All derived metrics are computed, never stored.
@@ -5264,6 +5339,29 @@ components:
     NullEnum:
       enum:
       - null
+    PaginatedAlertLogList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertLog'
     PartnerInvitationCreate:
       type: object
       description: |-
@@ -5993,6 +6091,16 @@ components:
         * `DRESSED` - Dressed
         * `LIVE` - Live
         * `OTHERS` - Others
+    SeverityEnum:
+      enum:
+      - danger
+      - warning
+      - info
+      type: string
+      description: |-
+        * `danger` - Danger
+        * `warning` - Warning
+        * `info` - Info
     TaskCompletion:
       type: object
       description: |-

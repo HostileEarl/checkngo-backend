@@ -6,7 +6,9 @@ from django.http import HttpResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_date
 from django.utils.text import slugify
+from rest_framework import generics
 from rest_framework.exceptions import ValidationError
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -15,7 +17,10 @@ from farms.permissions import FarmScopedPermission
 from production.models import Batch
 
 from . import reports
+from .alert_history import sync_alert_logs
 from .alerts import compute_alerts
+from .models import AlertLog
+from .serializers import AlertLogSerializer
 from .xlsx_reports import build_workbook, xlsx_filename
 from .services import (
     farm_dashboard,
@@ -228,10 +233,12 @@ class FarmProfitabilityView(APIView):
         "Standing conditions derived from live data — high mortality, an "
         "unbalanced feed ledger, a day not yet recorded, an approaching "
         "harvest, an expiring invitation, a recent correction.\n\n"
-        "Nothing is persisted. Each alert carries a stable `id` so the "
+        "Computed on every call. Each alert carries a stable `id` so the "
         "client can remember dismissals, and an `audience` — the list is "
         "already filtered to the caller's role before it is returned. "
-        "`link` omits the role prefix; the client prepends it."
+        "`link` omits the role prefix; the client prepends it.\n\n"
+        "Each call also records the farm's alerts in its history — see "
+        "`alerts/history/`."
     ),
 )
 class AlertsView(APIView):
@@ -240,18 +247,55 @@ class AlertsView(APIView):
     permission_classes = [AnalyticsPermission]
 
     def get(self, request, farm_pk):
+        # History is synced from the farm-wide set, never the caller's view
+        # of it — see alert_history.py.
+        farm_alerts = compute_alerts(request.farm)
+        sync_alert_logs(request.farm, farm_alerts)
+
+        # Only a worker's list can differ (house-scoped "today" alerts); for
+        # owners and managers the farm-wide list is the same, so reuse it.
+        alerts = farm_alerts
+        if request.membership.role == FarmMembership.Role.WORKER:
+            alerts = compute_alerts(request.farm, request.membership)
+
         role = request.membership.role
-        visible = [
-            alert
-            for alert in compute_alerts(request.farm, request.membership)
-            if role in alert["audience"]
-        ]
+        visible = [alert for alert in alerts if role in alert["audience"]]
 
         counts = {"danger": 0, "warning": 0, "info": 0}
         for alert in visible:
             counts[alert["severity"]] += 1
 
         return Response({"alerts": visible, "counts": counts})
+
+
+class AlertHistoryPagination(PageNumberPagination):
+    page_size = 20
+
+
+@extend_schema(
+    tags=["Analytics"],
+    summary="Alert history for the notification bell",
+    description=(
+        "Every alert the farm has had, newest first (`first_seen_at`, then "
+        "`id`), 20 per page via `?page=N`. `resolved_at` is null while the "
+        "condition still stands. Filtered to the caller's role exactly as "
+        "`alerts/` is. A condition that clears and comes back is a new row "
+        "with the same `alert_key`.\n\n"
+        "Resolved entries are kept for 90 days. A page past the end is a 404."
+    ),
+)
+class AlertHistoryView(generics.ListAPIView):
+    """GET /api/farms/<farm_pk>/alerts/history/ — same access as alerts/."""
+
+    serializer_class = AlertLogSerializer
+    permission_classes = [AnalyticsPermission]
+    pagination_class = AlertHistoryPagination
+
+    def get_queryset(self):
+        return AlertLog.objects.filter(
+            farm=self.request.farm,
+            audience__contains=[self.request.membership.role],
+        ).order_by("-first_seen_at", "-id")
 
 
 # ─────────────────────────────────────────────────────────────

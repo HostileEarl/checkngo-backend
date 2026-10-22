@@ -2,6 +2,7 @@
 from django.urls import path
 
 from .views import (
+    AlertHistoryView,
     AlertsView,
     BatchGrowthCurveView,
     BatchMortalityView,
@@ -39,6 +40,7 @@ urlpatterns = [
     path(f"{_base}/profitability/", FarmProfitabilityView.as_view(), name="profitability"),
 
     path("farms/<int:farm_pk>/alerts/", AlertsView.as_view(), name="alerts"),
+    path("farms/<int:farm_pk>/alerts/history/", AlertHistoryView.as_view(), name="alert-history"),
 
     # CSV report exports — owner and manager only.
     path(f"{_reports}/daily-records.csv", DailyRecordsReportView.as_view(), name="report-daily-records"),
