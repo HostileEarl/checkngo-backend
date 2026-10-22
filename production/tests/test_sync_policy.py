@@ -319,6 +319,20 @@ class TestDuplicatesAreAnsweredCleanly:
         assert response.status_code == 400, response.status_code
         assert Farm.objects.filter(owner=world["owner"]).count() == 1
 
+    def test_farm_name_per_owner_through_an_ownership_transfer(self, world):
+        """Handing a farm to someone who already owns one of that name."""
+        receiver = make_user("+639177000010", "Receiving Owner", User.Role.OWNER)
+        Farm.objects.create(name=world["farm"].name, owner=receiver)
+        url = reverse("farms:ownership-transfer", kwargs={"farm_pk": world["farm"].pk})
+        response = self._post(world, url, {
+            "new_owner_phone": receiver.phone_number,
+            "confirm_transfer": True,
+        })
+        assert response.status_code == 400, response.status_code
+        assert "already exists" in str(response.data)
+        world["farm"].refresh_from_db()
+        assert world["farm"].owner == world["owner"]
+
     def test_house_name_per_farm(self, world):
         url = reverse("production:house-list", kwargs={"farm_pk": world["farm"].pk})
         response = self._post(world, url, {"name": "house 1", "capacity": 10})

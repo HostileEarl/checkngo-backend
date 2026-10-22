@@ -1,10 +1,13 @@
 # farms/serializers.py
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from rest_framework import serializers
 
 from accounts.models import User, UserManager
 
 from .models import Farm, FarmMembership, FarmOwnershipHistory
+
+# unique_farm_name_per_owner, answered as a 400 instead of an IntegrityError.
+DUPLICATE_FARM_NAME = "A farm with this name already exists for this owner."
 
 
 class FarmSerializer(serializers.ModelSerializer):
@@ -29,6 +32,26 @@ class FarmSerializer(serializers.ModelSerializer):
     
     def get_member_count(self, obj) -> int:
         return obj.memberships.filter(is_active=True).count()
+
+    def validate_name(self, value):
+        # The owner is the caller when registering, the farm's owner when
+        # an owner or manager renames it.
+        owner = self.instance.owner if self.instance else self.context["request"].user
+        clash = Farm.objects.filter(owner=owner, name=value)
+        if self.instance:
+            clash = clash.exclude(pk=self.instance.pk)
+        if clash.exists():
+            raise serializers.ValidationError(DUPLICATE_FARM_NAME)
+        return value
+
+    def create(self, validated_data):
+        # Two identical registrations at once both pass validate_name; the
+        # loser gets the same answer instead of the constraint's 500.
+        try:
+            with transaction.atomic():
+                return super().create(validated_data)
+        except IntegrityError:
+            raise serializers.ValidationError({"name": [DUPLICATE_FARM_NAME]})
 
 
 class FarmMembershipSerializer(serializers.ModelSerializer):
@@ -128,6 +151,10 @@ class OwnershipTransferSerializer(serializers.Serializer):
             raise serializers.ValidationError("External partners cannot own a farm.")
         if new_owner == farm.owner:
             raise serializers.ValidationError("This person already owns the farm.")
+        if Farm.objects.filter(owner=new_owner, name=farm.name).exists():
+            raise serializers.ValidationError(
+                f"{DUPLICATE_FARM_NAME} Rename this farm before transferring it."
+            )
 
         self.new_owner = new_owner
         return phone
