@@ -1,8 +1,9 @@
 # production/views.py
+import functools
 import uuid
 from decimal import Decimal
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, serializers, status
@@ -66,6 +67,7 @@ from .permissions import (
     CanViewProduction,
 )
 from .serializers import (
+    ID_IN_USE,
     BatchCloseSerializer,
     BatchCreateSerializer,
     BatchSerializer,
@@ -89,6 +91,48 @@ from .serializers import (
     WeightSampleSerializer,
 )
 from drf_spectacular.utils import OpenApiExample, extend_schema
+
+
+def _well_formed_uuid(value):
+    """The client's id as a UUID, or None when missing or malformed (the serializer reports that)."""
+    if not value:
+        return None
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
+def _retry_lost_race(create):
+    """
+    For the create() of a view keyed by a client UUID. It asks "is this id,
+    or this day, already here?" and only then inserts, so two simultaneous
+    requests can both hear "no" and the loser's insert hits the unique
+    constraint. That is no fault of the client's: run the same create()
+    once more, in a fresh savepoint, now that the winner's row is visible.
+    A loser with the same id then takes the retry path (update, 200) and
+    one with a different id the conflict path (400), never a 500.
+    """
+
+    @functools.wraps(create)
+    def wrapper(self, request, *args, **kwargs):
+        try:
+            with transaction.atomic():
+                return create(self, request, *args, **kwargs)
+        except IntegrityError:
+            with transaction.atomic():
+                return create(self, request, *args, **kwargs)
+
+    return wrapper
+
+
+def _id_in_use():
+    """
+    A client UUID that already names a row outside this request's farm,
+    batch or house. Refused rather than updated, and rather than letting the
+    insert collide with that row's primary key.
+    """
+    return Response({"id": [ID_IN_USE]}, status=status.HTTP_400_BAD_REQUEST)
 
 # ─────────────────────────────────────────────────────────────
 # Houses
@@ -312,6 +356,7 @@ class DailyRecordListCreateView(BatchScopedMixin, generics.ListCreateAPIView):
             "recorded_by"
         )
 
+    @_retry_lost_race
     def create(self, request, *args, **kwargs):
         """
         A client-generated id existing already means this is a retry, not a
@@ -334,6 +379,8 @@ class DailyRecordListCreateView(BatchScopedMixin, generics.ListCreateAPIView):
                 pass
             else:
                 existing = self.get_queryset().filter(pk=supplied_id).first()
+                if existing is None and DailyRecord.objects.filter(pk=supplied_id).exists():
+                    return _id_in_use()
 
         if existing is not None:
             # DailyRecordSerializer.update() already enforces the 24-hour
@@ -484,6 +531,25 @@ class WeightSampleListCreateView(BatchScopedMixin, generics.ListCreateAPIView):
             "recorded_by"
         )
 
+    @_retry_lost_race
+    def create(self, request, *args, **kwargs):
+        """
+        Same client-UUID rules as daily records: an id already in this
+        batch is a retry (update in place, under the 24-hour lock), an id
+        elsewhere is refused.
+        """
+        supplied_id = _well_formed_uuid(request.data.get("id"))
+        if supplied_id is not None:
+            existing = self.get_queryset().filter(pk=supplied_id).first()
+            if existing is not None:
+                serializer = self.get_serializer(existing, data=request.data)
+                serializer.is_valid(raise_exception=True)
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            if WeightSample.objects.filter(pk=supplied_id).exists():
+                return _id_in_use()
+        return super().create(request, *args, **kwargs)
+
 
 class WeightSampleDetailView(BatchScopedMixin, generics.RetrieveUpdateAPIView):
     """GET / PATCH /api/farms/<farm_pk>/batches/<batch_pk>/weights/<pk>/"""
@@ -527,6 +593,7 @@ class SaleEventListCreateView(BatchScopedMixin, generics.ListCreateAPIView):
             .prefetch_related("payments")
         )
 
+    @_retry_lost_race
     def create(self, request, *args, **kwargs):
         supplied_id = request.data.get("id")
         existing = None
@@ -537,6 +604,8 @@ class SaleEventListCreateView(BatchScopedMixin, generics.ListCreateAPIView):
                 pass
             else:
                 existing = self.get_queryset().filter(pk=supplied_id).first()
+                if existing is None and SaleEvent.objects.filter(pk=supplied_id).exists():
+                    return _id_in_use()
 
         if existing is not None:
             serializer = self.get_serializer(existing, data=request.data)
@@ -1044,6 +1113,7 @@ class InventoryUsageListCreateView(generics.ListCreateAPIView):
             qs = qs.filter(usage_date=usage_date)
         return qs
 
+    @_retry_lost_race
     def create(self, request, *args, **kwargs):
         supplied_id = request.data.get("id")
         existing = None
@@ -1054,6 +1124,8 @@ class InventoryUsageListCreateView(generics.ListCreateAPIView):
                 pass
             else:
                 existing = self.get_queryset().filter(pk=supplied_id).first()
+                if existing is None and InventoryUsageLog.objects.filter(pk=supplied_id).exists():
+                    return _id_in_use()
 
         if existing is not None:
             # Reusing the serializer's update() keeps this retry path
@@ -1217,6 +1289,7 @@ class TaskCompletionListCreateView(generics.ListCreateAPIView):
             qs = qs.filter(house_id=house)
         return qs
 
+    @_retry_lost_race
     def create(self, request, *args, **kwargs):
         # Resolve the target shed and enforce house-level write scoping.
         house = House.objects.filter(
@@ -1241,13 +1314,17 @@ class TaskCompletionListCreateView(generics.ListCreateAPIView):
             except (ValueError, AttributeError, TypeError):
                 pass
             else:
+                # Only this farm's tick for the house this request names
+                # (the house the scope check above passed) is a retry.
                 existing = (
                     TaskCompletion.objects.filter(
-                        pk=supplied_id, template__farm=request.farm
+                        pk=supplied_id, template__farm=request.farm, house=house
                     )
                     .select_related("template", "recorded_by", "house")
                     .first()
                 )
+                if existing is None and TaskCompletion.objects.filter(pk=supplied_id).exists():
+                    return _id_in_use()
 
         if existing is not None:
             serializer = self.get_serializer(existing, data=request.data)

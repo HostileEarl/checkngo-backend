@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from .models import Farm, FarmMembership, FarmOwnershipHistory
 from .permissions import (
+    CanRegisterFarm,
     HasRotatedCredential,
     IsFarmManagerOrOwner,
     IsFarmMember,
@@ -23,11 +24,12 @@ from .serializers import (
 class FarmListCreateView(generics.ListCreateAPIView):
     """
     GET  /api/farms/ — farms this user belongs to, archived ones included
-    POST /api/farms/ — create a farm; the signal grants OWNER membership
+    POST /api/farms/ — create a farm; the signal grants OWNER membership.
+                       Owner accounts only (CanRegisterFarm).
     """
 
     serializer_class = FarmSerializer
-    permission_classes = [IsAuthenticated, HasRotatedCredential]
+    permission_classes = [IsAuthenticated, HasRotatedCredential, CanRegisterFarm]
 
     def get_queryset(self):
         return (

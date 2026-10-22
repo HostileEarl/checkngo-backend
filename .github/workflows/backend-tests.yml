@@ -1,0 +1,70 @@
+# Runs the whole backend suite on every pull request and on every push to
+# main, against a throwaway Postgres 16. Every value below is for this job
+# only: no production database, SMS key or secret is used or needed.
+name: Backend tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    # Pinned: setup-python has no 3.14.3 build for ubuntu-latest (26.04)
+    # yet, only for 22.04 and 24.04. Move with render.yaml's version.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: cng
+          POSTGRES_PASSWORD: cng
+          POSTGRES_DB: checkngo_local
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cng -d checkngo_local"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      SECRET_KEY: ci-test-only-not-a-secret
+      DEBUG: "True"
+      DB_NAME: checkngo_local
+      DB_USER: cng
+      DB_PASSWORD: cng
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      SMS_ENABLED: "False"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same interpreter as the deployed service (render.yaml PYTHON_VERSION).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14.3"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run the test suite
+        run: >-
+          pytest accounts analytics farms notifications partners production
+          --junitxml=test-results/junit.xml
+
+      # The report docs/TEST_EVIDENCE.md is generated from
+      # (python scripts/test_evidence.py --junit test-results/junit.xml).
+      - name: Keep the JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-report
+          path: test-results/junit.xml

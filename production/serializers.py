@@ -3,7 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Sum
 from django.utils import timezone
 from rest_framework import serializers
@@ -27,6 +27,33 @@ from .models import (
     TaskTemplate,
     WeightSample,
 )
+
+# The refusal for a client UUID that names a row the request may not
+# touch: another farm's, another batch's, another house's. Deliberately the
+# same wording whichever it is, so the answer reveals nothing about where
+# that row lives.
+ID_IN_USE = "This id is already in use."
+
+
+class ClientIdMixin:
+    """
+    For serializers whose `id` is the client-generated UUID.
+
+    The id names a record once, when it is created. On an update it may
+    only repeat the record's own id, which is then ignored: a different one
+    would be assigned by ModelSerializer.update(), and save() would write
+    this record's values over the row that id belongs to (another farm's,
+    or a locked one).
+    """
+
+    def validate_id(self, value):
+        if self.instance is not None and value is not None and value != self.instance.pk:
+            raise serializers.ValidationError("A saved record's id cannot be changed.")
+        return value
+
+    def update(self, instance, validated_data):
+        validated_data.pop("id", None)
+        return super().update(instance, validated_data)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -300,7 +327,7 @@ def sync_feed_usage_log(daily_record, *, user):
     return existing
 
 
-class DailyRecordSerializer(serializers.ModelSerializer):
+class DailyRecordSerializer(ClientIdMixin, serializers.ModelSerializer):
     """
     One entry per batch per day.
 
@@ -514,17 +541,111 @@ class DailyRecordBulkSyncSerializer(serializers.Serializer):
             )
         return value
 
+    def _write(self, payload):
+        """
+        One record, in its own savepoint so a failure rolls back only
+        itself. Returns the result list it belongs in and its entry there.
+        """
+        batch = self.context["batch"]
+        user = self.context["request"].user
+        record_date = payload["record_date"]
+        supplied_id = payload.get("id")
+
+        with transaction.atomic():
+            # Identity is the client-generated id, not the date — that
+            # is what makes a retry idempotent. (batch, record_date)
+            # is a fallback only, for a caller that never supplied one.
+            if supplied_id is not None:
+                existing = DailyRecord.objects.filter(
+                    pk=supplied_id, batch=batch
+                ).first()
+            else:
+                existing = DailyRecord.objects.filter(
+                    batch=batch, record_date=record_date
+                ).first()
+
+            if (
+                existing is None
+                and supplied_id is not None
+                and DailyRecord.objects.filter(pk=supplied_id).exists()
+            ):
+                # The id is taken outside this batch: it names a
+                # row this request may not touch, so never update
+                # it and never let the insert collide with it.
+                return "failed", {"record_date": str(record_date), "error": ID_IN_USE}
+
+            if existing is None:
+                # An id was supplied and doesn't exist yet, but a
+                # DIFFERENT record may already occupy this date —
+                # two devices, or two ids, both claiming the same
+                # day. "One entry per batch per day" is a business
+                # rule, not just an idempotency mechanism, so this
+                # is a genuine conflict, not a record to merge into:
+                # reject it with a message worth reading, rather
+                # than letting the unique constraint surface a raw
+                # IntegrityError below.
+                date_conflict = (
+                    DailyRecord.objects.filter(
+                        batch=batch, record_date=record_date
+                    ).first()
+                    if supplied_id is not None
+                    else None
+                )
+                if date_conflict is not None:
+                    return "failed", {
+                        "record_date": str(record_date),
+                        "error": (
+                            "A record already exists for this "
+                            "date under a different id."
+                        ),
+                    }
+
+                record = DailyRecord.objects.create(
+                    batch=batch, recorded_by=user, **payload
+                )
+                # Same transaction as the record: the derived
+                # inventory drawdown lands with it or not at all.
+                sync_feed_usage_log(record, user=user)
+                return "created", str(record.id)
+
+            if existing.record_date != record_date:
+                # Same id, another day: the numbers may change on a
+                # re-sync, the day they describe may not (the PATCH and
+                # retried-POST paths keep it the same way).
+                return "failed", {
+                    "record_date": str(record_date),
+                    "error": (
+                        f"This record is for {existing.record_date}; "
+                        "a re-sync cannot move it to another day."
+                    ),
+                }
+
+            if existing.is_editable:
+                # Overwrite on re-sync — the device is the source of
+                # truth for a day it already reported.
+                for field, val in payload.items():
+                    if field != "id":
+                        setattr(existing, field, val)
+                existing.recorded_by = user
+                existing.save()
+                sync_feed_usage_log(existing, user=user)
+                return "updated", str(existing.id)
+
+            return "failed", {
+                "record_date": str(record_date),
+                "error": "Locked — older than 24 hours.",
+            }
+
     def save(self, **kwargs):
         batch = self.context["batch"]
         request = self.context["request"]
-        user = request.user
         membership = getattr(request, "membership", None)
 
         created, updated, failed = [], [], []
+        results = {"created": created, "updated": updated, "failed": failed}
 
         for payload in self.validated_data["records"]:
             record_date = payload["record_date"]
-            supplied_id = payload.get("id")
 
             # House-level write scoping. Every record in one payload is for
             # the same batch, so this rejects the whole backlog per record
@@ -544,74 +665,18 @@ class DailyRecordBulkSyncSerializer(serializers.Serializer):
                 continue
 
             try:
-                with transaction.atomic():
-                    # Identity is the client-generated id, not the date — that
-                    # is what makes a retry idempotent. (batch, record_date)
-                    # is a fallback only, for a caller that never supplied one.
-                    if supplied_id is not None:
-                        existing = DailyRecord.objects.filter(
-                            pk=supplied_id, batch=batch
-                        ).first()
-                    else:
-                        existing = DailyRecord.objects.filter(
-                            batch=batch, record_date=record_date
-                        ).first()
-
-                    if existing is None:
-                        # An id was supplied and doesn't exist yet, but a
-                        # DIFFERENT record may already occupy this date —
-                        # two devices, or two ids, both claiming the same
-                        # day. "One entry per batch per day" is a business
-                        # rule, not just an idempotency mechanism, so this
-                        # is a genuine conflict, not a record to merge into:
-                        # reject it with a message worth reading, rather
-                        # than letting the unique constraint surface a raw
-                        # IntegrityError below.
-                        date_conflict = (
-                            DailyRecord.objects.filter(
-                                batch=batch, record_date=record_date
-                            ).first()
-                            if supplied_id is not None
-                            else None
-                        )
-                        if date_conflict is not None:
-                            failed.append(
-                                {
-                                    "record_date": str(record_date),
-                                    "error": (
-                                        "A record already exists for this "
-                                        "date under a different id."
-                                    ),
-                                }
-                            )
-                            continue
-
-                        record = DailyRecord.objects.create(
-                            batch=batch, recorded_by=user, **payload
-                        )
-                        # Same transaction as the record: the derived
-                        # inventory drawdown lands with it or not at all.
-                        sync_feed_usage_log(record, user=user)
-                        created.append(str(record.id))
-                    elif existing.is_editable:
-                        # Overwrite on re-sync — the device is the source of
-                        # truth for a day it already reported.
-                        for field, val in payload.items():
-                            if field != "id":
-                                setattr(existing, field, val)
-                        existing.recorded_by = user
-                        existing.save()
-                        sync_feed_usage_log(existing, user=user)
-                        updated.append(str(existing.id))
-                    else:
-                        failed.append(
-                            {
-                                "record_date": str(record_date),
-                                "error": "Locked — older than 24 hours.",
-                            }
-                        )
+                try:
+                    bucket, entry = self._write(payload)
+                except IntegrityError:
+                    # Lost a race: a concurrent upload of this record
+                    # committed between _write's lookups and its insert.
+                    # Once more, now that its row is visible: the same id
+                    # then updates it, a different id meets the usual
+                    # conflict rules. A second failure is reported below.
+                    bucket, entry = self._write(payload)
             except Exception as exc:  # noqa: BLE001
-                failed.append({"record_date": str(record_date), "error": str(exc)})
+                bucket, entry = "failed", {"record_date": str(record_date), "error": str(exc)}
+            results[bucket].append(entry)
 
         batch.recalculate_totals()
 
@@ -632,7 +697,7 @@ class DailyRecordBulkSyncSerializer(serializers.Serializer):
 # ─────────────────────────────────────────────────────────────
 
 
-class WeightSampleSerializer(serializers.ModelSerializer):
+class WeightSampleSerializer(ClientIdMixin, serializers.ModelSerializer):
     # Same fix as DailyRecordSerializer: a primary-key field is forced
     # read_only=True by ModelSerializer's field-building regardless of
     # extra_kwargs, which silently discarded the client-supplied id.
@@ -677,6 +742,29 @@ class WeightSampleSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate(self, attrs):
+        batch = self.context["batch"]
+
+        # The same rule as daily records: a harvested or terminated batch's
+        # figures are final.
+        if batch.status != Batch.Status.ACTIVE:
+            raise serializers.ValidationError(
+                "This batch is closed and accepts no further records."
+            )
+
+        # unique_weight_sample_per_day, answered as a 400: one weighing per
+        # batch per day, whether this is a new sample or an edit's new date.
+        sample_date = attrs.get("sample_date", getattr(self.instance, "sample_date", None))
+        if sample_date is not None:
+            clash = WeightSample.objects.filter(batch=batch, sample_date=sample_date)
+            if self.instance is not None:
+                clash = clash.exclude(pk=self.instance.pk)
+            if clash.exists():
+                raise serializers.ValidationError(
+                    {"sample_date": "This batch already has a weight sample for this date."}
+                )
+        return attrs
+
     def update(self, instance, validated_data):
         if not instance.is_editable:
             raise serializers.ValidationError(
@@ -697,7 +785,7 @@ class WeightSampleSerializer(serializers.ModelSerializer):
 # ─────────────────────────────────────────────────────────────
 
 
-class SaleEventSerializer(serializers.ModelSerializer):
+class SaleEventSerializer(ClientIdMixin, serializers.ModelSerializer):
     """
     One transaction in which some of a batch's birds left.
 
@@ -1081,50 +1169,68 @@ class SaleEventBulkSyncSerializer(serializers.Serializer):
             )
         return value
 
+    def _write(self, payload):
+        """One record in its own savepoint; returns (result list, entry)."""
+        batch = self.context["batch"]
+        user = self.context["request"].user
+        supplied_id = payload.get("id")
+
+        with transaction.atomic():
+            existing = None
+            if supplied_id is not None:
+                existing = SaleEvent.objects.filter(
+                    pk=supplied_id, batch=batch
+                ).first()
+                if (
+                    existing is None
+                    and SaleEvent.objects.filter(pk=supplied_id).exists()
+                ):
+                    return "failed", {"id": str(supplied_id), "error": ID_IN_USE}
+
+            if existing is None:
+                record = SaleEvent.objects.create(
+                    batch=batch, recorded_by=user, **payload
+                )
+                return "created", str(record.id)
+
+            if existing.is_editable:
+                for field, val in payload.items():
+                    if field in ("id", "sale_date"):
+                        continue
+                    setattr(existing, field, val)
+                existing.recorded_by = user
+                existing.save()
+                return "updated", str(existing.id)
+
+            return "failed", {
+                "id": str(supplied_id),
+                "error": "Locked — older than 24 hours.",
+            }
+
     def save(self, **kwargs):
         batch = self.context["batch"]
-        request = self.context["request"]
-        user = request.user
 
         created, updated, failed = [], [], []
+        results = {"created": created, "updated": updated, "failed": failed}
 
         for payload in self.validated_data["records"]:
             supplied_id = payload.get("id")
             try:
-                with transaction.atomic():
-                    existing = None
-                    if supplied_id is not None:
-                        existing = SaleEvent.objects.filter(
-                            pk=supplied_id, batch=batch
-                        ).first()
-
-                    if existing is None:
-                        record = SaleEvent.objects.create(
-                            batch=batch, recorded_by=user, **payload
-                        )
-                        created.append(str(record.id))
-                    elif existing.is_editable:
-                        for field, val in payload.items():
-                            if field in ("id", "sale_date"):
-                                continue
-                            setattr(existing, field, val)
-                        existing.recorded_by = user
-                        existing.save()
-                        updated.append(str(existing.id))
-                    else:
-                        failed.append(
-                            {
-                                "id": str(supplied_id),
-                                "error": "Locked — older than 24 hours.",
-                            }
-                        )
+                try:
+                    bucket, entry = self._write(payload)
+                except IntegrityError:
+                    # Lost a race: a concurrent upload of this record
+                    # committed between _write's lookups and its insert.
+                    # Once more, now that its row is visible: the same id
+                    # then updates it, a different id meets the usual
+                    # conflict rules. A second failure is reported below.
+                    bucket, entry = self._write(payload)
             except Exception as exc:  # noqa: BLE001
-                failed.append(
-                    {
-                        "id": str(supplied_id) if supplied_id else None,
-                        "error": str(exc),
-                    }
-                )
+                bucket, entry = "failed", {
+                    "id": str(supplied_id) if supplied_id else None,
+                    "error": str(exc),
+                }
+            results[bucket].append(entry)
 
         batch.recalculate_sales()
 
@@ -1743,7 +1849,7 @@ class InventoryStockInSerializer(serializers.ModelSerializer):
         )
 
 
-class InventoryUsageLogSerializer(serializers.ModelSerializer):
+class InventoryUsageLogSerializer(ClientIdMixin, serializers.ModelSerializer):
     """
     One worker drawing an item down.
 
@@ -1895,51 +2001,71 @@ class InventoryUsageBulkSyncSerializer(serializers.Serializer):
             )
         return value
 
-    def save(self, **kwargs):
+    def _write(self, payload):
+        """One record in its own savepoint; returns (result list, entry)."""
         user = self.context["request"].user
+        farm = self.context["farm"]
+        supplied_id = payload.get("id")
+
+        with transaction.atomic():
+            existing = None
+            if supplied_id is not None:
+                # Only this farm's log is a re-sync of this event.
+                existing = (
+                    InventoryUsageLog.objects.select_related("item")
+                    .filter(pk=supplied_id, item__farm=farm)
+                    .first()
+                )
+                if (
+                    existing is None
+                    and InventoryUsageLog.objects.filter(pk=supplied_id).exists()
+                ):
+                    return "failed", {"id": str(supplied_id), "error": ID_IN_USE}
+
+            if existing is None:
+                record = InventoryUsageLog.objects.create(
+                    recorded_by=user, **payload
+                )
+                return "created", str(record.id)
+
+            if existing.is_editable:
+                # The device is the source of truth for an event it
+                # already reported — overwrite on re-sync.
+                for field, val in payload.items():
+                    if field in ("id", "item", "usage_date"):
+                        continue
+                    setattr(existing, field, val)
+                existing.recorded_by = user
+                existing.save()
+                return "updated", str(existing.id)
+
+            return "failed", {
+                "id": str(supplied_id),
+                "error": "Locked — older than 24 hours.",
+            }
+
+    def save(self, **kwargs):
         created, updated, failed = [], [], []
+        results = {"created": created, "updated": updated, "failed": failed}
 
         for payload in self.validated_data["records"]:
             supplied_id = payload.get("id")
             try:
-                with transaction.atomic():
-                    existing = None
-                    if supplied_id is not None:
-                        existing = (
-                            InventoryUsageLog.objects.select_related("item")
-                            .filter(pk=supplied_id)
-                            .first()
-                        )
-
-                    if existing is None:
-                        record = InventoryUsageLog.objects.create(
-                            recorded_by=user, **payload
-                        )
-                        created.append(str(record.id))
-                    elif existing.is_editable:
-                        # The device is the source of truth for an event it
-                        # already reported — overwrite on re-sync.
-                        for field, val in payload.items():
-                            if field in ("id", "item", "usage_date"):
-                                continue
-                            setattr(existing, field, val)
-                        existing.recorded_by = user
-                        existing.save()
-                        updated.append(str(existing.id))
-                    else:
-                        failed.append(
-                            {
-                                "id": str(supplied_id),
-                                "error": "Locked — older than 24 hours.",
-                            }
-                        )
+                try:
+                    bucket, entry = self._write(payload)
+                except IntegrityError:
+                    # Lost a race: a concurrent upload of this record
+                    # committed between _write's lookups and its insert.
+                    # Once more, now that its row is visible: the same id
+                    # then updates it, a different id meets the usual
+                    # conflict rules. A second failure is reported below.
+                    bucket, entry = self._write(payload)
             except Exception as exc:  # noqa: BLE001
-                failed.append(
-                    {
-                        "id": str(supplied_id) if supplied_id else None,
-                        "error": str(exc),
-                    }
-                )
+                bucket, entry = "failed", {
+                    "id": str(supplied_id) if supplied_id else None,
+                    "error": str(exc),
+                }
+            results[bucket].append(entry)
 
         return {"created": created, "updated": updated, "failed": failed}
 
@@ -1983,7 +2109,7 @@ class TaskTemplateSerializer(serializers.ModelSerializer):
         )
 
 
-class TaskCompletionSerializer(serializers.ModelSerializer):
+class TaskCompletionSerializer(ClientIdMixin, serializers.ModelSerializer):
     """
     A routine item ticked off for a day.
 
@@ -2116,11 +2242,61 @@ class TaskCompletionBulkSyncSerializer(serializers.Serializer):
             )
         return value
 
+    def _write(self, payload):
+        """One record in its own savepoint; returns (result list, entry)."""
+        user = self.context["request"].user
+        supplied_id = payload.get("id")
+
+        with transaction.atomic():
+            existing = None
+            if supplied_id is not None:
+                # Only this farm's tick, for the house this record
+                # names (the house the scope check passed), is a
+                # re-sync of it.
+                existing = TaskCompletion.objects.filter(
+                    pk=supplied_id,
+                    template__farm=self.context["farm"],
+                    house=payload["house"],
+                ).first()
+                if (
+                    existing is None
+                    and TaskCompletion.objects.filter(pk=supplied_id).exists()
+                ):
+                    return "failed", {"id": str(supplied_id), "error": ID_IN_USE}
+
+            if existing is None:
+                # A different device may already have ticked this
+                # item today for this shed under another id. Absorb
+                # it: the task is done, and there is no content to
+                # merge.
+                dupe = TaskCompletion.objects.filter(
+                    template=payload["template"],
+                    completion_date=payload["completion_date"],
+                    house=payload["house"],
+                ).first()
+                if dupe is not None:
+                    return "updated", str(supplied_id) if supplied_id else str(dupe.id)
+
+                record = TaskCompletion.objects.create(
+                    recorded_by=user, **payload
+                )
+                return "created", str(record.id)
+
+            if existing.is_editable:
+                existing.recorded_by = user
+                existing.save()
+                return "updated", str(existing.id)
+
+            return "failed", {
+                "id": str(supplied_id),
+                "error": "Locked — older than 24 hours.",
+            }
+
     def save(self, **kwargs):
         request = self.context["request"]
-        user = request.user
         membership = getattr(request, "membership", None)
         created, updated, failed = [], [], []
+        results = {"created": created, "updated": updated, "failed": failed}
 
         for payload in self.validated_data["records"]:
             supplied_id = payload.get("id")
@@ -2140,50 +2316,20 @@ class TaskCompletionBulkSyncSerializer(serializers.Serializer):
                 continue
 
             try:
-                with transaction.atomic():
-                    existing = None
-                    if supplied_id is not None:
-                        existing = TaskCompletion.objects.filter(
-                            pk=supplied_id
-                        ).first()
-
-                    if existing is None:
-                        # A different device may already have ticked this
-                        # item today for this shed under another id. Absorb
-                        # it: the task is done, and there is no content to
-                        # merge.
-                        dupe = TaskCompletion.objects.filter(
-                            template=payload["template"],
-                            completion_date=payload["completion_date"],
-                            house=payload["house"],
-                        ).first()
-                        if dupe is not None:
-                            updated.append(
-                                str(supplied_id) if supplied_id else str(dupe.id)
-                            )
-                            continue
-
-                        record = TaskCompletion.objects.create(
-                            recorded_by=user, **payload
-                        )
-                        created.append(str(record.id))
-                    elif existing.is_editable:
-                        existing.recorded_by = user
-                        existing.save()
-                        updated.append(str(existing.id))
-                    else:
-                        failed.append(
-                            {
-                                "id": str(supplied_id),
-                                "error": "Locked — older than 24 hours.",
-                            }
-                        )
+                try:
+                    bucket, entry = self._write(payload)
+                except IntegrityError:
+                    # Lost a race: a concurrent upload of this record
+                    # committed between _write's lookups and its insert.
+                    # Once more, now that its row is visible: the same id
+                    # then updates it, a different id meets the usual
+                    # conflict rules. A second failure is reported below.
+                    bucket, entry = self._write(payload)
             except Exception as exc:  # noqa: BLE001
-                failed.append(
-                    {
-                        "id": str(supplied_id) if supplied_id else None,
-                        "error": str(exc),
-                    }
-                )
+                bucket, entry = "failed", {
+                    "id": str(supplied_id) if supplied_id else None,
+                    "error": str(exc),
+                }
+            results[bucket].append(entry)
 
         return {"created": created, "updated": updated, "failed": failed}
