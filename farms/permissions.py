@@ -1,6 +1,8 @@
 # farms/permissions.py
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
+from accounts.models import User
+
 from .models import Farm, FarmMembership
 
 
@@ -129,6 +131,26 @@ class CanInviteRole(FarmScopedPermission):
         if request.membership.role == FarmMembership.Role.OWNER:
             return True
         return requested_role == FarmMembership.Role.WORKER
+
+
+class CanRegisterFarm(BasePermission):
+    """
+    Registering a farm makes the caller its OWNER, so only an owner account
+    (User.role OWNER, issued by the platform admin or handed a farm by an
+    ownership transfer) may do it. A manager, worker or buyer account gets a
+    403. Listing farms stays open to everyone the other classes admit.
+
+    Used alongside IsAuthenticated and HasRotatedCredential, which keep
+    anonymous callers and an unrotated PIN out first.
+    """
+
+    message = "Only a farm owner account can register a farm."
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+        user = request.user
+        return bool(user and user.is_authenticated and user.role == User.Role.OWNER)
 
 
 class IsExternalPartner(BasePermission):

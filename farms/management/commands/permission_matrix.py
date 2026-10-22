@@ -28,7 +28,12 @@ from rest_framework.permissions import SAFE_METHODS, AllowAny, IsAuthenticated
 
 from checkngo.url_inventory import api_routes
 from farms.models import FarmMembership
-from farms.permissions import FarmScopedPermission, HasRotatedCredential, IsExternalPartner
+from farms.permissions import (
+    CanRegisterFarm,
+    FarmScopedPermission,
+    HasRotatedCredential,
+    IsExternalPartner,
+)
 from partners.permissions import IsLinkedPartner
 from production.mixins import BatchScopedMixin
 
@@ -79,7 +84,7 @@ NOTES = {
     "accounts:access-request-create": {"POST": "Public landing-page form."},
     "farms:farm-list": {
         "GET": "Only farms where the caller has an active membership.",
-        "POST": "The caller becomes the new farm's OWNER. Not limited to owner accounts: any rotated account, a buyer included.",
+        "POST": "Owner accounts only (User.role OWNER); the caller becomes the new farm's OWNER. Everyone else: 403.",
     },
     "farms:farm-invitations": {
         "GET": "A manager never sees buyer invitations.",
@@ -148,6 +153,9 @@ def _class_cell(permission, method, column):
         return _MEMBER_ROLES[column] in (roles or _ALL_MEMBERS)
     if permission in (IsExternalPartner, IsLinkedPartner):
         return column == "buyer"
+    if permission is CanRegisterFarm:
+        # The account's own role, not a farm membership: an owner account.
+        return method in SAFE_METHODS or column == "owner"
     if permission is HasRotatedCredential:
         return column not in ("anonymous", "unrotated")
     if permission is IsAuthenticated:

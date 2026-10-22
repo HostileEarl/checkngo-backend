@@ -39,8 +39,8 @@ the Notes column lists what the view checks after that.
 | `/api/auth/credential/change/` | POST | IsAuthenticated | yes | yes | yes | yes | yes | no | yes | The PIN rotation itself, so open to an unrotated PIN. Throttled: 5/hour (credential_change). |
 | `/api/invitations/accept/` | POST | AllowAny | yes | yes | yes | yes | yes | yes | yes | Public: the invitee has no account yet. Needs the invitation token and PIN. Throttled: 10/hour (invite_accept). |
 | `/api/access-requests/` | POST | AllowAny | yes | yes | yes | yes | yes | yes | yes | Public landing-page form. Throttled: 3/hour (access_request). |
-| `/api/farms/` | GET | IsAuthenticated, HasRotatedCredential | yes | yes | yes | yes | yes | no | no | Only farms where the caller has an active membership. |
-| `/api/farms/` | POST | IsAuthenticated, HasRotatedCredential | yes | yes | yes | yes | yes | no | no | The caller becomes the new farm's OWNER. Not limited to owner accounts: any rotated account, a buyer included. |
+| `/api/farms/` | GET | IsAuthenticated, HasRotatedCredential, CanRegisterFarm | yes | yes | yes | yes | yes | no | no | Only farms where the caller has an active membership. |
+| `/api/farms/` | POST | IsAuthenticated, HasRotatedCredential, CanRegisterFarm | yes | no | no | no | no | no | no | Owner accounts only (User.role OWNER); the caller becomes the new farm's OWNER. Everyone else: 403. |
 | `/api/farms/<int:pk>/` | GET | IsFarmManagerOrOwner | yes | yes | yes | yes | no | no | no |  |
 | `/api/farms/<int:pk>/` | PUT | IsFarmManagerOrOwner | yes | yes | no | no | no | no | no |  |
 | `/api/farms/<int:pk>/` | PATCH | IsFarmManagerOrOwner | yes | yes | no | no | no | no | no |  |
