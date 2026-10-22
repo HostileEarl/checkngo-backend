@@ -346,13 +346,6 @@ class Invitation(models.Model):
             return self.Status.EXPIRED
         return self.status
 
-    @property
-    def effective_status(self):
-        """The stored status, except a PENDING row past expires_at reads EXPIRED."""
-        if self.status == self.Status.PENDING and self.is_expired:
-            return self.Status.EXPIRED
-        return self.status
-
     def expire_if_overdue(self):
         """Persist EXPIRED on this row if it is PENDING and past expires_at."""
         if self.status != self.Status.PENDING or not self.is_expired:
@@ -452,6 +445,62 @@ class Invitation(models.Model):
         self.accepted_user = user
         self.save(update_fields=["status", "accepted_at", "accepted_user"])
         return user
+
+
+class AccessRequest(models.Model):
+    """
+    A "Request access" submission from the public landing page.
+
+    Deliberately NOT a sign-up: saving one never creates a User or a Farm.
+    It is a contact record for the technical administrator, who reaches out
+    and, if it goes ahead, creates the owner by hand through the "Create
+    Farm Owner" flow. No IP address is stored.
+    """
+
+    class Role(models.TextChoices):
+        OWNER = "OWNER", "Farm owner"
+        MANAGER = "MANAGER", "Farm manager"
+        OTHER = "OTHER", "Other"
+
+    class Status(models.TextChoices):
+        NEW = "NEW", "New"
+        CONTACTED = "CONTACTED", "Contacted"
+        APPROVED = "APPROVED", "Approved"
+        DECLINED = "DECLINED", "Declined"
+
+    full_name = models.CharField(max_length=100)
+    phone_number = models.CharField(max_length=16, validators=[e164_validator])
+    email = models.EmailField(blank=True, default="")
+    farm_name = models.CharField(max_length=150)
+    location = models.CharField(max_length=150, help_text="Municipality / province.")
+    houses = models.PositiveSmallIntegerField(null=True, blank=True)
+    role = models.CharField(max_length=20, choices=Role.choices)
+    message = models.CharField(max_length=500, blank=True, default="")
+    consent = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW)
+    created_at = models.DateTimeField(auto_now_add=True)
+    handled_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "accounts_access_request"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "created_at"], name="access_req_status_idx"),
+        ]
+        constraints = [
+            # The API refuses consent=False; this keeps any other write
+            # path (shell, admin, a future form) from storing one either.
+            models.CheckConstraint(
+                condition=models.Q(consent=True), name="access_request_consent_given"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.farm_name} — {self.full_name} ({mask_phone(self.phone_number)})"
+
+    def save(self, *args, **kwargs):
+        self.phone_number = UserManager.normalize_phone(self.phone_number)
+        super().save(*args, **kwargs)
 
 
 class FarmOwnerAccount(User):

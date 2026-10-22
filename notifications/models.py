@@ -17,6 +17,7 @@ class SmsLog(models.Model):
     class Purpose(models.TextChoices):
         INVITATION = "INVITATION", "Invitation PIN"
         LOW_STOCK = "LOW_STOCK", "Low stock alert"
+        ACCESS_REQUEST = "ACCESS_REQUEST", "Access request alert"
 
     class Status(models.TextChoices):
         SENT = "SENT", "Sent"

@@ -1,7 +1,13 @@
 # notifications/tests/test_messages.py
 from dataclasses import dataclass
 
-from notifications.messages import render_invitation_message, render_low_stock_message
+import pytest
+
+from notifications.messages import (
+    render_access_request_message,
+    render_invitation_message,
+    render_low_stock_message,
+)
 from notifications.sms import SMS_SEGMENT_LIMIT, is_gsm7_basic
 
 
@@ -123,3 +129,54 @@ class TestRenderLowStockMessage:
         assert len(message) <= SMS_SEGMENT_LIMIT
         assert "Peña's Farm" in message
         assert "Muñoz's Starter Feed" in message
+
+
+class TestRenderAccessRequestMessage:
+    def test_typical_message_is_exact(self):
+        assert render_access_request_message("Santos Layer Farm", "Tarlac City, Tarlac") == (
+            "CheckN Go: new access request from Santos Layer Farm, "
+            "Tarlac City, Tarlac. Open the admin to reply."
+        )
+
+    def test_max_length_fields_fit_one_segment(self):
+        message = render_access_request_message("F" * 150, "L" * 150)
+        assert len(message) <= SMS_SEGMENT_LIMIT
+        assert message.startswith("CheckN Go: new access request from F")
+        assert message.endswith(". Open the admin to reply.")
+        # Both fields keep a share when both are long.
+        assert "L" in message
+
+    def test_a_short_field_hands_its_unused_budget_to_the_long_one(self):
+        message = render_access_request_message("Short Farm", "L" * 150)
+        assert len(message) == SMS_SEGMENT_LIMIT
+        assert "Short Farm, " in message
+
+        message = render_access_request_message("F" * 150, "Capas")
+        assert len(message) == SMS_SEGMENT_LIMIT
+        assert ", Capas. Open" in message
+
+    @pytest.mark.parametrize(
+        "farm_name",
+        [
+            "Manalo Farm 09181234567",
+            "Manalo Farm 0918 123 4567",
+            "Manalo Farm +63 918-123-4567",
+            "Manalo Farm (0918) 123.4567",
+            "Manalo Farm liza@example.com",
+        ],
+    )
+    def test_phone_numbers_and_emails_are_cut_out(self, farm_name):
+        message = render_access_request_message(farm_name, "Capas, Tarlac")
+        assert message == (
+            "CheckN Go: new access request from Manalo Farm, Capas, Tarlac. "
+            "Open the admin to reply."
+        )
+
+    def test_short_numbers_are_kept(self):
+        message = render_access_request_message("House 2024 Farm", "Km 12 2300 Tarlac")
+        assert "House 2024 Farm, Km 12 2300 Tarlac." in message
+
+    def test_non_gsm7_characters_are_sanitized(self):
+        message = render_access_request_message("Peña’s Farm 🐔", "Bañga, Aklan")
+        assert is_gsm7_basic(message)
+        assert "Peña's Farm" in message

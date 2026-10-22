@@ -12,6 +12,8 @@ from farms.permissions import CanInviteRole, IsFarmManagerOrOwner
 
 from .models import Invitation, User
 from .serializers import (
+    AccessRequestCreatedSerializer,
+    AccessRequestSerializer,
     CredentialChangeSerializer,
     InvitationAcceptSerializer,
     InvitationCreateResponseSerializer,
@@ -22,9 +24,11 @@ from .serializers import (
     UserSerializer,
     build_short_accept_url,
     existing_user_invite_message,
+    notify_access_request,
     send_invitation_pin_sms,
 )
 from .throttles import (
+    AccessRequestThrottle,
     CredentialChangeThrottle,
     InvitationAcceptThrottle,
     LoginIPThrottle,
@@ -267,3 +271,38 @@ class InvitationAcceptView(APIView):
         if serializer.tokens:
             payload.update(serializer.tokens)
         return Response(payload, status=status.HTTP_200_OK)
+
+
+class AccessRequestCreateView(APIView):
+    """
+    POST /api/access-requests/
+
+    The landing page's "Request access" form. Public, so it answers with
+    the same fixed message whatever happens after validation — it never
+    echoes the saved row back or says whether the SMS went out.
+
+    "website" is a honeypot: the form hides it, so a person leaves it
+    empty and a form-filling bot doesn't. A filled one gets the normal 201
+    with nothing saved and nothing sent, so the bot learns nothing.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [AccessRequestThrottle]
+
+    SUCCESS = {"detail": "Thanks! We'll contact you soon."}
+
+    @extend_schema(
+        request=AccessRequestSerializer,
+        responses={201: AccessRequestCreatedSerializer},
+    )
+    def post(self, request):
+        honeypot = request.data.get("website") if hasattr(request.data, "get") else None
+        if str(honeypot or "").strip():
+            return Response(self.SUCCESS, status=status.HTTP_201_CREATED)
+
+        serializer = AccessRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        access_request = serializer.save()
+        notify_access_request(access_request)
+        return Response(self.SUCCESS, status=status.HTTP_201_CREATED)
