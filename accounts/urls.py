@@ -3,6 +3,7 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView
 
 from .views import (
+    AccessRequestCreateView,
     CredentialChangeView,
     InvitationAcceptView,
     LogoutView,
@@ -20,4 +21,5 @@ urlpatterns = [
     path("auth/me/", MeView.as_view(), name="me"),
     path("auth/credential/change/", CredentialChangeView.as_view(), name="credential-change"),
     path("invitations/accept/", InvitationAcceptView.as_view(), name="invitation-accept"),
+    path("access-requests/", AccessRequestCreateView.as_view(), name="access-request-create"),
 ]

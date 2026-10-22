@@ -1,6 +1,8 @@
 # accounts/admin.py
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.admin.actions import delete_selected
+from django.contrib.admin.options import ActionLocation
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
@@ -10,7 +12,7 @@ from django.utils.html import format_html
 from unfold.admin import ModelAdmin
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
-from .models import FarmOwnerAccount, Invitation, User, mask_phone
+from .models import AccessRequest, FarmOwnerAccount, Invitation, User, mask_phone
 from .services import issue_owner_account
 
 
@@ -336,6 +338,118 @@ class InvitationAdmin(ModelAdmin):
             invitation.revoke()
             count += 1
         self.message_user(request, f"{count} invitation(s) revoked.")
+
+
+ACCESS_REQUEST_STATUS_PILL = {
+    AccessRequest.Status.NEW: "status-warning",
+    AccessRequest.Status.CONTACTED: "status-muted",
+    AccessRequest.Status.APPROVED: "status-success",
+    AccessRequest.Status.DECLINED: "status-danger",
+}
+
+
+@admin.register(AccessRequest)
+class AccessRequestAdmin(ModelAdmin):
+    """
+    Landing-page "Request access" submissions. Read-only apart from the
+    status actions: what the requester typed is kept as typed.
+
+    The list masks the phone number and leaves out the email, like every
+    other changelist. The detail page shows both in full — it exists so
+    the administrator can contact the person.
+    """
+
+    list_display = [
+        "farm_name",
+        "full_name",
+        "masked_phone_number",
+        "location",
+        "role",
+        "status_pill",
+        "created_at",
+        "handled_at",
+    ]
+    list_filter = ["status", "created_at", "role"]
+    search_fields = ["full_name", "farm_name", "location", "phone_number"]
+    date_hierarchy = "created_at"
+    ordering = ["-created_at"]
+    readonly_fields = [
+        "full_name",
+        "phone_number",
+        "email",
+        "farm_name",
+        "location",
+        "houses",
+        "birds",
+        "role",
+        "message",
+        "consent",
+        "status",
+        "created_at",
+        "handled_at",
+    ]
+    actions = ["mark_contacted", "mark_approved", "mark_declined", "delete_handled"]
+
+    def has_add_permission(self, request):
+        # Requests only ever come from the public form.
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        # Retention: a handled request may be deleted; a NEW one may not,
+        # so nobody loses a request before it has been answered.
+        if obj is not None and obj.handled_at is None:
+            return False
+        return super().has_delete_permission(request, obj)
+
+    def get_actions(self, request, action_location=ActionLocation.CHANGE_LIST):
+        # Replaced by delete_handled, which skips NEW requests.
+        actions = super().get_actions(request, action_location)
+        actions.pop("delete_selected", None)
+        return actions
+
+    @admin.display(description="Phone number")
+    def masked_phone_number(self, obj):
+        return mask_phone(obj.phone_number)
+
+    @admin.display(description="Status", ordering="status")
+    def status_pill(self, obj):
+        status = AccessRequest.Status(obj.status)
+        return format_html(
+            '<span class="{}">{}</span>', ACCESS_REQUEST_STATUS_PILL[status], status.label
+        )
+
+    def _mark(self, request, queryset, status):
+        count = queryset.update(status=status, handled_at=timezone.now())
+        self.message_user(
+            request, f"{count} request(s) marked {AccessRequest.Status(status).label.lower()}."
+        )
+
+    @admin.action(description="Mark contacted", permissions=["change"])
+    def mark_contacted(self, request, queryset):
+        self._mark(request, queryset, AccessRequest.Status.CONTACTED)
+
+    @admin.action(description="Mark approved", permissions=["change"])
+    def mark_approved(self, request, queryset):
+        self._mark(request, queryset, AccessRequest.Status.APPROVED)
+
+    @admin.action(description="Mark declined", permissions=["change"])
+    def mark_declined(self, request, queryset):
+        self._mark(request, queryset, AccessRequest.Status.DECLINED)
+
+    @admin.action(description="Delete selected handled requests", permissions=["delete"])
+    def delete_handled(self, request, queryset):
+        handled = queryset.exclude(handled_at=None)
+        kept = queryset.count() - handled.count()
+        if kept:
+            self.message_user(
+                request,
+                f"{kept} new request(s) kept — mark them handled before deleting.",
+                messages.WARNING,
+            )
+        if not handled.exists():
+            return None
+        # Django's own confirm-then-delete flow, on the handled rows only.
+        return delete_selected(self, request, handled)
 
 
 # --- third-party admins, re-registered with the Unfold theme -------------------

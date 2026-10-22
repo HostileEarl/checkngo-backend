@@ -188,6 +188,15 @@ SEMAPHORE_API_KEY = config("SEMAPHORE_API_KEY", default="")
 SEMAPHORE_SENDER_NAME = config("SEMAPHORE_SENDER_NAME", default="")
 SMS_ENABLED = config("SMS_ENABLED", default=False, cast=bool)
 
+# Who gets texted when someone submits the landing page's "Request access"
+# form (accounts.AccessRequest). Optional: left empty, requests are still
+# saved and shown in the admin, just without the SMS heads-up. Email isn't
+# an option — Render's free plan blocks outbound SMTP.
+ACCESS_REQUEST_NOTIFY_PHONE = config("ACCESS_REQUEST_NOTIFY_PHONE", default="")
+# At most this many access-request SMS in any rolling 24 hours, counted
+# from SmsLog, so a flood of submissions can't drain prepaid credits.
+ACCESS_REQUEST_SMS_DAILY_CAP = 10
+
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
 
@@ -271,6 +280,7 @@ REST_FRAMEWORK = {
         "login_ip": "30/hour",
         "invite_accept": "10/hour",
         "credential_change": "5/hour",
+        "access_request": "3/hour",
         "user": "1000/hour",
         "anon": "60/hour",
     },
@@ -365,6 +375,12 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
+    # Pinned so a new model with its own `role` choices (AccessRequest)
+    # can't silently rename the existing FarmMembership enum component.
+    "ENUM_NAME_OVERRIDES": {
+        "RoleEnum": "farms.models.FarmMembership.Role",
+        "AccessRequestRoleEnum": "accounts.models.AccessRequest.Role",
+    },
     "TAGS": [
         {"name": "Authentication", "description": "Login, logout, PIN rotation."},
         {"name": "Invitations", "description": "Staff and partner onboarding."},

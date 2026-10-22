@@ -265,6 +265,11 @@ environment variables, all optional locally:
 - `SMS_ENABLED` — must be explicitly `True` in production. Kept separate
   from the key so SMS can be switched off (e.g. for a demo) without
   removing credentials.
+- `ACCESS_REQUEST_NOTIFY_PHONE` — optional; the number texted when the
+  landing page's "Request access" form is submitted. The text names only
+  the farm and location ("Open the admin to reply"), at most 10 per
+  rolling 24 hours. Blank means no text; requests are still saved under
+  **People → Access requests**.
 
 Low-stock alerts are **not** sent automatically — `analytics/alerts.py`
 only computes the condition on read. Schedule
@@ -278,6 +283,7 @@ just means an idle no-op most of the time, not extra texts.
 
 | Section | Editable? | Notes |
 |---|---|---|
+| People → Access requests | Status actions only | Landing-page "Request access" submissions. Never creates an account — create the owner by hand. Mark contacted / approved / declined; only handled requests can be deleted. |
 | Accounts → Users | Yes | Membership inline is read-only. |
 | Accounts → Farm owner accounts | Add only | Owner onboarding funnel; PIN generated and shown once. No edit/delete. |
 | Accounts → Invitations | Read-only | Add disabled; revoke action available. |

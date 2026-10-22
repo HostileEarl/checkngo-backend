@@ -1,17 +1,20 @@
 # accounts/serializers.py
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from farms.models import FarmMembership
-from notifications.messages import render_invitation_message
+from notifications.messages import render_access_request_message, render_invitation_message
 from notifications.models import SmsLog
 from notifications.sms import send_sms
 
-from .models import Invitation, User, UserManager
+from .models import AccessRequest, Invitation, User, UserManager, e164_validator
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 
@@ -484,3 +487,124 @@ class InvitationAcceptSerializer(serializers.Serializer):
             }
 
         return user
+
+
+# ─────────────────────────────────────────────────────────────
+# Landing-page access requests
+# ─────────────────────────────────────────────────────────────
+
+
+class AccessRequestCreatedSerializer(serializers.Serializer):
+    """Schema only: the fixed 201 body of POST /api/access-requests/."""
+
+    detail = serializers.CharField()
+
+
+class WholeNumberField(serializers.IntegerField):
+    """
+    An optional count as the landing form types it: 5000, "5000" or
+    "5,000". An empty string means "not given", the same as null.
+    """
+
+    def validate_empty_values(self, data):
+        if isinstance(data, str) and not data.strip():
+            data = None
+        return super().validate_empty_values(data)
+
+    def to_internal_value(self, data):
+        if isinstance(data, str):
+            data = data.replace(",", "").strip()
+        return super().to_internal_value(data)
+
+
+class AccessRequestSerializer(serializers.ModelSerializer):
+    """
+    The public "Request access" form. Creates an AccessRequest and nothing
+    else — never a User, never a Farm.
+    """
+
+    # Declared rather than inherited from the model so the number is
+    # normalized BEFORE the E.164 check — "+63 917 123 4567" is accepted.
+    phone_number = serializers.CharField(max_length=32)
+    houses = WholeNumberField(required=False, allow_null=True, min_value=0, max_value=999)
+    # Positive: a farm asking for access raises at least one bird. The max
+    # is the column's own limit.
+    birds = WholeNumberField(
+        required=False, allow_null=True, min_value=1, max_value=2_147_483_647
+    )
+    consent = serializers.BooleanField()
+    # Honeypot — see AccessRequestCreateView. Declared only so the schema
+    # documents it; the view acts on it before this serializer runs.
+    website = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        write_only=True,
+        help_text="Honeypot. Keep it hidden and always send it empty.",
+    )
+
+    class Meta:
+        model = AccessRequest
+        fields = [
+            "full_name",
+            "phone_number",
+            "email",
+            "farm_name",
+            "location",
+            "houses",
+            "birds",
+            "role",
+            "message",
+            "consent",
+            "website",
+        ]
+
+    def validate_phone_number(self, value):
+        value = UserManager.normalize_phone(value)
+        try:
+            e164_validator(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages)
+        return value
+
+    def validate_consent(self, value):
+        if value is not True:
+            raise serializers.ValidationError(
+                "Please agree to be contacted about your request."
+            )
+        return value
+
+    def validate(self, attrs):
+        attrs.pop("website", None)
+        return attrs
+
+
+def notify_access_request(access_request):
+    """
+    Text the administrator that a new access request arrived.
+
+    Skipped (no SmsLog row) when ACCESS_REQUEST_NOTIFY_PHONE is empty, SMS
+    is disabled, or ACCESS_REQUEST_SMS_DAILY_CAP alerts already went out in
+    the last 24 hours — the request itself is saved regardless. The text
+    names the farm and location only, and SmsLog gets a fixed label rather
+    than the text, the same as an invitation PIN SMS.
+
+    Returns True if the SMS was actually sent.
+    """
+    recipient = UserManager.normalize_phone(settings.ACCESS_REQUEST_NOTIFY_PHONE.strip())
+    if not recipient or not settings.SMS_ENABLED:
+        return False
+
+    since = timezone.now() - timedelta(hours=24)
+    sent_recently = SmsLog.objects.filter(
+        purpose=SmsLog.Purpose.ACCESS_REQUEST, sent_at__gte=since
+    ).count()
+    if sent_recently >= settings.ACCESS_REQUEST_SMS_DAILY_CAP:
+        return False
+
+    result = send_sms(
+        recipient,
+        render_access_request_message(access_request.farm_name, access_request.location),
+        purpose=SmsLog.Purpose.ACCESS_REQUEST,
+        log_message="Access request alert sent",
+    )
+    return result.status == SmsLog.Status.SENT

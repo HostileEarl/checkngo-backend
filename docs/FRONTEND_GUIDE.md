@@ -234,3 +234,30 @@ After `py manage.py seed_demo_data --reset`:
 | Owner | `+639171112222` | `111111` |
 | Manager | `+639172223333` | `222222` |
 | Worker | `+639173334444` | `333333` |
+
+---
+
+## 10. Landing page — "Request access"
+
+`POST /api/access-requests/` — public, no token. It saves a request for the
+administrator and texts them; it never creates an account.
+
+The landing form (`src/lib/request-access.ts`) maps onto the body like this:
+
+| Form field | API field | Type | Rules |
+|---|---|---|---|
+| `fullName` | `full_name` | string | required, max 100 |
+| `farmName` | `farm_name` | string | required, max 150 |
+| `mobile` | `phone_number` | string | required, E.164 — send `toPhilippineMobile(mobile)` (`+639171234567`) |
+| `email` | `email` | string | optional, a valid email or `""` |
+| `location` | `location` | string | required, max 150 — municipality / province |
+| `houses` | `houses` | whole number | optional, 0–999; `"3"`, `3`, `""` or `null` all work |
+| `birds` | `birds` | whole number | optional, at least 1; `"15,000"`, `15000`, `""` or `null` all work |
+| `message` | `message` | string | optional, max 500 |
+| — (checkbox) | `consent` | boolean | required, must be `true` |
+| — (hidden) | `website` | string | honeypot — hide the input and always send `""` |
+| — | `role` | string | optional: `OWNER` (default), `MANAGER` or `OTHER`; the form can leave it out |
+
+- `201` → `{"detail": "Thanks! We'll contact you soon."}` — always exactly this.
+- `400` → field-keyed errors, e.g. `{"consent": ["Please agree to be contacted about your request."]}`.
+- `429` → `{"detail": "Request was throttled. Expected available in N seconds."}` (3 per hour per IP).

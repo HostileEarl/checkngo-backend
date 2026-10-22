@@ -10,6 +10,7 @@ settings.py only holds the UNFOLD dict:
   (#C4F188) sits at primary-300 and is used for the main Save button and
   highlights through checkngo-admin.css, always with ink text.
 - SIDEBAR_NAVIGATION: the hubs this admin covers — People, Farms, System.
+  People starts with landing-page access requests (accounts.AccessRequest).
   Accounts only: no farm-operational hub (Birds & Sales, Resources) —
   see production/admin.py, which registers nothing. Each link is hidden
   unless the user may view that model.
@@ -103,6 +104,10 @@ SIDEBAR_NAVIGATION = [
         "separator": True,
         "collapsible": False,
         "items": [
+            {
+                **_item(_("Access requests"), "how_to_reg", "accounts", "accessrequest"),
+                "badge": "checkngo.admin_theme.new_access_requests_badge",
+            },
             _item(_("Farm owner accounts"), "badge", "accounts", "farmowneraccount", can_create_owner),
             _item(_("Users"), "person", "accounts", "user"),
             {
@@ -140,6 +145,13 @@ SIDEBAR_NAVIGATION = [
 
 
 # --- callbacks -----------------------------------------------------------------
+
+
+def new_access_requests_badge(request):
+    from accounts.models import AccessRequest
+
+    count = AccessRequest.objects.filter(status=AccessRequest.Status.NEW).count()
+    return count or None
 
 
 def pending_invitations_badge(request):

@@ -11,6 +11,42 @@ info:
 
     **Farm scoping:** operational endpoints are nested under `/farms/<farm_id>/`. Access is resolved from the caller's active membership on that farm; a member of one farm cannot read another's data.
 paths:
+  /api/access-requests/:
+    post:
+      operationId: access_requests_create
+      description: |-
+        POST /api/access-requests/
+
+        The landing page's "Request access" form. Public, so it answers with
+        the same fixed message whatever happens after validation — it never
+        echoes the saved row back or says whether the SMS went out.
+
+        "website" is a honeypot: the form hides it, so a person leaves it
+        empty and a form-filling bot doesn't. A filled one gets the normal 201
+        with nothing saved and nothing sent, so the bot learns nothing.
+      tags:
+      - access-requests
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AccessRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AccessRequestRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequestCreated'
+          description: ''
   /api/auth/credential/change/:
     post:
       operationId: auth_credential_change_create
@@ -3709,6 +3745,81 @@ paths:
           description: ''
 components:
   schemas:
+    AccessRequestCreated:
+      type: object
+      description: 'Schema only: the fixed 201 body of POST /api/access-requests/.'
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    AccessRequestRequest:
+      type: object
+      description: |-
+        The public "Request access" form. Creates an AccessRequest and nothing
+        else — never a User, never a Farm.
+      properties:
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        phone_number:
+          type: string
+          minLength: 1
+          maxLength: 32
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        farm_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        location:
+          type: string
+          minLength: 1
+          description: Municipality / province.
+          maxLength: 150
+        houses:
+          type: integer
+          maximum: 999
+          minimum: 0
+          nullable: true
+        birds:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          nullable: true
+        role:
+          $ref: '#/components/schemas/AccessRequestRoleEnum'
+        message:
+          type: string
+          maxLength: 500
+        consent:
+          type: boolean
+        website:
+          type: string
+          writeOnly: true
+          description: Honeypot. Keep it hidden and always send it empty.
+      required:
+      - consent
+      - farm_name
+      - full_name
+      - location
+      - phone_number
+    AccessRequestRoleEnum:
+      enum:
+      - OWNER
+      - MANAGER
+      - OTHER
+      type: string
+      description: |-
+        * `OWNER` - Farm owner
+        * `MANAGER` - Farm manager
+        * `OTHER` - Other
     AccountRoleEnum:
       enum:
       - OWNER
