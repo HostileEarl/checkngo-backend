@@ -8,25 +8,25 @@ Do not edit by hand; rerun the suite and the script.
 
 | | |
 |---|---|
-| Date | 2026-10-23 02:28 UTC+08:00 |
-| Commit tested | `fe423dbca9875c9bb281ec746534e4f2ec58bf49` |
+| Date | 2026-10-24 04:32 UTC+08:00 |
+| Commit tested | `e8094f7d041edd1e07a35e8e2a25bf630dd8bbcd` |
 | Python | 3.13.16 |
-| Collected | 1316 |
-| Passed | 1315 |
+| Collected | 1439 |
+| Passed | 1438 |
 | Skipped | 1 |
-| Duration | 48 min 36 s |
+| Duration | 50 min 16 s |
 
 ## Tests per app
 
 | App | Tests | Result |
 |---|---|---|
-| accounts | 209 | 208 passed, 1 skipped |
+| accounts | 225 | 224 passed, 1 skipped |
 | analytics | 240 | 240 passed |
-| farms | 403 | 403 passed |
-| notifications | 63 | 63 passed |
+| farms | 426 | 426 passed |
+| notifications | 83 | 83 passed |
 | partners | 87 | 87 passed |
-| production | 314 | 314 passed |
-| **total** | **1316** | 1315 passed, 1 skipped |
+| production | 378 | 378 passed |
+| **total** | **1439** | 1438 passed, 1 skipped |
 
 ## Tests per file
 
@@ -36,6 +36,7 @@ Do not edit by hand; rerun the suite and the script.
 | `accounts/tests/test_admin_hardening.py` | 7 | 6 passed, 1 skipped |
 | `accounts/tests/test_admin_privacy.py` | 42 | 42 passed |
 | `accounts/tests/test_auth.py` | 14 | 14 passed |
+| `accounts/tests/test_demo_numbers.py` | 16 | 16 passed |
 | `accounts/tests/test_invitation_expiry.py` | 12 | 12 passed |
 | `accounts/tests/test_invitation_kind_filter.py` | 10 | 10 passed |
 | `accounts/tests/test_invitations.py` | 26 | 26 passed |
@@ -52,6 +53,7 @@ Do not edit by hand; rerun the suite and the script.
 | `analytics/tests/test_reports_xlsx.py` | 80 | 80 passed |
 | `farms/tests/test_admin_farm_privacy.py` | 4 | 4 passed |
 | `farms/tests/test_archive.py` | 5 | 5 passed |
+| `farms/tests/test_evaluation_admin.py` | 19 | 19 passed |
 | `farms/tests/test_farm_id_substitution.py` | 227 | 227 passed |
 | `farms/tests/test_farm_registration.py` | 10 | 10 passed |
 | `farms/tests/test_feed_catalogue.py` | 8 | 8 passed |
@@ -59,8 +61,9 @@ Do not edit by hand; rerun the suite and the script.
 | `farms/tests/test_isolation.py` | 14 | 14 passed |
 | `farms/tests/test_ownership.py` | 8 | 8 passed |
 | `farms/tests/test_permission_matrix.py` | 20 | 20 passed |
-| `farms/tests/test_rotation_gate.py` | 99 | 99 passed |
+| `farms/tests/test_rotation_gate.py` | 103 | 103 passed |
 | `notifications/tests/test_admin_sms_masking.py` | 4 | 4 passed |
+| `notifications/tests/test_demo_number_guard.py` | 20 | 20 passed |
 | `notifications/tests/test_messages.py` | 22 | 22 passed |
 | `notifications/tests/test_network_isolation.py` | 1 | 1 passed |
 | `notifications/tests/test_send_stock_alerts.py` | 9 | 9 passed |
@@ -77,6 +80,7 @@ Do not edit by hand; rerun the suite and the script.
 | `production/tests/test_daily_record_idempotency.py` | 13 | 13 passed |
 | `production/tests/test_daily_record_inventory_link.py` | 14 | 14 passed |
 | `production/tests/test_daily_record_timezone.py` | 2 | 2 passed |
+| `production/tests/test_evaluation_farms.py` | 47 | 47 passed |
 | `production/tests/test_feed_delivery_with_stock.py` | 7 | 7 passed |
 | `production/tests/test_feed_inventory_consistency.py` | 15 | 15 passed |
 | `production/tests/test_feed_sacks.py` | 8 | 8 passed |
@@ -92,6 +96,7 @@ Do not edit by hand; rerun the suite and the script.
 | `production/tests/test_stale_and_closed_writes.py` | 32 | 32 passed |
 | `production/tests/test_sync_policy.py` | 23 | 23 passed |
 | `production/tests/test_tasks.py` | 16 | 16 passed |
+| `production/tests/test_worker_money_reads.py` | 17 | 17 passed |
 
 ## Concerns
 
@@ -104,7 +109,7 @@ Each review concern and the tests that prove it. A test can serve more than one 
 | Concurrent uploads | 5 | 5 passed | `production/tests/test_concurrent_uploads.py` |
 | Cross-farm access | 265 | 265 passed | `accounts/tests/test_invitations.py`<br>`analytics/tests/test_access.py`<br>`analytics/tests/test_alert_history.py`<br>`analytics/tests/test_alerts.py`<br>`analytics/tests/test_reports.py`<br>`analytics/tests/test_reports_xlsx.py`<br>`farms/tests/test_farm_id_substitution.py`<br>`farms/tests/test_house_assignment.py`<br>`farms/tests/test_isolation.py`<br>`partners/tests/test_buyer_management.py`<br>`production/tests/test_feed_delivery_with_stock.py`<br>`production/tests/test_feed_sacks.py`<br>`production/tests/test_inventory.py`<br>`production/tests/test_payments.py`<br>`production/tests/test_sale_events.py`<br>`production/tests/test_tasks.py` |
 | Buyer isolation | 79 | 79 passed | `analytics/tests/test_access.py`<br>`farms/tests/test_farm_registration.py`<br>`farms/tests/test_isolation.py`<br>`partners/tests/test_buyer_two_farms.py`<br>`partners/tests/test_my_payments.py`<br>`partners/tests/test_my_purchases.py` |
-| PIN-change gate | 107 | 107 passed | `accounts/tests/test_auth.py`<br>`accounts/tests/test_login_throttle.py`<br>`farms/tests/test_rotation_gate.py` |
+| PIN-change gate | 111 | 111 passed | `accounts/tests/test_auth.py`<br>`accounts/tests/test_login_throttle.py`<br>`farms/tests/test_rotation_gate.py` |
 | Login throttling | 10 | 10 passed | `accounts/tests/test_admin_hardening.py`<br>`accounts/tests/test_login_throttle.py` |
 | The 24-hour lock | 20 | 20 passed | `production/tests/test_inventory.py`<br>`production/tests/test_sale_events.py`<br>`production/tests/test_stale_and_closed_writes.py`<br>`production/tests/test_sync_policy.py`<br>`production/tests/test_tasks.py` |
 | KPI formulas (mortality, survival, FCR, feed margin; TC-25) | 27 | 27 passed | `analytics/tests/test_calculations.py`<br>`analytics/tests/test_kpi_tc25.py`<br>`production/tests/test_sale_events.py` |
@@ -305,7 +310,7 @@ Each review concern and the tests that prove it. A test can serve more than one 
 | `accounts/tests/test_auth.py::TestRotationGate::test_wrong_current_pin_rejected` | 1 | 1 passed |
 | `accounts/tests/test_auth.py::TestSessionRevocation::test_pin_change_kills_existing_sessions` | 1 | 1 passed |
 | `accounts/tests/test_login_throttle.py::test_pin_change_is_throttled_at_five_an_hour` | 1 | 1 passed |
-| `farms/tests/test_rotation_gate.py::TestGateClassesRefuseGatedUsers::test_refuses_until_rotated` | 76 | 76 passed |
+| `farms/tests/test_rotation_gate.py::TestGateClassesRefuseGatedUsers::test_refuses_until_rotated` | 80 | 80 passed |
 | `farms/tests/test_rotation_gate.py::TestGatedWorker::test_farm_reads_refused` | 6 | 6 passed |
 | `farms/tests/test_rotation_gate.py::TestGatedWorker::test_daily_record_refused_and_nothing_saved` | 1 | 1 passed |
 | `farms/tests/test_rotation_gate.py::TestGatedWorker::test_rotation_opens_the_same_requests` | 1 | 1 passed |
