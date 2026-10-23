@@ -83,17 +83,17 @@ the Notes column lists what the view checks after that.
 | `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/weights/<uuid:pk>/` | GET | CanRecordDaily | yes | yes | yes | yes | no | no | no |  |
 | `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/weights/<uuid:pk>/` | PUT | CanRecordDaily | yes | yes | yes | no | no | no | no | Refused once the record is older than 24 hours (server clock). |
 | `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/weights/<uuid:pk>/` | PATCH | CanRecordDaily | yes | yes | yes | no | no | no | no | Refused once the record is older than 24 hours (server clock). |
-| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/` | GET | CanManageBatches | yes | yes | yes | yes | no | no | no |  |
-| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/` | POST | CanManageBatches | yes | yes | no | no | no | no | no | Same client UUID again = update, under the 24-hour lock. |
-| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/bulk-sync/` | POST | CanManageBatches | yes | yes | no | no | no | no | no | Per-record results: 200 when all landed, 207 with failed[] otherwise. At most 60 records. |
-| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/<uuid:pk>/` | GET | CanManageBatches | yes | yes | yes | yes | no | no | no |  |
-| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/<uuid:pk>/` | PUT | CanManageBatches | yes | yes | no | no | no | no | no | Refused once the record is older than 24 hours (server clock). |
-| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/<uuid:pk>/` | PATCH | CanManageBatches | yes | yes | no | no | no | no | no | Refused once the record is older than 24 hours (server clock). |
-| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/<uuid:sale_pk>/payments/` | GET | CanManageBatches | yes | yes | yes | yes | no | no | no |  |
-| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/<uuid:sale_pk>/payments/` | POST | CanManageBatches | yes | yes | no | no | no | no | no | Append-only: no edit or delete exists. A mistake is reversed with a negative entry. Accepted after the batch closes. |
+| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/` | GET | CanManageSales | yes | yes | no | no | no | no | no |  |
+| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/` | POST | CanManageSales | yes | yes | no | no | no | no | no | Same client UUID again = update, under the 24-hour lock. |
+| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/bulk-sync/` | POST | CanManageSales | yes | yes | no | no | no | no | no | Per-record results: 200 when all landed, 207 with failed[] otherwise. At most 60 records. |
+| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/<uuid:pk>/` | GET | CanManageSales | yes | yes | no | no | no | no | no |  |
+| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/<uuid:pk>/` | PUT | CanManageSales | yes | yes | no | no | no | no | no | Refused once the record is older than 24 hours (server clock). |
+| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/<uuid:pk>/` | PATCH | CanManageSales | yes | yes | no | no | no | no | no | Refused once the record is older than 24 hours (server clock). |
+| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/<uuid:sale_pk>/payments/` | GET | CanManageSales | yes | yes | no | no | no | no | no |  |
+| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/sales/<uuid:sale_pk>/payments/` | POST | CanManageSales | yes | yes | no | no | no | no | no | Append-only: no edit or delete exists. A mistake is reversed with a negative entry. Accepted after the batch closes. |
 | `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/close/` | POST | CanManageBatches | yes | yes | no | no | no | no | no | ACTIVE batches with at least one sale only. |
-| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/harvest/detail/` | GET | CanViewProduction | yes | yes | yes | yes | no | no | no |  |
-| `/api/farms/<int:farm_pk>/feed-deliveries/` | GET | CanManageFeed | yes | yes | yes | yes | no | no | no |  |
+| `/api/farms/<int:farm_pk>/batches/<uuid:batch_pk>/harvest/detail/` | GET | CanManageSales | yes | yes | no | no | no | no | no |  |
+| `/api/farms/<int:farm_pk>/feed-deliveries/` | GET | CanManageFeed | yes | yes | no | no | no | no | no |  |
 | `/api/farms/<int:farm_pk>/feed-deliveries/` | POST | CanManageFeed | yes | yes | no | no | no | no | no |  |
 | `/api/farms/<int:farm_pk>/feed-deliveries/with-stock/` | POST | CanManageFeed | yes | yes | no | no | no | no | no |  |
 | `/api/farms/<int:farm_pk>/feed-stock/` | GET | CanViewProduction | yes | yes | yes | yes | no | no | no |  |

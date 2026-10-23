@@ -55,6 +55,8 @@ from .models import (
     TaskTemplate,
     WeightSample,
 )
+from farms.models import FarmMembership
+
 from .permissions import (
     CanArchiveHouse,
     CanCorrectLockedRecord,
@@ -62,6 +64,7 @@ from .permissions import (
     CanManageFeed,
     CanManageInventory,
     CanManageRoutine,
+    CanManageSales,
     CanRecordDaily,
     CanRecordInventoryUsage,
     CanViewProduction,
@@ -571,8 +574,10 @@ class SaleEventListCreateView(BatchScopedMixin, generics.ListCreateAPIView):
     GET  /api/farms/<farm_pk>/batches/<batch_pk>/sales/
     POST /api/farms/<farm_pk>/batches/<batch_pk>/sales/
 
-    Owner and manager write; every member reads. A worker records mortality
-    and feed, not sales. Idempotent: a POST whose client-generated `id`
+    Owner and manager only, reads included — a sale carries price, revenue,
+    and buyer identity, which is money data per OwnerManagerAnalyticsPermission.
+    A worker records mortality and feed, not sales. Idempotent: a POST whose
+    client-generated `id`
     already exists is a retry, routed through the serializer's update()
     (which enforces the 24-hour lock) and returns 200 — mirroring
     DailyRecordListCreateView. No same-date conflict branch: a sale is an
@@ -580,7 +585,7 @@ class SaleEventListCreateView(BatchScopedMixin, generics.ListCreateAPIView):
     """
 
     serializer_class = SaleEventSerializer
-    permission_classes = [CanManageBatches]
+    permission_classes = [CanManageSales]
 
     def get_queryset(self):
         return (
@@ -625,7 +630,7 @@ class SaleEventDetailView(BatchScopedMixin, generics.RetrieveUpdateAPIView):
     """
 
     serializer_class = SaleEventSerializer
-    permission_classes = [CanManageBatches]
+    permission_classes = [CanManageSales]
 
     def get_queryset(self):
         return (
@@ -645,14 +650,15 @@ class PaymentListCreateView(SaleScopedMixin, generics.ListCreateAPIView):
     POST /api/farms/<farm_pk>/batches/<batch_pk>/sales/<sale_pk>/payments/
 
     Owner and manager write — the owner was explicit that confirming a
-    payment is the owner/manager's job, not the buyer's. Every farm member
-    reads, same split as the sale itself. No update or delete view exists
+    payment is the owner/manager's job, not the buyer's. Reads are
+    owner/manager only too, same split as the sale itself: a worker does not
+    see balances. No update or delete view exists
     for this model anywhere: a payment row is permanent once written, and
     a mistake is corrected with a reversing entry instead.
     """
 
     serializer_class = PaymentSerializer
-    permission_classes = [CanManageBatches]
+    permission_classes = [CanManageSales]
 
     def get_queryset(self):
         return Payment.objects.filter(sale=self.sale).select_related(
@@ -680,7 +686,7 @@ class PaymentListCreateView(SaleScopedMixin, generics.ListCreateAPIView):
 class SaleEventBulkSyncView(BatchScopedMixin, APIView):
     """POST /api/farms/<farm_pk>/batches/<batch_pk>/sales/bulk-sync/"""
 
-    permission_classes = [CanManageBatches]
+    permission_classes = [CanManageSales]
 
     def post(self, request, farm_pk, batch_pk):
         serializer = SaleEventBulkSyncSerializer(
@@ -744,7 +750,7 @@ class HarvestDetailView(BatchScopedMixin, generics.RetrieveAPIView):
     """GET /api/farms/<farm_pk>/batches/<batch_pk>/harvest/detail/"""
 
     serializer_class = HarvestSerializer
-    permission_classes = [CanViewProduction]
+    permission_classes = [CanManageSales]
 
     def get_object(self):
         return get_object_or_404(Harvest, batch=self.batch)
@@ -783,7 +789,7 @@ class BatchTerminateView(APIView):
 
 class FeedDeliveryListCreateView(generics.ListCreateAPIView):
     """
-    GET  /api/farms/<farm_pk>/feed-deliveries/
+    GET  /api/farms/<farm_pk>/feed-deliveries/  — owner/manager only
     POST /api/farms/<farm_pk>/feed-deliveries/  — owner/manager only
     """
 
@@ -815,6 +821,10 @@ class FeedStockView(APIView):
     Farm-level balance: everything delivered minus everything consumed
     across all batches. Per the earlier ruling we do not trace individual
     sacks to individual houses, so this is a running total, not a ledger.
+
+    Open to every member — a worker needs the kg balance to know whether
+    feed is running low — but total_feed_cost is money data and is left out
+    of a worker's response rather than refusing the endpoint outright.
     """
 
     permission_classes = [CanViewProduction]
@@ -822,14 +832,17 @@ class FeedStockView(APIView):
     def get(self, request, farm_pk):
         feed = feed_balance(request.farm)
 
-        return Response(
-            {
-                "delivered_kg": str(feed["delivered_kg"]),
-                "consumed_kg": str(feed["consumed_kg"]),
-                "balance_kg": str(feed["balance_kg"]),
-                "total_feed_cost": str(feed["total_feed_cost"]),
-            }
-        )
+        data = {
+            "delivered_kg": str(feed["delivered_kg"]),
+            "consumed_kg": str(feed["consumed_kg"]),
+            "balance_kg": str(feed["balance_kg"]),
+        }
+        if request.membership.role in (
+            FarmMembership.Role.OWNER,
+            FarmMembership.Role.MANAGER,
+        ):
+            data["total_feed_cost"] = str(feed["total_feed_cost"])
+        return Response(data)
 
 
 class FeedDeliveryWithStockView(APIView):
