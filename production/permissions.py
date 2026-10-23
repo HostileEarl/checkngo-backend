@@ -50,13 +50,27 @@ class CanCorrectLockedRecord(FarmScopedPermission):
 
 class CanManageFeed(FarmScopedPermission):
     """
-    Feed deliveries carry cost and supplier attribution, so writes sit with
-    owner and manager. Consumption (the daily feed_kg field) stays with workers.
+    Feed deliveries carry cost and supplier attribution — money data, not
+    worker data — so both reads and writes sit with owner and manager.
+    Consumption (the daily feed_kg field) stays with workers, but that's
+    CanRecordDaily, a different view.
     """
 
     allowed_roles = {FarmMembership.Role.OWNER, FarmMembership.Role.MANAGER}
-    read_roles = set()
-    message = "Only an owner or manager can record feed deliveries."
+    read_roles = {FarmMembership.Role.OWNER, FarmMembership.Role.MANAGER}
+    message = "Only an owner or manager can view or record feed deliveries."
+
+
+class CanManageSales(FarmScopedPermission):
+    """
+    Sales, payments, and the harvest record they roll up into carry price,
+    revenue, buyer identity, and outstanding balance — money data a worker
+    does not see, per the manuscript. Owner and manager only, reads included.
+    """
+
+    allowed_roles = {FarmMembership.Role.OWNER, FarmMembership.Role.MANAGER}
+    read_roles = {FarmMembership.Role.OWNER, FarmMembership.Role.MANAGER}
+    message = "Only an owner or manager can view sales, payments, or harvest records."
 
 
 class CanManageInventory(FarmScopedPermission):

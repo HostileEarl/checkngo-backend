@@ -237,7 +237,7 @@ WORKER_READS = [
     "production:house-list",
     "analytics:alerts",
     "farms:farm-members",
-    "production:feed-list",
+    "production:feed-stock",
     "production:inventory-item-list",
 ]
 
