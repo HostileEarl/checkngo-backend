@@ -171,6 +171,31 @@ class TestInvitationIssue:
         assert "token" not in entry
         assert "accept_url" not in entry
 
+    def test_staff_invite_response_still_includes_accept_url_and_pin(
+        self, auth, owner, staffed_farm, settings
+    ):
+        """
+        The link is dropped from the SMS, not from the API response: the
+        inviter's screen still needs `accept_url` (for "Copy invite link")
+        and `pin` (to read the PIN out loud or show it) for a new invitee.
+        """
+        created = auth(owner).post(
+            reverse("farms:farm-invitations", kwargs={"farm_pk": staffed_farm.pk}),
+            {
+                "phone_number": "+639170000053",
+                "full_name": "Response Fields Check",
+                "account_role": "WORKER",
+                "membership_role": "WORKER",
+            },
+            format="json",
+        )
+        assert created.status_code == 201
+        invitation = Invitation.objects.get(pk=created.data["id"])
+        assert created.data["accept_url"] == (
+            f"{settings.FRONTEND_URL}/i/{invitation.token}?p=%2B639170000053"
+        )
+        assert created.data["pin"]
+
     def test_cannot_invite_as_owner(self, auth, owner, staffed_farm):
         client = auth(owner)
         response = client.post(
@@ -600,14 +625,16 @@ class TestInvitationSms:
         log = SmsLog.objects.get(purpose=SmsLog.Purpose.INVITATION)
         assert pin not in log.message
 
-    def test_sms_fits_one_segment_with_the_accept_link_included(
+    def test_sms_carries_the_pin_without_a_link(
         self, auth, owner, staffed_farm, settings
     ):
         """
         End-to-end, not just the pure renderer: the real message sent
-        through send_invitation_pin_sms — farm name, PIN and the real
-        /i/<token> link together — must still fit one 160-character SMS
-        segment, even for a long farm name.
+        through send_invitation_pin_sms — farm name and PIN, no link —
+        must fit one 160-character SMS segment, even for a long farm
+        name. Philippine carriers silently filter SMS containing links,
+        so the message must never include one; the link is still
+        returned to the inviter as `accept_url`.
         """
         from notifications.sms import SMS_SEGMENT_LIMIT
 
@@ -636,9 +663,11 @@ class TestInvitationSms:
         # the provider is what send_sms actually posts.
         sent_message = mock_post.call_args.kwargs["data"]["message"]
         assert len(sent_message) <= SMS_SEGMENT_LIMIT
-        assert response.data["token"] in sent_message
-        assert "/i/" in sent_message
+        assert "http" not in sent_message
+        assert "/i/" not in sent_message
         assert response.data["pin"] in sent_message
+        farm_name_prefix = staffed_farm.name[:20]
+        assert farm_name_prefix in sent_message
 
     def test_existing_user_invite_sends_no_sms(self, auth, owner, rival_farm, worker):
         """No new PIN is issued for an existing account, so nothing is sent."""
