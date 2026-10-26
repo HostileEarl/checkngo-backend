@@ -214,22 +214,23 @@ def build_short_accept_url(token, phone_number=None):
 
 def send_invitation_pin_sms(invitation, raw_pin):
     """
-    Text a freshly issued invitation PIN, with a short accept link, to the
-    invitee. Only called for a NEW user (an existing user keeps their own
-    PIN, so there is nothing to send).
+    Text a freshly issued invitation PIN to the invitee. Only called for a
+    NEW user (an existing user keeps their own PIN, so there is nothing to
+    send).
 
-    The SMS link is deliberately bare (token only, no phone-prefill
-    query param) — every character here competes with the farm name and
-    PIN for the one 160-character segment. The phone-enriched version of
-    the link is only used in `accept_url` on the API response, which the
-    owner can share through a channel with no such limit.
+    The SMS carries only the farm name and PIN — no link. Philippine
+    carriers silently filter SMS containing URLs, so a message with
+    `accept_url` in it never reaches the phone even though Semaphore
+    reports it as sent. The PIN alone is enough: the invitee logs in with
+    their phone number and PIN, then sets their own PIN. The link is still
+    available to the inviter as `accept_url` on the API response, to share
+    through a channel without that restriction.
 
     Returns True if the SMS was actually sent (not skipped, not failed) so
     the caller can surface `sms_sent` in the API response.
     """
     farm_name = invitation.farm.name if invitation.farm else "CheckN Go"
-    accept_url = build_short_accept_url(invitation.token)
-    message = render_invitation_message(farm_name, raw_pin, accept_url)
+    message = render_invitation_message(farm_name, raw_pin)
     result = send_sms(
         invitation.phone_number,
         message,
