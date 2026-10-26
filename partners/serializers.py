@@ -82,6 +82,10 @@ class PartnerInvitationCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"account_role": f"This account is registered as a {existing.role}."}
             )
+        if existing and not existing.is_active:
+            raise serializers.ValidationError(
+                {"phone_number": "This account has been deactivated."}
+            )
 
         if FarmPartnerLink.objects.filter(
             farm=farm, partner__phone_number=phone, link_type=role, is_active=True
@@ -125,6 +129,34 @@ class PartnerInvitationCreateSerializer(serializers.ModelSerializer):
             ).expire_overdue()
             invitation.save()
         return invitation
+
+
+def existing_buyer_invite_message(invitation, existing_user):
+    """
+    Response text for a buyer invitation that linked an EXISTING account to
+    another farm instead of issuing a new PIN. Mirrors
+    accounts.serializers.existing_user_invite_message, but the label is
+    always "buyer" — CONSUMER is an internal role token, not something to
+    show the inviting owner.
+    """
+    typed_name = (invitation.full_name or "").strip()
+    real_name = existing_user.full_name
+
+    detail = (
+        f"{real_name} already has an account. They have been linked to "
+        f"{invitation.farm.name} as a buyer using their existing PIN."
+    )
+
+    name_mismatch = bool(
+        typed_name and typed_name.casefold() != real_name.casefold()
+    )
+    if name_mismatch:
+        detail += (
+            f' Heads up: you entered "{typed_name}", but '
+            f"{invitation.phone_number} belongs to {real_name}."
+        )
+
+    return detail, name_mismatch
 
 
 class BuyerPurchaseSerializer(serializers.ModelSerializer):

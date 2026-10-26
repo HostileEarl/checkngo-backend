@@ -1,18 +1,17 @@
 # partners/views.py
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import PolymorphicProxySerializer, extend_schema
 from rest_framework import generics, status
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.serializers import (
-    InvitationReadSerializer,
-    existing_user_invite_message,
-    send_invitation_pin_sms,
-)
+from accounts.serializers import InvitationReadSerializer, send_invitation_pin_sms
 from farms.permissions import HasRotatedCredential
 from production.models import Harvest, Payment, SaleEvent, per_sale_mode_batch_ids
 
@@ -24,6 +23,7 @@ from .serializers import (
     BuyerSalePurchaseSerializer,
     FarmPartnerLinkSerializer,
     PartnerInvitationCreateSerializer,
+    existing_buyer_invite_message,
 )
 
 
@@ -73,32 +73,43 @@ class FarmPartnerListCreateView(generics.ListCreateAPIView):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        invitation = serializer.save()
 
-        payload = InvitationReadSerializer(invitation).data
+        with transaction.atomic():
+            invitation = serializer.save()
 
-        if serializer.issued_pin:
-            # See FarmInvitationListCreateView.create() — same split: the
-            # token travels in the accept link, the PIN travels out-of-band.
-            payload["pin"] = serializer.issued_pin
-            payload["token"] = invitation.token
-            payload["accept_url"] = (
-                f"{settings.FRONTEND_URL}/accept-invite?token={invitation.token}"
-            )
-            payload["detail"] = (
-                f"Invitation created. Give this PIN to {invitation.full_name}."
-            )
-            payload["sms_sent"] = send_invitation_pin_sms(
-                invitation, serializer.issued_pin
-            )
-        else:
-            existing = serializer.existing_user
-            detail, name_mismatch = existing_user_invite_message(
-                invitation, existing
-            )
-            payload["existing_user"] = existing.full_name
-            payload["name_mismatch"] = name_mismatch
-            payload["detail"] = detail
+            if serializer.issued_pin:
+                payload = InvitationReadSerializer(invitation).data
+                # See FarmInvitationListCreateView.create() — same split: the
+                # token travels in the accept link, the PIN travels out-of-band.
+                payload["pin"] = serializer.issued_pin
+                payload["token"] = invitation.token
+                payload["accept_url"] = (
+                    f"{settings.FRONTEND_URL}/accept-invite?token={invitation.token}"
+                )
+                payload["detail"] = (
+                    f"Invitation created. Give this PIN to {invitation.full_name}."
+                )
+                payload["sms_sent"] = send_invitation_pin_sms(
+                    invitation, serializer.issued_pin
+                )
+            else:
+                # An existing account needs no PIN of its own, and no
+                # separate acceptance step — accept immediately so it links
+                # (or relinks) the buyer to this farm right away, instead of
+                # leaving a PENDING invitation that can never be accepted.
+                existing = serializer.existing_user
+                try:
+                    invitation.accept()
+                except DjangoValidationError as exc:
+                    raise DRFValidationError(exc.messages[0])
+
+                payload = InvitationReadSerializer(invitation).data
+                detail, name_mismatch = existing_buyer_invite_message(
+                    invitation, existing
+                )
+                payload["existing_user"] = existing.full_name
+                payload["name_mismatch"] = name_mismatch
+                payload["detail"] = detail
 
         return Response(payload, status=status.HTTP_201_CREATED)
 
