@@ -304,7 +304,7 @@ def farm_feed_cost_per_kg(farm):
     feed cost is an allocation, not a trace. This is the ruling from the
     schema design: average cost over the period, stated as such.
     """
-    agg = FeedDelivery.objects.filter(farm=farm).aggregate(
+    agg = FeedDelivery.objects.filter(farm=farm, voided_at__isnull=True).aggregate(
         kg=Coalesce(Sum("quantity_kg"), Value(Decimal("0")), output_field=DecimalField()),
         cost=Coalesce(Sum("total_cost"), Value(Decimal("0")), output_field=DecimalField()),
     )
@@ -422,7 +422,7 @@ def feed_balance(farm):
     the aggregates coalesce to Decimal("0") but still get quantized to
     Decimal("0.00") for the same "0.00" a farm with real records would show.
     """
-    delivered = FeedDelivery.objects.filter(farm=farm).aggregate(
+    delivered = FeedDelivery.objects.filter(farm=farm, voided_at__isnull=True).aggregate(
         kg=Coalesce(Sum("quantity_kg"), Value(Decimal("0")), output_field=DecimalField()),
         cost=Coalesce(Sum("total_cost"), Value(Decimal("0")), output_field=DecimalField()),
     )

@@ -96,6 +96,7 @@ the Notes column lists what the view checks after that.
 | `/api/farms/<int:farm_pk>/feed-deliveries/` | GET | CanManageFeed | yes | yes | no | no | no | no | no |  |
 | `/api/farms/<int:farm_pk>/feed-deliveries/` | POST | CanManageFeed | yes | yes | no | no | no | no | no |  |
 | `/api/farms/<int:farm_pk>/feed-deliveries/with-stock/` | POST | CanManageFeed | yes | yes | no | no | no | no | no |  |
+| `/api/farms/<int:farm_pk>/feed-deliveries/<uuid:pk>/void/` | POST | CanManageFeed | yes | yes | no | no | no | no | no |  |
 | `/api/farms/<int:farm_pk>/feed-stock/` | GET | CanViewProduction | yes | yes | yes | yes | no | no | no |  |
 | `/api/farms/<int:farm_pk>/inventory/items/` | GET | CanManageInventory | yes | yes | yes | yes | no | no | no |  |
 | `/api/farms/<int:farm_pk>/inventory/items/` | POST | CanManageInventory | yes | yes | no | no | no | no | no |  |

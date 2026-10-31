@@ -835,6 +835,25 @@ class FeedDelivery(OfflineSyncModel):
         limit_choices_to={"is_feed": True},
     )
 
+    # Audited void — nothing about a delivery is ever deleted. A duplicate
+    # (the same delivery recorded twice on a weak connection) is corrected
+    # by voiding the second one, not erasing it, so the evidence of what
+    # happened stays on the books. Mirrors RecordCorrection's shape
+    # (actor + permanent name copy + reason) rather than inventing a new one.
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="feed_deliveries_voided",
+    )
+    # Permanent ink — survives the voiding account being deleted.
+    voided_by_name = models.CharField(max_length=150, blank=True)
+    void_reason = models.TextField(blank=True)
+
+    MIN_VOID_REASON_LENGTH = 15
+
     class Meta:
         db_table = "production_feed_delivery"
         ordering = ["-delivery_date"]
@@ -844,6 +863,10 @@ class FeedDelivery(OfflineSyncModel):
 
     def __str__(self):
         return f"{self.quantity_kg}kg {self.get_feed_type_display()} — {self.delivery_date}"
+
+    @property
+    def is_voided(self):
+        return self.voided_at is not None
 
     def clean(self):
         if self.farm_id is None:
@@ -944,6 +967,7 @@ def _feed_stock_in_for_delivery(delivery, recorded_by, quantity_in_units):
         stock_in_date=delivery.delivery_date,
         note=f"Feed delivery — {ref}" if ref else "Feed delivery",
         recorded_by=recorded_by,
+        feed_delivery=delivery,
     )
 
 
@@ -1068,11 +1092,11 @@ class RecordCorrection(models.Model):
 _QTY = models.DecimalField(max_digits=12, decimal_places=2)
 
 
-def _item_sum_subquery(model, field):
+def _item_sum_subquery(model, field, **extra_filters):
     """Σ `field` over `model` rows belonging to the outer InventoryItem, or 0."""
     return Coalesce(
         models.Subquery(
-            model.objects.filter(item=models.OuterRef("pk"))
+            model.objects.filter(item=models.OuterRef("pk"), **extra_filters)
             .values("item")
             .annotate(total=models.Sum(field))
             .values("total")[:1],
@@ -1083,11 +1107,11 @@ def _item_sum_subquery(model, field):
     )
 
 
-def _item_count_subquery(model, field="item"):
+def _item_count_subquery(model, field="item", **extra_filters):
     """How many `model` rows belong to the outer InventoryItem via `field`."""
     return Coalesce(
         models.Subquery(
-            model.objects.filter(**{field: models.OuterRef("pk")})
+            model.objects.filter(**{field: models.OuterRef("pk")}, **extra_filters)
             .values(field)
             .annotate(c=models.Count("pk"))
             .values("c")[:1],
@@ -1115,7 +1139,12 @@ class InventoryItemQuerySet(models.QuerySet):
         alert — read these directly; the serializer falls back to the
         properties for a bare instance.
         """
-        stocked = _item_sum_subquery(InventoryStockIn, "quantity")
+        # voided_at__isnull=True on the stock-in side only: a voided
+        # delivery's mirrored stock-in never happened as far as the balance
+        # is concerned. Usage logs are never voided.
+        stocked = _item_sum_subquery(
+            InventoryStockIn, "quantity", voided_at__isnull=True
+        )
         used = _item_sum_subquery(InventoryUsageLog, "quantity_used")
         return self.annotate(
             qty_stocked_in=stocked,
@@ -1123,7 +1152,9 @@ class InventoryItemQuerySet(models.QuerySet):
             qty_current=models.ExpressionWrapper(
                 stocked - used, output_field=_QTY
             ),
-            stock_in_count=_item_count_subquery(InventoryStockIn),
+            stock_in_count=_item_count_subquery(
+                InventoryStockIn, voided_at__isnull=True
+            ),
             usage_count=_item_count_subquery(InventoryUsageLog),
             feed_delivery_count=_item_count_subquery(FeedDelivery, "inventory_item"),
             daily_feed_record_count=_item_count_subquery(DailyRecord, "feed_item"),
@@ -1280,7 +1311,11 @@ class InventoryItem(models.Model):
 
     @property
     def stocked_in(self):
-        return self.stock_ins.aggregate(t=models.Sum("quantity"))["t"] or Decimal("0")
+        return (
+            self.stock_ins.filter(voided_at__isnull=True)
+            .aggregate(t=models.Sum("quantity"))["t"]
+            or Decimal("0")
+        )
 
     @property
     def used_total(self):
@@ -1300,7 +1335,10 @@ class InventoryItem(models.Model):
         is not "low", it has simply never been stocked, and warning on it
         the moment a manager adds it would be noise.
         """
-        return not self.stock_ins.exists() and not self.usage_logs.exists()
+        return (
+            not self.stock_ins.filter(voided_at__isnull=True).exists()
+            and not self.usage_logs.exists()
+        )
 
     @property
     def is_low(self):
@@ -1353,6 +1391,24 @@ class InventoryStockIn(models.Model):
         related_name="inventory_stock_ins",
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # Set by _feed_stock_in_for_delivery for rows written going forward, so
+    # voiding a FeedDelivery can find and void its mirrored stock-in
+    # directly instead of matching on item/date/quantity/note. Null for
+    # every row written before this field existed and for a manual,
+    # non-feed stock-in (those have no FeedDelivery at all) — see
+    # FeedDeliveryVoidView for how an unlinked row is still found.
+    feed_delivery = models.ForeignKey(
+        "FeedDelivery",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="stock_ins_created",
+    )
+    # Set alongside the FeedDelivery it mirrors when that delivery is
+    # voided. Nothing is deleted; this row is excluded from every balance
+    # and ledger calculation the same way its delivery is.
+    voided_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "production_inventory_stock_in"

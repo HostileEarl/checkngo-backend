@@ -55,10 +55,16 @@ class Command(BaseCommand):
 
         violations = 0
         for item in items.order_by("farm_id", "name"):
-            stock_in_count = item.stock_ins.count()
+            # Voided deliveries and their mirrored stock-ins are excluded on
+            # both sides, the same way they are excluded from feed_balance
+            # and farm_feed_cost_per_kg — a voided pair never happened as
+            # far as the ledger invariant is concerned.
+            stock_in_count = item.stock_ins.filter(voided_at__isnull=True).count()
             stock_in_qty = item.stocked_in
 
-            deliveries = FeedDelivery.objects.filter(inventory_item=item)
+            deliveries = FeedDelivery.objects.filter(
+                inventory_item=item, voided_at__isnull=True
+            )
             delivery_count = deliveries.count()
 
             if item.kg_per_unit:
