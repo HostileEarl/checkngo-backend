@@ -1390,6 +1390,15 @@ class BatchCloseSerializer(serializers.Serializer):
 
 
 class FeedDeliverySerializer(serializers.ModelSerializer):
+    # Declared explicitly for the same reason DailyRecordSerializer and
+    # InventoryUsageLogSerializer do it: ModelSerializer forces a primary-key
+    # field to read_only because FeedDelivery.id is editable=False (it's the
+    # inherited OfflineSyncModel UUID), which would silently discard a
+    # client-generated id and make a retried POST create a second delivery
+    # (and a second mirrored InventoryStockIn) instead of being recognised
+    # as the same one. See FeedDeliveryListCreateView.create() and
+    # FeedDeliveryWithStockView.post() for the idempotent-replay lookup.
+    id = serializers.UUIDField(required=False)
     # Read-only now: feed source is free text (other_source). Kept under
     # its old name so the frontend keeps showing delivery history without
     # a rename.
@@ -1401,6 +1410,7 @@ class FeedDeliverySerializer(serializers.ModelSerializer):
     # FeedDelivery.clean()) — this tells a read whether the stored value is
     # one of those pre-existing rows rather than a current choice.
     legacy_feed_type = serializers.SerializerMethodField()
+    is_voided = serializers.SerializerMethodField()
 
     class Meta:
         model = FeedDelivery
@@ -1422,12 +1432,26 @@ class FeedDeliverySerializer(serializers.ModelSerializer):
             "recorded_by_name",
             "recorded_at",
             "created_at",
+            "is_voided",
+            "voided_at",
+            "voided_by_name",
+            "void_reason",
         ]
-        read_only_fields = ["farm", "recorded_by", "created_at"]
-        extra_kwargs = {"id": {"required": False}, "inventory_item": {"required": False}}
+        read_only_fields = [
+            "farm",
+            "recorded_by",
+            "created_at",
+            "voided_at",
+            "voided_by_name",
+            "void_reason",
+        ]
+        extra_kwargs = {"inventory_item": {"required": False}}
 
     def get_legacy_feed_type(self, obj) -> bool:
         return obj.feed_type == FeedDelivery.FeedType.OTHER
+
+    def get_is_voided(self, obj) -> bool:
+        return obj.voided_at is not None
 
     def to_internal_value(self, data):
         # Backward compat: the live frontend's delivery picker still offers
@@ -1465,7 +1489,63 @@ class FeedDeliverySerializer(serializers.ModelSerializer):
             # Not an error — cost is optional. The model derives whichever
             # is missing when only one is supplied.
             pass
+        # Idempotent replay (same client id, same farm) is handled by the
+        # view before this serializer is even built — see
+        # FeedDeliveryListCreateView.create() — so reaching validate() at
+        # all means this is a genuinely new delivery. Refuse one that is an
+        # exact repeat of a non-voided delivery already on the books rather
+        # than silently double-counting it.
+        farm = self.context.get("farm")
+        if farm is not None and self.instance is None:
+            self._reject_exact_repeat(farm, attrs)
         return attrs
+
+    def _reject_exact_repeat(self, farm, attrs):
+        delivery_date = attrs.get("delivery_date")
+        quantity_kg = attrs.get("quantity_kg")
+        if delivery_date is None or quantity_kg is None:
+            return
+
+        item = attrs.get("inventory_item")
+        invoice_ref = (attrs.get("invoice_ref") or "").strip()
+
+        candidates = FeedDelivery.objects.filter(
+            farm=farm,
+            voided_at__isnull=True,
+            delivery_date=delivery_date,
+            quantity_kg=quantity_kg,
+        ).select_related("recorded_by")
+        if item is not None:
+            candidates = candidates.filter(inventory_item=item)
+        else:
+            candidates = candidates.filter(
+                inventory_item__isnull=True, feed_type=attrs.get("feed_type")
+            )
+
+        duplicate = next(
+            (
+                d
+                for d in candidates
+                if d.invoice_ref.strip().casefold() == invoice_ref.casefold()
+            ),
+            None,
+        )
+        if duplicate is not None:
+            recorded_by = (
+                duplicate.recorded_by.full_name
+                if duplicate.recorded_by
+                else "an unknown user"
+            )
+            raise serializers.ValidationError(
+                {
+                    "detail": (
+                        "A matching delivery already exists for "
+                        f"{duplicate.delivery_date.isoformat()}, recorded by "
+                        f"{recorded_by}. Void it first if it was a mistake — "
+                        "this looks like a duplicate, not a new delivery."
+                    )
+                }
+            )
 
     def create(self, validated_data):
         item = validated_data.pop("inventory_item", None)
@@ -1816,8 +1896,17 @@ class InventoryStockInSerializer(serializers.ModelSerializer):
             "recorded_by",
             "recorded_by_name",
             "created_at",
+            "feed_delivery",
+            "voided_at",
         ]
-        read_only_fields = ["id", "item", "recorded_by", "created_at"]
+        read_only_fields = [
+            "id",
+            "item",
+            "recorded_by",
+            "created_at",
+            "feed_delivery",
+            "voided_at",
+        ]
 
     def validate_quantity(self, value):
         if value <= 0:

@@ -13,6 +13,7 @@ from .views import (
     FarmCorrectionListView,
     BatchCloseView,
     FeedDeliveryListCreateView,
+    FeedDeliveryVoidView,
     FeedDeliveryWithStockView,
     FeedStockView,
     HarvestDetailView,
@@ -77,6 +78,7 @@ urlpatterns = [
 
     path(f"{_farm}/feed-deliveries/", FeedDeliveryListCreateView.as_view(), name="feed-list"),
     path(f"{_farm}/feed-deliveries/with-stock/", FeedDeliveryWithStockView.as_view(), name="feed-with-stock"),
+    path(f"{_farm}/feed-deliveries/<uuid:pk>/void/", FeedDeliveryVoidView.as_view(), name="feed-void"),
     path(f"{_farm}/feed-stock/", FeedStockView.as_view(), name="feed-stock"),
 
     path(f"{_farm}/inventory/items/", InventoryItemListCreateView.as_view(), name="inventory-item-list"),

@@ -4,6 +4,8 @@ import uuid
 from decimal import Decimal
 
 from django.db import IntegrityError, transaction
+from django.db.models import Q
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, serializers, status
@@ -787,10 +789,49 @@ class BatchTerminateView(APIView):
 # ─────────────────────────────────────────────────────────────
 
 
+def _feed_delivery_replay(farm, request_data):
+    """
+    Look up a client-supplied `id` on a feed-delivery create, the same way
+    DailyRecordListCreateView and InventoryUsageListCreateView treat their
+    own client-generated ids, except for what happens when the id is
+    already here:
+
+      - this farm's delivery   -> return it. The caller returns 200 and
+        writes nothing — a feed delivery (and its mirrored stock-in) are
+        never silently re-applied with new values the way a daily record
+        is, so there is no update() path here, just a replay.
+      - another farm's row     -> 404, not 400. Mirrors the cross-farm
+        lookup every detail/archive view in this module already does via
+        get_object_or_404(Model, pk=pk, farm=request.farm): a client never
+        learns that an id it guessed or replayed wrong belongs to someone
+        else's farm.
+      - no row has this id, or no id was supplied, or it's malformed
+        -> None. A malformed id is left for the serializer's UUIDField to
+        reject with its normal 400, rather than treated as "no id".
+    """
+    supplied_id = request_data.get("id") if hasattr(request_data, "get") else None
+    rid = _well_formed_uuid(supplied_id)
+    if rid is None:
+        return None
+
+    existing = FeedDelivery.objects.filter(pk=rid, farm=farm).select_related(
+        "recorded_by"
+    ).first()
+    if existing is not None:
+        return existing
+    if FeedDelivery.objects.filter(pk=rid).exists():
+        raise Http404()
+    return None
+
+
 class FeedDeliveryListCreateView(generics.ListCreateAPIView):
     """
     GET  /api/farms/<farm_pk>/feed-deliveries/  — owner/manager only
     POST /api/farms/<farm_pk>/feed-deliveries/  — owner/manager only
+
+    POST is idempotent on a client-supplied `id`: replaying the same id for
+    this farm returns the existing delivery (200, nothing written) instead
+    of creating a second one. See _feed_delivery_replay.
     """
 
     serializer_class = FeedDeliverySerializer
@@ -812,6 +853,14 @@ class FeedDeliveryListCreateView(generics.ListCreateAPIView):
                 feed_type = FeedDelivery.FeedType.BOOSTER
             qs = qs.filter(feed_type=feed_type)
         return qs
+
+    def create(self, request, *args, **kwargs):
+        existing = _feed_delivery_replay(self.request.farm, request.data)
+        if existing is not None:
+            return Response(
+                self.get_serializer(existing).data, status=status.HTTP_200_OK
+            )
+        return super().create(request, *args, **kwargs)
 
 
 class FeedStockView(APIView):
@@ -859,12 +908,31 @@ class FeedDeliveryWithStockView(APIView):
     Equivalent to a plain POST /feed-deliveries/ with an inventory_item —
     kept as its own endpoint so the response can echo back the stock-in
     that was created alongside it.
+
+    Idempotent on a client-supplied `id`, same as the plain POST — see
+    _feed_delivery_replay. A replay returns 200 with the pair exactly as
+    they were first written, rather than touching either record again.
     """
 
     permission_classes = [CanManageFeed]
 
     def post(self, request, farm_pk):
         farm = request.farm
+
+        existing = _feed_delivery_replay(farm, request.data)
+        if existing is not None:
+            stock_in = InventoryStockIn.objects.filter(feed_delivery=existing).first()
+            return Response(
+                {
+                    "feed_delivery": FeedDeliverySerializer(existing).data,
+                    "inventory_stock_in": (
+                        InventoryStockInSerializer(stock_in).data
+                        if stock_in is not None
+                        else None
+                    ),
+                },
+                status=status.HTTP_200_OK,
+            )
 
         delivery_serializer = FeedDeliverySerializer(
             data=request.data, context={"request": request, "farm": farm}
@@ -884,6 +952,148 @@ class FeedDeliveryWithStockView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class FeedDeliveryVoidView(APIView):
+    """
+    POST /api/farms/<farm_pk>/feed-deliveries/<uuid:pk>/void/ — owner/manager only.
+
+    The legitimate way to undo a duplicate delivery: nothing is deleted.
+    The delivery is marked voided (who, when, why) and its mirrored
+    InventoryStockIn is voided alongside it in the same transaction, so
+    feed_balance, farm_feed_cost_per_kg, inventory balances and low-stock
+    all drop by the voided amount while the rows themselves stay on the
+    books as evidence. Mirrors DailyRecordCorrectView/
+    DailyRecordCorrectionSerializer's reason-length rule in style.
+    """
+
+    permission_classes = [CanManageFeed]
+
+    def post(self, request, farm_pk, pk):
+        delivery = get_object_or_404(FeedDelivery, pk=pk, farm=request.farm)
+
+        reason = (request.data.get("reason") or "").strip()
+        if len(reason) < FeedDelivery.MIN_VOID_REASON_LENGTH:
+            return Response(
+                {
+                    "reason": [
+                        "Give a real explanation — at least "
+                        f"{FeedDelivery.MIN_VOID_REASON_LENGTH} characters."
+                    ]
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if delivery.voided_at is not None:
+            return Response(
+                {"detail": "This delivery has already been voided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            delivery.voided_at = timezone.now()
+            delivery.voided_by = request.user
+            delivery.voided_by_name = request.user.full_name
+            delivery.void_reason = reason
+            delivery.save(
+                update_fields=[
+                    "voided_at",
+                    "voided_by",
+                    "voided_by_name",
+                    "void_reason",
+                ]
+            )
+
+            stock_in, needs_attention = _void_linked_stock_in(delivery)
+
+        data = {
+            "feed_delivery": FeedDeliverySerializer(delivery).data,
+            "inventory_stock_in": (
+                InventoryStockInSerializer(stock_in).data
+                if stock_in is not None
+                else None
+            ),
+            "stock_in_needs_attention": needs_attention,
+        }
+        if needs_attention:
+            data["detail"] = (
+                "Delivery voided. Its matching stock-in could not be "
+                "identified automatically and needs manual attention."
+            )
+        else:
+            data["detail"] = "Delivery voided."
+        return Response(data, status=status.HTTP_200_OK)
+
+
+def _void_linked_stock_in(delivery):
+    """
+    Find and void the InventoryStockIn _feed_stock_in_for_delivery mirrored
+    for this delivery, then return (stock_in_or_None, needs_attention).
+
+    A delivery written since the feed_delivery FK existed is found
+    directly. An older one predates that link, so it's matched the same
+    way check_feed_ledger reasons about the pair: same item, same date,
+    same quantity (converted to the item's own unit), and the note
+    _feed_stock_in_for_delivery writes. If there's more than one such
+    unlinked match, this also checks whether the rows are interchangeable
+    — e.g. the same receipt posted twice before this feature existed,
+    leaving two identical deliveries and two identical stock-ins. When
+    the count of unlinked legacy matches equals the count of non-voided
+    sibling deliveries sharing the same farm/item/date/quantity/
+    invoice_ref, exactly one stock-in is voided and linked to this
+    delivery. Otherwise the delivery is still voided — the stock-in is
+    left alone and flagged for a human instead of guessed at.
+    """
+    if delivery.inventory_item_id is None:
+        return None, False
+
+    stock_in = InventoryStockIn.objects.filter(
+        feed_delivery=delivery, voided_at__isnull=True
+    ).first()
+
+    if stock_in is None:
+        item = delivery.inventory_item
+        if not item.kg_per_unit:
+            return None, True
+        quantity_in_units = (delivery.quantity_kg / item.kg_per_unit).quantize(
+            Decimal("0.01")
+        )
+        ref = delivery.invoice_ref.strip()
+        note = f"Feed delivery — {ref}" if ref else "Feed delivery"
+        matches = list(
+            InventoryStockIn.objects.filter(
+                item=item,
+                stock_in_date=delivery.delivery_date,
+                quantity=quantity_in_units,
+                note=note,
+                voided_at__isnull=True,
+                feed_delivery__isnull=True,
+            ).order_by("-created_at")
+        )
+        if len(matches) == 1:
+            stock_in = matches[0]
+        else:
+            sibling_count = (
+                FeedDelivery.objects.filter(
+                    farm_id=delivery.farm_id,
+                    inventory_item_id=item.id,
+                    delivery_date=delivery.delivery_date,
+                    quantity_kg=delivery.quantity_kg,
+                    invoice_ref__iexact=ref,
+                )
+                .filter(Q(voided_at__isnull=True) | Q(pk=delivery.pk))
+                .count()
+            )
+            if matches and len(matches) == sibling_count:
+                stock_in = matches[0]
+                stock_in.feed_delivery = delivery
+                stock_in.voided_at = timezone.now()
+                stock_in.save(update_fields=["feed_delivery", "voided_at"])
+                return stock_in, False
+            return None, True
+
+    stock_in.voided_at = timezone.now()
+    stock_in.save(update_fields=["voided_at"])
+    return stock_in, False
 
 
 class DailyRecordCorrectView(BatchScopedMixin, APIView):
