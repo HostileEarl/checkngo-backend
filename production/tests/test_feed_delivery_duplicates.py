@@ -373,6 +373,92 @@ class TestVoid:
         delivery.refresh_from_db()
         assert delivery.voided_at is not None
 
+    def test_two_identical_legacy_deliveries_and_stock_ins_void_one_pair(
+        self, auth, owner, staffed_farm, feed_item
+    ):
+        """
+        Reproduces the real incident: the same receipt (invoice 6338) was
+        recorded twice before this feature existed, leaving two identical
+        legacy deliveries and two identical legacy stock-ins, none linked
+        by feed_delivery. Voiding one delivery must void exactly one of
+        the two indistinguishable stock-ins (not zero, not both) and link
+        it, so inventory stops being doubled.
+        """
+        from analytics.services import feed_balance
+
+        deliveries = [
+            FeedDelivery.objects.create(
+                farm=staffed_farm,
+                recorded_by=owner,
+                inventory_item=feed_item,
+                delivery_date=date(2026, 1, 10),
+                feed_type=FeedDelivery.FeedType.STARTER,
+                quantity_kg=Decimal("250.00"),
+                unit_cost=Decimal("30.00"),
+                invoice_ref="6338",
+            )
+            for _ in range(2)
+        ]
+        stock_ins = [
+            InventoryStockIn.objects.create(
+                item=feed_item,
+                quantity=Decimal("5.00"),  # 250kg / 50kg per sack
+                stock_in_date=date(2026, 1, 10),
+                note="Feed delivery — 6338",
+                recorded_by=owner,
+                feed_delivery=None,
+            )
+            for _ in range(2)
+        ]
+
+        before = feed_balance(staffed_farm)
+        feed_item.refresh_from_db()
+        before_levels = InventoryItem.objects.filter(pk=feed_item.pk).with_levels().get()
+        before_low = set(
+            InventoryItem.objects.filter(farm=staffed_farm).low_stock().values_list(
+                "pk", flat=True
+            )
+        )
+
+        response = auth(owner).post(
+            _void_url(staffed_farm, deliveries[0]),
+            {"reason": "Same receipt (invoice 6338) recorded twice."},
+            format="json",
+        )
+        assert response.status_code == 200, response.data
+        assert response.data["stock_in_needs_attention"] is False
+        assert response.data["inventory_stock_in"] is not None
+
+        after = feed_balance(staffed_farm)
+        assert after["delivered_kg"] == before["delivered_kg"] - Decimal("250.00")
+
+        after_levels = InventoryItem.objects.filter(pk=feed_item.pk).with_levels().get()
+        assert after_levels.qty_current == before_levels.qty_current - Decimal("5.00")
+        after_low = set(
+            InventoryItem.objects.filter(farm=staffed_farm).low_stock().values_list(
+                "pk", flat=True
+            )
+        )
+        # 10 sacks (two 5-sack stock-ins) was above the 5-sack threshold;
+        # voiding one stock-in drops it to exactly 5, which crosses into
+        # low stock — proving the low-stock figure reflects the void.
+        assert feed_item.pk not in before_low
+        assert feed_item.pk in after_low
+
+        deliveries[0].refresh_from_db()
+        deliveries[1].refresh_from_db()
+        assert deliveries[0].voided_at is not None
+        assert deliveries[1].voided_at is None  # the other delivery stays active
+
+        stock_ins[0].refresh_from_db()
+        stock_ins[1].refresh_from_db()
+        voided_stock_ins = [s for s in stock_ins if s.voided_at is not None]
+        active_stock_ins = [s for s in stock_ins if s.voided_at is None]
+        assert len(voided_stock_ins) == 1
+        assert len(active_stock_ins) == 1
+        assert voided_stock_ins[0].feed_delivery_id == deliveries[0].id
+        assert active_stock_ins[0].feed_delivery_id is None
+
     def test_ambiguous_legacy_match_is_flagged_not_guessed(
         self, auth, owner, staffed_farm, feed_item
     ):

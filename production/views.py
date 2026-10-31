@@ -4,6 +4,7 @@ import uuid
 from decimal import Decimal
 
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -1032,9 +1033,15 @@ def _void_linked_stock_in(delivery):
     directly. An older one predates that link, so it's matched the same
     way check_feed_ledger reasons about the pair: same item, same date,
     same quantity (converted to the item's own unit), and the note
-    _feed_stock_in_for_delivery writes. If that match isn't exactly one
-    row, the delivery is still voided — the stock-in is left alone and
-    flagged for a human instead of guessed at.
+    _feed_stock_in_for_delivery writes. If there's more than one such
+    unlinked match, this also checks whether the rows are interchangeable
+    — e.g. the same receipt posted twice before this feature existed,
+    leaving two identical deliveries and two identical stock-ins. When
+    the count of unlinked legacy matches equals the count of non-voided
+    sibling deliveries sharing the same farm/item/date/quantity/
+    invoice_ref, exactly one stock-in is voided and linked to this
+    delivery. Otherwise the delivery is still voided — the stock-in is
+    left alone and flagged for a human instead of guessed at.
     """
     if delivery.inventory_item_id is None:
         return None, False
@@ -1059,11 +1066,30 @@ def _void_linked_stock_in(delivery):
                 quantity=quantity_in_units,
                 note=note,
                 voided_at__isnull=True,
-            )
+                feed_delivery__isnull=True,
+            ).order_by("-created_at")
         )
-        if len(matches) != 1:
+        if len(matches) == 1:
+            stock_in = matches[0]
+        else:
+            sibling_count = (
+                FeedDelivery.objects.filter(
+                    farm_id=delivery.farm_id,
+                    inventory_item_id=item.id,
+                    delivery_date=delivery.delivery_date,
+                    quantity_kg=delivery.quantity_kg,
+                    invoice_ref__iexact=ref,
+                )
+                .filter(Q(voided_at__isnull=True) | Q(pk=delivery.pk))
+                .count()
+            )
+            if matches and len(matches) == sibling_count:
+                stock_in = matches[0]
+                stock_in.feed_delivery = delivery
+                stock_in.voided_at = timezone.now()
+                stock_in.save(update_fields=["feed_delivery", "voided_at"])
+                return stock_in, False
             return None, True
-        stock_in = matches[0]
 
     stock_in.voided_at = timezone.now()
     stock_in.save(update_fields=["voided_at"])
